@@ -318,10 +318,14 @@ export default function App() {
             const cls = l.includes('takes 0') ? 'log-safe' : 'log-dmg';
             return <span key={i} className={cls}>{l}</span>;
           });
+          // Interleave lines with <br /> separators, safely handling empty arrays.
+          const interleaved = lines.length === 0
+            ? null
+            : lines.reduce((a, b) => [a, <br key="br" />, '  ', b]);
           return (
             <div key={e.round} className="log-entry">
               <strong>R{e.round}:</strong> P1 {CARD_ICONS[e.cards_1[0]]} vs P2 {CARD_ICONS[e.cards_2[0]]}
-              <br />&nbsp;&nbsp;{lines.reduce((a, b) => [a, <br key="br" />, '  ', b])}
+              {interleaved && <><br />&nbsp;&nbsp;{interleaved}</>}
               <br /><span style={{ color: 'var(--muted)' }}>
                 → P1 {e.hp_1_after}HP | P2 {e.hp_2_after}HP
               </span>
@@ -338,6 +342,7 @@ export default function App() {
       <>
         <h1 className="app-title">⚔️ Custom Card Game</h1>
         <div className="app-subtitle">Hot-seat — pass the device between players</div>
+        {error && <div className="error-banner">{error}</div>}
         <div className="loading-text">Loading…</div>
       </>
     );
