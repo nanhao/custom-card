@@ -9,6 +9,12 @@ Before running in production mode, build the React frontend first:
 """
 
 import sys
+from pathlib import Path
+
+# Ensure the project root is on sys.path so `src.*` imports resolve.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.backend.controller.api import create_app
 
