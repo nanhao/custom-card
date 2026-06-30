@@ -32,13 +32,32 @@ class Player:
 
         Per architecture D6, this is called AFTER resolution and damage
         application, so resolution never depends on current hand state.
+
+        Convenience wrapper around play_cards for single-card use.
         """
-        try:
-            self.hand.remove(card)
-        except ValueError:
-            raise ValueError(
-                f"Card {card.name} is not in the player's hand."
-            ) from None
+        self.play_cards([card])
+
+    def play_cards(self, cards: list[CardType]) -> None:
+        """Remove one occurrence of each card in `cards` from hand.
+
+        Raises ValueError if any card is not present (no partial removal).
+        Supports future multi-card gameplay (architecture D12).
+
+        Per architecture D6, this is called AFTER resolution and damage
+        application, so resolution never depends on current hand state.
+        """
+        if not cards:
+            return
+        # Validate all cards present before removing any (atomic)
+        remaining = list(self.hand)
+        for card in cards:
+            try:
+                remaining.remove(card)
+            except ValueError:
+                raise ValueError(
+                    f"Card {card.name} is not in the player's hand."
+                ) from None
+        self.hand = remaining
 
     def take_damage(self, amount: int) -> None:
         """Reduce HP by `amount`, clamped to 0.
@@ -50,3 +69,16 @@ class Player:
     def has_card(self, card: CardType) -> bool:
         """Return True if `card` is present in hand."""
         return card in self.hand
+
+    def has_cards(self, cards: list[CardType]) -> bool:
+        """Return True if all cards in `cards` are present in hand.
+
+        Checks duplicates correctly (e.g., two ATK requires at least two ATK in hand).
+        Supports future multi-card gameplay (architecture D12).
+        """
+        remaining = list(self.hand)
+        for card in cards:
+            if card not in remaining:
+                return False
+            remaining.remove(card)
+        return True

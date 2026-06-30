@@ -1,0 +1,33 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+
+title POST /api/games — Create Game
+
+actor "Client" as C
+participant "Flask\napi.py" as API
+participant "GameManager\n(game/)" as GM
+participant "SessionStore\n(game/)" as STORE
+
+C -> API : POST /api/games\n{}
+activate API
+
+API -> API : generate UUID for game_id
+
+API -> GM : new GameManager()
+activate GM
+GM -> GM : start_game()
+deactivate GM
+
+API -> STORE : save(game_id, gm)
+activate STORE
+note right of STORE
+  Write to
+  {save_dir}/{game_id}.json
+end note
+deactivate STORE
+
+API --> C : 201 Created\n{"game_id": "<uuid>", "state": {...}}
+
+deactivate API
+@enduml

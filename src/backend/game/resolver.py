@@ -16,13 +16,13 @@ class ResolutionResult:
     """Value object returned by CardResolver.resolve().
 
     Attributes:
-        damage_a: Damage dealt to Player A this round.
-        damage_b: Damage dealt to Player B this round.
+        damage_1: Damage dealt to Player 1 this round.
+        damage_2: Damage dealt to Player 2 this round.
         details: Human-readable resolution steps (for logging/debugging).
     """
 
-    damage_a: int
-    damage_b: int
+    damage_1: int
+    damage_2: int
     details: list[str] = field(default_factory=list)
 
 
@@ -63,12 +63,15 @@ class CardResolver:
 
     @staticmethod
     def resolve(
-        card_a: CardType,
-        card_b: CardType,
-        history_a: list[CardType],
-        history_b: list[CardType],
+        cards_1: list[CardType],
+        cards_2: list[CardType],
+        history_1: list[CardType],
+        history_2: list[CardType],
     ) -> ResolutionResult:
         """Compute damage for both players given their played cards and history.
+
+        Accepts lists for future multi-card support (architecture D12).
+        Current version expects exactly 1 card per list.
 
         Per architecture D3: both card effects are computed independently,
         then combined with max() per D8 to avoid double-counting.
@@ -77,42 +80,53 @@ class CardResolver:
         a Heavy Strike hitting Defense comes from the HS card, not the Defense.
 
         Args:
-            card_a: Card played by Player A this round.
-            card_b: Card played by Player B this round.
-            history_a: Cards played by A in previous rounds (chronological).
-            history_b: Cards played by B in previous rounds (chronological).
+            cards_1: Cards played by Player 1 this round.
+            cards_2: Cards played by Player 2 this round.
+            history_1: Cards played by 1 in previous rounds (chronological).
+            history_2: Cards played by 2 in previous rounds (chronological).
 
         Returns:
-            ResolutionResult with damage_a, damage_b, and resolution details.
+            ResolutionResult with damage_1, damage_2, and resolution details.
+
+        Raises:
+            ValueError: If either cards list is not exactly 1 element
+                       (current version limitation).
         """
+        if len(cards_1) != 1 or len(cards_2) != 1:
+            raise ValueError(
+                f"Current version supports exactly 1 card per player per round. "
+                f"Got {len(cards_1)} for 1, {len(cards_2)} for 2."
+            )
+        card_1 = cards_1[0]
+        card_2 = cards_2[0]
         # ---- Step 1: Compute damage from each card independently ----
-        dA_from_a, dB_from_a = CardResolver._card_effect(
-            card_a, card_b, history_a, history_b, is_player_a=True
+        d1_from_1, d2_from_1 = CardResolver._card_effect(
+            card_1, card_2, history_1, history_2, is_player_1=True
         )
-        # For player B: _card_effect returns (dmg_to_B, dmg_to_A).
-        # We need (dmg_to_A, dmg_to_B), so swap the unpacking.
-        dB_from_b, dA_from_b = CardResolver._card_effect(
-            card_b, card_a, history_b, history_a, is_player_a=False
+        # For player 2: _card_effect returns (dmg_to_2, dmg_to_1).
+        # We need (dmg_to_1, dmg_to_2), so swap the unpacking.
+        d2_from_2, d1_from_2 = CardResolver._card_effect(
+            card_2, card_1, history_2, history_1, is_player_1=False
         )
 
         # ---- Step 2: Combine with max() (D8) ----
-        damage_a = max(dA_from_a, dA_from_b)
-        damage_b = max(dB_from_a, dB_from_b)
+        damage_1 = max(d1_from_1, d1_from_2)
+        damage_2 = max(d2_from_1, d2_from_2)
 
         # ---- Step 3: Build human-readable details ----
         details = []
-        # Card A's perspective
+        # Card 1's perspective
         details.append(CardResolver._describe_effect(
-            card_a, card_b, history_a, history_b, "A", "B"
+            card_1, card_2, history_1, history_2, "1", "2"
         ))
-        # Card B's perspective
+        # Card 2's perspective
         details.append(CardResolver._describe_effect(
-            card_b, card_a, history_b, history_a, "B", "A"
+            card_2, card_1, history_2, history_1, "2", "1"
         ))
 
         return ResolutionResult(
-            damage_a=damage_a,
-            damage_b=damage_b,
+            damage_1=damage_1,
+            damage_2=damage_2,
             details=details,
         )
 
@@ -126,7 +140,7 @@ class CardResolver:
         opp_card: CardType,
         my_history: list[CardType],
         opp_history: list[CardType],
-        is_player_a: bool,
+        is_player_1: bool,
     ) -> tuple[int, int]:
         """Compute (damage_to_me, damage_to_opponent) for one card's effect.
 
@@ -137,7 +151,7 @@ class CardResolver:
             opp_card: The opponent's card.
             my_history: This player's history (for consecutive checks).
             opp_history: Opponent's history (for consecutive checks).
-            is_player_a: Whether this is Player A's card.
+            is_player_1: Whether this is Player 1's card.
 
         Returns:
             (damage_to_self, damage_to_opponent) tuple.

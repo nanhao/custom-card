@@ -1,0 +1,41 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+
+title Game Lifecycle State Machine
+
+[*] --> UNINIT : __init__()
+note right of UNINIT
+  players = None
+  round_number = 0
+end note
+
+UNINIT --> PLAYING : start_game()
+note right of PLAYING
+  Players created
+  HP = 3 each
+  Hand = 7 cards
+end note
+
+PLAYING --> ROUND_RESULT : play_round(cards_1, cards_2)
+
+ROUND_RESULT --> PLAYING : game continues\n(round < 7, both HP > 0)
+
+ROUND_RESULT --> GAME_OVER : both HP == 0\n→ draw
+
+ROUND_RESULT --> GAME_OVER : one HP == 0\n→ survivor wins
+
+ROUND_RESULT --> GAME_OVER : round >= 7\n→ higher HP or draw
+
+GAME_OVER --> [*] : terminal state
+
+note right of GAME_OVER
+  is_over = True
+  winner = "1" | "2" | "draw"
+end note
+
+note bottom of UNINIT
+  start_game() can also be called
+  from GAME_OVER to restart
+end note
+@enduml

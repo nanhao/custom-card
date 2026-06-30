@@ -23,16 +23,16 @@ class TestResolutionResult:
 
     def test_creation_and_attributes(self):
         """ResolutionResult should hold damage and details."""
-        result = ResolutionResult(damage_a=1, damage_b=2, details=["A takes 1", "B takes 2"])
-        assert result.damage_a == 1
-        assert result.damage_b == 2
+        result = ResolutionResult(damage_1=1, damage_2=2, details=["A takes 1", "B takes 2"])
+        assert result.damage_1 == 1
+        assert result.damage_2 == 2
         assert result.details == ["A takes 1", "B takes 2"]
 
     def test_zero_damage(self):
         """ResolutionResult should handle zero damage."""
-        result = ResolutionResult(damage_a=0, damage_b=0, details=["no damage"])
-        assert result.damage_a == 0
-        assert result.damage_b == 0
+        result = ResolutionResult(damage_1=0, damage_2=0, details=["no damage"])
+        assert result.damage_1 == 0
+        assert result.damage_2 == 0
 
 
 # ---------------------------------------------------------------------------
@@ -125,9 +125,9 @@ class TestResolverPRDExamples:
         ids=[t[0] for t in PRD_EXAMPLES],
     )
     def test_prd_example(self, tid, card_a, card_b, hist_a, hist_b, dmg_a, dmg_b, desc):
-        result = CardResolver.resolve(card_a, card_b, list(hist_a), list(hist_b))
-        assert result.damage_a == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_a}"
-        assert result.damage_b == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_b}"
+        result = CardResolver.resolve([card_a], [card_b], list(hist_a), list(hist_b))
+        assert result.damage_1 == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_1}"
+        assert result.damage_2 == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_2}"
         assert len(result.details) > 0, f"{tid}: expected non-empty details"
 
 
@@ -140,9 +140,9 @@ class TestResolverMatrix:
         ids=[t[0] for t in MATRIX_R1],
     )
     def test_matrix_r1(self, tid, card_a, card_b, dmg_a, dmg_b, reason):
-        result = CardResolver.resolve(card_a, card_b, [], [])
-        assert result.damage_a == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_a}"
-        assert result.damage_b == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_b}"
+        result = CardResolver.resolve([card_a], [card_b], [], [])
+        assert result.damage_1 == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_1}"
+        assert result.damage_2 == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_2}"
 
 
 class TestResolverConsecutiveAttack:
@@ -154,9 +154,9 @@ class TestResolverConsecutiveAttack:
         ids=[t[0] for t in CONSEC_ATTACK],
     )
     def test_consecutive_attack(self, tid, card_a, card_b, hist_a, hist_b, dmg_a, dmg_b, desc):
-        result = CardResolver.resolve(card_a, card_b, list(hist_a), list(hist_b))
-        assert result.damage_a == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_a}"
-        assert result.damage_b == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_b}"
+        result = CardResolver.resolve([card_a], [card_b], list(hist_a), list(hist_b))
+        assert result.damage_1 == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_1}"
+        assert result.damage_2 == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_2}"
 
 
 class TestResolverConsecutiveDefense:
@@ -168,9 +168,9 @@ class TestResolverConsecutiveDefense:
         ids=[t[0] for t in CONSEC_DEFENSE],
     )
     def test_consecutive_defense(self, tid, card_a, card_b, hist_a, hist_b, dmg_a, dmg_b, desc):
-        result = CardResolver.resolve(card_a, card_b, list(hist_a), list(hist_b))
-        assert result.damage_a == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_a}"
-        assert result.damage_b == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_b}"
+        result = CardResolver.resolve([card_a], [card_b], list(hist_a), list(hist_b))
+        assert result.damage_1 == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_1}"
+        assert result.damage_2 == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_2}"
 
 
 # ---------------------------------------------------------------------------
@@ -182,24 +182,24 @@ class TestResolverEdgeCases:
 
     def test_tc_x9_no_double_count_hs_vs_def(self):
         """TC-X9: HS vs DEF with empty history → dmg(DEF player)=1, not 2."""
-        result = CardResolver.resolve(H, D, [], [])
-        assert result.damage_b == 1  # DEF player takes 1 from HS
-        assert result.damage_a == 0  # HS player takes 0 from DEF
+        result = CardResolver.resolve([H], [D], [], [])
+        assert result.damage_2 == 1  # DEF player takes 1 from HS
+        assert result.damage_1 == 0  # HS player takes 0 from DEF
 
     def test_defense_never_deals_damage_d7(self):
         """Architecture D7: Defense is pure-block — never deals damage."""
         # DEF vs ATTACK
-        result = CardResolver.resolve(D, A, [], [])
-        assert result.damage_a == 0
-        assert result.damage_b == 0
+        result = CardResolver.resolve([D], [A], [], [])
+        assert result.damage_1 == 0
+        assert result.damage_2 == 0
         # DEF vs HEAVY (with prev DEF — blocks)
-        result = CardResolver.resolve(D, H, [D], [])
-        assert result.damage_a == 0
-        assert result.damage_b == 0
+        result = CardResolver.resolve([D], [H], [D], [])
+        assert result.damage_1 == 0
+        assert result.damage_2 == 0
         # DEF vs HEAVY (no prev DEF — still Defense deals 0, HS deals the 1)
-        result = CardResolver.resolve(D, H, [], [])
-        assert result.damage_a == 1  # From HS, not from DEF
-        assert result.damage_b == 0
+        result = CardResolver.resolve([D], [H], [], [])
+        assert result.damage_1 == 1  # From HS, not from DEF
+        assert result.damage_2 == 0
 
 
 class TestHelperFunctions:

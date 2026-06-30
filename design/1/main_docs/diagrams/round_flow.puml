@@ -1,0 +1,75 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+
+title Round Execution Sequence
+
+actor "Caller" as C
+participant "GameManager" as GC
+participant "Player 1" as P1
+participant "Player 2" as P2
+participant "CardResolver" as CR
+
+C -> GC : play_round(cards_1, cards_2)
+
+activate GC
+
+GC -> GC : ① validate (not game over,\n  cards in hands, hands not empty)
+
+GC -> CR : ② resolve(cards_1, cards_2,\n  history_1, history_2)
+activate CR
+
+CR -> CR : compute damage_1 from cards_1 effects
+CR -> CR : compute damage_2 from cards_2 effects
+note right of CR
+  Damage computed independently.
+  Defense never deals damage;
+  HS damage counted once.
+end note
+
+CR --> GC : ResolutionResult(damage_1, damage_2, details)
+deactivate CR
+
+GC -> P1 : ③ take_damage(damage_1)
+activate P1
+P1 --> GC
+deactivate P1
+
+GC -> P2 : ③ take_damage(damage_2)
+activate P2
+P2 --> GC
+deactivate P2
+
+GC -> P1 : ④ play_cards(cards_1)
+activate P1
+P1 --> GC
+deactivate P1
+
+GC -> P2 : ④ play_cards(cards_2)
+activate P2
+P2 --> GC
+deactivate P2
+
+GC -> GC : ⑤ append to history_1, history_2
+
+GC -> GC : ⑥ check game-end conditions
+
+alt both HP == 0
+  GC -> GC : is_over = True, winner = "draw"
+else one HP == 0
+  GC -> GC : is_over = True, winner = surviving player
+else round >= 7
+  GC -> GC : is_over = True, winner = higher HP or "draw"
+else game continues
+  GC -> GC : round_number += 1
+end
+
+GC --> C : ⑦ RoundResult
+
+deactivate GC
+
+note right
+  All participants reside in
+  src/backend/game/
+end note
+@enduml

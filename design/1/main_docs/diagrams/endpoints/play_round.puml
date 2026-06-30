@@ -1,0 +1,66 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+
+title POST /api/games/{game_id}/play — Play Round
+
+actor "Client" as C
+participant "Flask\napi.py" as API
+participant "SessionStore\n(game/)" as STORE
+participant "GameManager\n(game/)" as GM
+participant "CardResolver\n(game/)" as CR
+
+C -> API : POST /api/games/{id}/play\n{"cards_1": ["attack"], "cards_2": ["defense"]}
+activate API
+
+API -> STORE : load(game_id)
+activate STORE
+alt game_id not found (file missing)
+  STORE --> API : None
+  deactivate STORE
+  API --> C : 404 Not Found
+else game_id found
+  STORE --> API : GameManager
+  deactivate STORE
+  API -> API : deserialize cards_1, cards_2\nfrom strings to list[CardType]
+  alt invalid card string
+    API --> C : 400 Bad Request\n{"error": "...", "code": "INVALID_CARD"}
+  else valid cards
+    API -> GM : play_round(cards_1, cards_2)
+    activate GM
+
+    GM -> GM : validate (not over, cards in hands)
+    alt validation fails
+      GM --> API : ValueError
+      API --> C : 400 Bad Request\n{"error": "...", "code": "GAME_OVER"}
+    else validation passes
+      GM -> CR : resolve(cards_1, cards_2,\n  history_1, history_2)
+      activate CR
+      CR -> CR : compute damage_1, damage_2
+      CR --> GM : ResolutionResult
+      deactivate CR
+
+      GM -> GM : apply damage → players
+      GM -> GM : discard cards from hands
+      GM -> GM : record history
+      GM -> GM : check game-end
+
+      GM --> API : RoundResult
+      deactivate GM
+
+      API -> STORE : save(game_id, gm)
+      activate STORE
+      note right of STORE
+        Overwrite
+        {save_dir}/{game_id}.json
+      end note
+      deactivate STORE
+
+      API -> API : serialize RoundResult,\nget updated state
+      API --> C : 200 OK\n{"round_result": {...}, "state": {...}}
+    end
+  end
+end
+
+deactivate API
+@enduml

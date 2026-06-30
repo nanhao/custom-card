@@ -1,0 +1,119 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+
+package "src/backend/game/  <<pure logic>>" as game {
+  enum CardType <<enum>> {
+    ATTACK
+    DEFENSE
+    HEAVY_STRIKE
+    COUNTER
+  }
+
+  class Player {
+    +hp: int
+    +hand: list[CardType]
+    +history: list[CardType]
+    --
+    +play_card(card: CardType): None
+    +play_cards(cards: list[CardType]): None
+    +take_damage(amount: int): None
+    +has_card(card: CardType): bool
+    +has_cards(cards: list[CardType]): bool
+  }
+
+  note right of CardType
+    get_initial_hand()
+    returns new list[CardType]
+  end note
+
+  class ResolutionResult {
+    +damage_1: int
+    +damage_2: int
+    +details: list[str]
+  }
+
+  class CardResolver <<stateless>> {
+    +{static} resolve(cards_1, cards_2, history_1, history_2): ResolutionResult
+    +{static} get_consecutive_attack(history): int
+    +{static} played_defense_last_round(history): bool
+  }
+
+  class RoundResult {
+    +round: int
+    +cards_1: list[CardType]
+    +cards_2: list[CardType]
+    +damage_1: int
+    +damage_2: int
+    +hp_1_after: int
+    +hp_2_after: int
+    +details: list[str]
+    +is_game_over: bool
+    +winner: str | None
+  }
+
+  class GameManager {
+    +player_1: Player
+    +player_2: Player
+    +round_number: int
+    +is_over: bool
+    +winner: str | None
+    +round_log: list[RoundResult]
+    --
+    +start_game(): None
+    +play_round(cards_1, cards_2): RoundResult
+    +get_state(): dict
+  }
+
+  Player --> CardType : uses
+  CardResolver ..> ResolutionResult : returns
+  CardResolver ..> CardType : uses
+  GameManager --> Player : owns
+  GameManager --> CardResolver : calls
+  GameManager ..> RoundResult : returns
+  RoundResult --> CardType : uses
+}
+
+package "src/backend/script/  <<CLI adapter>>" as script {
+  class CLIMain <<entry>> {
+    +main(): None
+    +display_round_result(result: RoundResult): None
+    +display_game_over(manager: GameManager): None
+  }
+  note right of CLIMain
+    No business logic.
+    Only parse args, call game/,
+    display output.
+  end note
+}
+
+package "src/backend/controller/  <<REST adapter>>" as controller {
+  class API {
+    +POST /api/games
+    +GET /api/games/{id}
+    +POST /api/games/{id}/play
+    +DELETE /api/games/{id}
+  }
+  note right of API
+    No business logic.
+    Only HTTP handling,
+    delegate to game/.
+  end note
+}
+
+package "src/web/  <<browser UI>>" as web {
+  class WebUI <<external>> {
+    HTML/CSS/JS
+  }
+  note right of WebUI
+    Consumes REST API.
+    No game logic.
+  end note
+}
+
+CLIMain --> GameManager : uses
+CLIMain ..> RoundResult : reads
+API --> GameManager : uses
+API ..> RoundResult : returns JSON
+WebUI --> API : HTTP calls
+@enduml

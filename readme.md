@@ -25,10 +25,15 @@ src/backend/game/        Pure game logic (no UI, no I/O)
   player.py              Player state container
   resolver.py            Stateless card resolution engine
   game_manager.py        Game state machine + round orchestration
+  session_store.py       Disk-based game persistence (save/load/delete)
+
+src/backend/controller/  REST API adapter (thin, no business logic)
+  api.py                 Flask routes (create, get state, play, delete)
+  serializers.py         CardType ↔ string, RoundResult ⟶ dict, error formatting
 
 tests/
   unit/                  Unit tests (per-module)
-  integration/           Integration tests (full game flows)
+  integration/           Integration tests (full game flows, API)
   e2e/                   End-to-end tests (future)
 ```
 

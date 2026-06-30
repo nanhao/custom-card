@@ -1,0 +1,31 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+
+title DELETE /api/games/{game_id} — Clean Up
+
+actor "Client" as C
+participant "Flask\napi.py" as API
+participant "SessionStore\n(game/)" as STORE
+
+C -> API : DELETE /api/games/{game_id}
+activate API
+
+API -> STORE : delete(game_id)
+activate STORE
+alt file not found
+  STORE --> API : False
+  deactivate STORE
+  API --> C : 404 Not Found\n{"error": "Game not found"}
+else file deleted
+  note right of STORE
+    Remove
+    {save_dir}/{game_id}.json
+  end note
+  STORE --> API : True
+  deactivate STORE
+  API --> C : 204 No Content
+end
+
+deactivate API
+@enduml

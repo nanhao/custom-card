@@ -21,15 +21,17 @@ class RoundResult:
     """Value object returned by GameManager.play_round().
 
     Contains all data needed by adapter layers to display the round outcome.
+    Uses list[CardType] for cards_1/cards_2 to support future multi-card
+    gameplay (architecture D12).
     """
 
     round: int
-    card_a: CardType
-    card_b: CardType
-    damage_a: int
-    damage_b: int
-    hp_a_after: int
-    hp_b_after: int
+    cards_1: list[CardType]
+    cards_2: list[CardType]
+    damage_1: int
+    damage_2: int
+    hp_1_after: int
+    hp_2_after: int
     details: list[str]
     is_game_over: bool
     winner: str | None
@@ -43,11 +45,11 @@ class GameManager:
     and play_round() to advance the game state.
 
     Attributes:
-        player_a: Player A state (hp, hand, history).
-        player_b: Player B state (hp, hand, history).
+        player_1: Player 1 state (hp, hand, history).
+        player_2: Player 2 state (hp, hand, history).
         round_number: Current round number (1–7).
         is_over: Whether the game has ended.
-        winner: "A", "B", "draw", or None if game is ongoing.
+        winner: "1", "2", "draw", or None if game is ongoing.
         round_log: History of all completed rounds.
     """
 
@@ -55,8 +57,8 @@ class GameManager:
 
     def __init__(self) -> None:
         """Create an uninitialized GameManager. Call start_game() to begin."""
-        self.player_a: Player | None = None
-        self.player_b: Player | None = None
+        self.player_1: Player | None = None
+        self.player_2: Player | None = None
         self.round_number: int = 0
         self.is_over: bool = False
         self.winner: str | None = None
@@ -73,15 +75,18 @@ class GameManager:
         sets round to 1, and clears the round log. Can be called at
         any time to restart (doubles as reset — TC-X6).
         """
-        self.player_a = Player(hp=3, hand=get_initial_hand())
-        self.player_b = Player(hp=3, hand=get_initial_hand())
+        self.player_1 = Player(hp=3, hand=get_initial_hand())
+        self.player_2 = Player(hp=3, hand=get_initial_hand())
         self.round_number = 1
         self.is_over = False
         self.winner = None
         self.round_log = []
 
-    def play_round(self, card_a: CardType, card_b: CardType) -> RoundResult:
+    def play_round(self, cards_1: list[CardType], cards_2: list[CardType]) -> RoundResult:
         """Execute one round of the game.
+
+        Accepts lists for future multi-card support (architecture D12).
+        Current version expects exactly 1 card per list.
 
         Follows the round execution flow defined in game_flow.md §2:
         1. Validate inputs (game not over, cards in hands)
@@ -96,37 +101,37 @@ class GameManager:
         so resolution never depends on current hand state.
 
         Args:
-            card_a: Card played by Player A this round.
-            card_b: Card played by Player B this round.
+            cards_1: Cards played by Player 1 this round.
+            cards_2: Cards played by Player 2 this round.
 
         Returns:
             RoundResult with all round outcome data.
 
         Raises:
-            ValueError: If game is over, card not in player's hand,
+            ValueError: If game is over, any card not in player's hand,
                         or players are not initialized.
         """
         # ---- Step 1: Validate ----
-        self._validate(card_a, card_b)
+        self._validate(cards_1, cards_2)
 
         # ---- Step 2: Resolve ----
         resolution: ResolutionResult = CardResolver.resolve(
-            card_a, card_b,
-            self.player_a.history,
-            self.player_b.history,
+            cards_1, cards_2,
+            self.player_1.history,
+            self.player_2.history,
         )
 
         # ---- Step 3: Apply damage ----
-        self.player_a.take_damage(resolution.damage_a)
-        self.player_b.take_damage(resolution.damage_b)
+        self.player_1.take_damage(resolution.damage_1)
+        self.player_2.take_damage(resolution.damage_2)
 
         # ---- Step 4: Discard cards (after damage per D6) ----
-        self.player_a.play_card(card_a)
-        self.player_b.play_card(card_b)
+        self.player_1.play_cards(cards_1)
+        self.player_2.play_cards(cards_2)
 
         # ---- Step 5: Record history ----
-        self.player_a.history.append(card_a)
-        self.player_b.history.append(card_b)
+        self.player_1.history.extend(cards_1)
+        self.player_2.history.extend(cards_2)
 
         # ---- Step 6: Check game-end conditions (priority order) ----
         is_over, winner = self._check_game_end()
@@ -134,12 +139,12 @@ class GameManager:
         # ---- Step 7: Build and return result ----
         result = RoundResult(
             round=self.round_number,
-            card_a=card_a,
-            card_b=card_b,
-            damage_a=resolution.damage_a,
-            damage_b=resolution.damage_b,
-            hp_a_after=self.player_a.hp,
-            hp_b_after=self.player_b.hp,
+            cards_1=cards_1,
+            cards_2=cards_2,
+            damage_1=resolution.damage_1,
+            damage_2=resolution.damage_2,
+            hp_1_after=self.player_1.hp,
+            hp_2_after=self.player_2.hp,
             details=resolution.details,
             is_game_over=is_over,
             winner=winner,
@@ -159,7 +164,7 @@ class GameManager:
         or serialize state for API responses.
 
         Returns:
-            dict with keys: round, players (A/B with hp/hand/history),
+            dict with keys: round, players (1/2 with hp/hand/history),
             is_over, winner.
         """
         def _player_dict(p: Player | None) -> dict:
@@ -174,8 +179,8 @@ class GameManager:
         return {
             "round": self.round_number,
             "players": {
-                "A": _player_dict(self.player_a),
-                "B": _player_dict(self.player_b),
+                "1": _player_dict(self.player_1),
+                "2": _player_dict(self.player_2),
             },
             "is_over": self.is_over,
             "winner": self.winner,
@@ -185,27 +190,27 @@ class GameManager:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _validate(self, card_a: CardType, card_b: CardType) -> None:
+    def _validate(self, cards_1: list[CardType], cards_2: list[CardType]) -> None:
         """Validate that play_round() can proceed.
 
         Raises ValueError if:
         - Game is already over (TC-X2)
-        - Either card is not in the respective player's hand (TC-X3)
+        - Any card is not in the respective player's hand (TC-X3)
         - Players are not initialized
         """
         if self.is_over:
             raise ValueError("Cannot play round: the game is over.")
-        if self.player_a is None or self.player_b is None:
+        if self.player_1 is None or self.player_2 is None:
             raise ValueError(
                 "Cannot play round: game not started. Call start_game() first."
             )
-        if not self.player_a.has_card(card_a):
+        if not self.player_1.has_cards(cards_1):
             raise ValueError(
-                f"Card {card_a.name} is not in Player A's hand."
+                f"Not all cards in {[c.name for c in cards_1]} are in Player 1's hand."
             )
-        if not self.player_b.has_card(card_b):
+        if not self.player_2.has_cards(cards_2):
             raise ValueError(
-                f"Card {card_b.name} is not in Player B's hand."
+                f"Not all cards in {[c.name for c in cards_2]} are in Player 2's hand."
             )
 
     def _check_game_end(self) -> tuple[bool, str | None]:
@@ -213,43 +218,43 @@ class GameManager:
 
         Per game_flow.md §3, win condition priority:
         1. Both HP = 0 → draw
-        2. A HP = 0, B HP > 0 → B wins
-        3. B HP = 0, A HP > 0 → A wins
-        4. Round 7 reached, A HP > B HP → A wins
-        5. Round 7 reached, B HP > A HP → B wins
-        6. Round 7 reached, A HP = B HP → draw
+        2. 1 HP = 0, 2 HP > 0 → 2 wins
+        3. 2 HP = 0, 1 HP > 0 → 1 wins
+        4. Round 7 reached, 1 HP > 2 HP → 1 wins
+        5. Round 7 reached, 2 HP > 1 HP → 2 wins
+        6. Round 7 reached, 1 HP = 2 HP → draw
 
         Returns:
             (is_over, winner) tuple. winner is None if game continues.
         """
-        hp_a = self.player_a.hp
-        hp_b = self.player_b.hp
+        hp_1 = self.player_1.hp
+        hp_2 = self.player_2.hp
 
         # Priority 1: both dead
-        if hp_a == 0 and hp_b == 0:
+        if hp_1 == 0 and hp_2 == 0:
             self.is_over = True
             self.winner = "draw"
             return True, "draw"
 
-        # Priority 2: A dead
-        if hp_a == 0:
+        # Priority 2: 1 dead
+        if hp_1 == 0:
             self.is_over = True
-            self.winner = "B"
-            return True, "B"
+            self.winner = "2"
+            return True, "2"
 
-        # Priority 3: B dead
-        if hp_b == 0:
+        # Priority 3: 2 dead
+        if hp_2 == 0:
             self.is_over = True
-            self.winner = "A"
-            return True, "A"
+            self.winner = "1"
+            return True, "1"
 
         # Priority 4–6: round limit reached
         if self.round_number >= self.MAX_ROUNDS:
             self.is_over = True
-            if hp_a > hp_b:
-                self.winner = "A"
-            elif hp_b > hp_a:
-                self.winner = "B"
+            if hp_1 > hp_2:
+                self.winner = "1"
+            elif hp_2 > hp_1:
+                self.winner = "2"
             else:
                 self.winner = "draw"
             return True, self.winner

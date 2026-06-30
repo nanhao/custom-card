@@ -1,0 +1,32 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+
+title GET /api/games/{game_id} — Get State
+
+actor "Client" as C
+participant "Flask\napi.py" as API
+participant "SessionStore\n(game/)" as STORE
+participant "GameManager\n(game/)" as GM
+
+C -> API : GET /api/games/{game_id}
+activate API
+
+API -> STORE : load(game_id)
+activate STORE
+alt game_id not found (file missing)
+  STORE --> API : None
+  deactivate STORE
+  API --> C : 404 Not Found\n{"error": "Game not found"}
+else game_id found
+  STORE --> API : GameManager
+  deactivate STORE
+  API -> GM : get_state()
+  activate GM
+  GM --> API : {round, players, is_over, winner, last_round}
+  deactivate GM
+  API --> C : 200 OK\n{"game_id": "...", "state": {...}}
+end
+
+deactivate API
+@enduml
