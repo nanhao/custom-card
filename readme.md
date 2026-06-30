@@ -28,14 +28,59 @@ src/backend/game/        Pure game logic (no UI, no I/O)
   session_store.py       Disk-based game persistence (save/load/delete)
 
 src/backend/controller/  REST API adapter (thin, no business logic)
-  api.py                 Flask routes (create, get state, play, delete)
-  serializers.py         CardType ↔ string, RoundResult ⟶ dict, error formatting
+  api.py                 Flask routes + static serving
+  serializers.py         CardType ⇄ string, RoundResult → dict, error formatting
+
+src/frontend/            React SPA (Vite + React 19)
+  src/api.js             REST API client
+  src/App.jsx            Main game UI component
+  src/App.css            All styles
 
 tests/
   unit/                  Unit tests (per-module)
-  integration/           Integration tests (full game flows, API)
+  integration/           Integration tests (API routes, full game flows)
   e2e/                   End-to-end tests (future)
+
+run.py                   Server entry point
 ```
+
+## Quick Start
+
+### Development (hot-reload)
+
+```bash
+# Terminal 1 — start the Flask API server
+python run.py --debug
+
+# Terminal 2 — start the Vite dev server
+cd src/frontend
+npm install    # first time only
+npm run dev
+```
+
+Open **http://localhost:5173** in your browser. The Vite dev server proxies
+`/api` requests to Flask automatically.
+
+### Production
+
+```bash
+# Build the React frontend
+cd src/frontend && npm run build
+
+# Start the server (serves both API and static frontend)
+cd ../.. && python run.py
+```
+
+Open **http://127.0.0.1:5000** in your browser.
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/games` | Create a new game |
+| `GET` | `/api/games/{id}` | Get current game state |
+| `POST` | `/api/games/{id}/play` | Submit cards and resolve a round |
+| `DELETE` | `/api/games/{id}` | Delete a game session |
 
 ## Running Tests
 

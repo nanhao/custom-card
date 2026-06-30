@@ -9,15 +9,28 @@ Per architecture D11, the face-down protocol is client-side. The API
 receives both cards together via POST /play.
 
 Routes:
+    GET    /                       — Serve the React SPA (production) or dev info
     POST   /api/games              — Create a new game
     GET    /api/games/{game_id}    — Get current game state
     POST   /api/games/{game_id}/play  — Play a round
     DELETE /api/games/{game_id}    — Delete a game session
+
+In development, run the Vite dev server (port 5173) which proxies /api to Flask
+(port 5000). In production, run `npm run build` then Flask serves dist/ at /.
 """
 
 import uuid
+from pathlib import Path
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
+
+# Paths relative to this module.
+# api.py → src/backend/controller/api.py
+# frontend source → src/frontend/
+# frontend build  → src/frontend/dist/
+_FRONTEND_SRC = Path(__file__).resolve().parent.parent.parent / "frontend"
+_FRONTEND_DIST = _FRONTEND_SRC / "dist"
 
 from src.backend.controller.serializers import (
     card_to_str,
@@ -44,6 +57,9 @@ def create_app(config_path: str = "config.json") -> Flask:
     """
     app = Flask(__name__)
 
+    # Enable CORS for the Vite dev server (different port during development).
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
+
     # Store a SessionStore instance on the app for all routes to use.
     # Each request reads/writes through the filesystem per DC3/DC4.
     app.config["SESSION_STORE"] = SessionStore(config_path)
@@ -54,6 +70,39 @@ def create_app(config_path: str = "config.json") -> Flask:
 
 def _register_routes(app: Flask) -> None:
     """Register all API routes on the given Flask app."""
+
+    # ------------------------------------------------------------------
+    # GET / — Serve the React SPA (production) or dev info
+    # ------------------------------------------------------------------
+
+    @app.route("/", defaults={"path": ""})
+    @app.route("/<path:path>")
+    def serve_frontend(path: str):
+        """Serve the built React app with SPA fallback.
+
+        In production (dist/ present), serves static assets from dist/
+        and index.html for all non-/api routes (client-side routing).
+
+        In development (no dist/), returns a message pointing to the
+        Vite dev server on port 5173.
+        """
+        # Skip API routes — let them be handled by their own route decorators.
+        if path.startswith("api"):
+            return jsonify(error_response("Not Found", "NOT_FOUND", 404)), 404
+
+        if _FRONTEND_DIST.is_dir():
+            # Try serving a specific file; fall back to index.html for SPA routing.
+            file_path = _FRONTEND_DIST / path
+            if path and file_path.is_file():
+                return send_from_directory(str(_FRONTEND_DIST), path)
+            return send_from_directory(str(_FRONTEND_DIST), "index.html")
+
+        # Development mode: no build available.
+        return (
+            "<h2>Frontend not built</h2>"
+            "<p>Run <code>npm run dev</code> in <code>src/frontend/</code> "
+            "and open <a href='http://localhost:5173'>http://localhost:5173</a>.</p>"
+        )
 
     # ------------------------------------------------------------------
     # POST /api/games — Create Game

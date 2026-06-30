@@ -1,0 +1,427 @@
+/* =========================================================================
+   Custom Card Game — Styles (matches prototype visual design)
+   ========================================================================= */
+
+:root {
+  --bg: #1a1a2e;
+  --panel: #16213e;
+  --accent: #e94560;
+  --gold: #f5c518;
+  --text: #eee;
+  --muted: #8899aa;
+  --attack: #e94560;
+  --defense: #4e9af1;
+  --heavy: #f39c12;
+  --counter: #9b59b6;
+  --green: #2ecc71;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+}
+
+/* ---- Title ---- */
+.app-title {
+  font-size: 1.4rem;
+  color: var(--gold);
+  margin-bottom: 2px;
+}
+.app-subtitle {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 12px;
+}
+
+/* ---- Loading ---- */
+.loading-text {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+/* ---- Error Banner ---- */
+.error-banner {
+  width: 100%;
+  max-width: 700px;
+  background: var(--accent);
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+/* ---- Game Over Banner ---- */
+.game-over-banner {
+  width: 100%;
+  max-width: 700px;
+  padding: 16px 24px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.banner-win {
+  background: var(--green);
+  color: #fff;
+}
+.banner-draw {
+  background: var(--gold);
+  color: #1a1a2e;
+}
+.banner-sub {
+  font-size: 0.9rem;
+  font-weight: 400;
+  margin-top: 4px;
+}
+
+/* ---- Status Bar ---- */
+.status-bar {
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.status-player {
+  flex: 1;
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 12px 16px;
+  border: 2px solid transparent;
+  transition: border-color 0.3s;
+}
+.status-player.current {
+  border-color: var(--gold);
+}
+.status-player.winner {
+  border-color: var(--green);
+}
+.status-player.loser {
+  border-color: var(--accent);
+  opacity: 0.6;
+}
+.status-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.status-hp {
+  font-size: 1.1rem;
+}
+.status-hp .hearts {
+  letter-spacing: 2px;
+}
+
+/* ---- History Chips ---- */
+.status-history {
+  margin-top: 6px;
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.hist-chip {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.chip-attack {
+  background: var(--attack);
+  color: #fff;
+}
+.chip-defense {
+  background: var(--defense);
+  color: #fff;
+}
+.chip-heavy {
+  background: var(--heavy);
+  color: #1a1a2e;
+}
+.chip-counter {
+  background: var(--counter);
+  color: #fff;
+}
+
+/* ---- Hand Area ---- */
+.hand-area {
+  width: 100%;
+  max-width: 700px;
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.hand-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 10px;
+  text-align: center;
+}
+.card-grid {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ---- Card Button ---- */
+.card-btn {
+  width: 80px;
+  height: 110px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: inherit;
+}
+.card-btn:hover:not(:disabled) {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.card-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.card-btn.selected {
+  border-color: var(--gold);
+  box-shadow: 0 0 16px rgba(245, 197, 24, 0.5);
+}
+.card-btn .icon {
+  font-size: 1.8rem;
+}
+.card-btn .count {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+.card-attack {
+  background: var(--attack);
+  color: #fff;
+}
+.card-defense {
+  background: var(--defense);
+  color: #fff;
+}
+.card-heavy {
+  background: var(--heavy);
+  color: #1a1a2e;
+}
+.card-counter {
+  background: var(--counter);
+  color: #fff;
+}
+
+/* ---- Opponent Hand (Hidden) ---- */
+.opp-hand-area {
+  width: 100%;
+  max-width: 700px;
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+.opp-hand-title {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 8px;
+}
+.opp-card-grid {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.opp-card-back {
+  width: 80px;
+  height: 110px;
+  border-radius: 10px;
+  background: #2c3e50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  border: 2px dashed #444;
+}
+
+/* ---- Pass Screen ---- */
+.pass-screen {
+  width: 100%;
+  max-width: 700px;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  margin-bottom: 12px;
+  border: 2px solid var(--gold);
+}
+.pass-text {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+}
+.pass-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 12px;
+}
+
+/* ---- Round Result ---- */
+.result-panel {
+  width: 100%;
+  max-width: 700px;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 12px;
+  border: 2px solid var(--gold);
+}
+.result-title {
+  text-align: center;
+  font-size: 1rem;
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+.result-cards {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.result-card {
+  width: 90px;
+  height: 120px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.result-vs {
+  font-size: 1.3rem;
+  color: var(--gold);
+  font-weight: 700;
+}
+.result-details {
+  font-size: 0.85rem;
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.res-dmg {
+  color: var(--accent);
+  font-weight: 700;
+}
+.res-safe {
+  color: var(--green);
+}
+.res-hp {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+/* ---- Buttons ---- */
+.btn-row {
+  margin-bottom: 12px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.btn {
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+.btn-primary {
+  background: var(--gold);
+  color: #1a1a2e;
+}
+.btn-primary:hover {
+  background: #e0b010;
+}
+.btn-secondary {
+  background: #334;
+  color: var(--text);
+}
+.btn-secondary:hover {
+  background: #445;
+}
+.btn-big {
+  padding: 14px 40px;
+  font-size: 1.05rem;
+}
+
+/* ---- Round Info Line ---- */
+.round-info {
+  text-align: center;
+  padding: 8px 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+.round-info .highlight {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+/* ---- Round Log ---- */
+.log-area {
+  width: 100%;
+  max-width: 700px;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 10px 16px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.log-area h3 {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.log-entry {
+  font-size: 0.8rem;
+  padding: 3px 0;
+  border-bottom: 1px solid #2a2a4a;
+}
+.log-entry:last-child {
+  border-bottom: none;
+}
+.log-dmg {
+  color: var(--accent);
+}
+.log-safe {
+  color: var(--green);
+}
