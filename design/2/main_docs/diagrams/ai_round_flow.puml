@@ -1,0 +1,54 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+title Human vs AI — Round Flow
+
+actor Human
+participant "Frontend\n(React SPA)" as FE
+participant "Controller\n(Flask API)" as API
+participant "GameManager" as GM
+participant "AI Model\n(GRU)" as AI
+database "SessionStore\n(Disk)" as Store
+
+== New Game ==
+Human -> FE: Click "vs AI" → select "rnn_v1.1"
+FE -> API: POST /api/games\n{mode: "pve", ai: "rnn_v1.1"}
+API -> API: Validate AI name in registry
+API -> GM: new GameManager(mode="pve")
+API -> GM: start_game()
+API -> API: ai_state = [0.0]*8
+note right: Hardcoded zeros:\ninit_hidden_state() is trivial\nand model not loaded yet
+API -> Store: save(game_id, gm, ai_state=ai_state)
+API --> FE: 201 {game_id, state}
+FE -> FE: Show game board (human's hand + AI card backs)
+
+== Round N ==
+Human -> FE: Select card (e.g. "attack")
+FE -> API: POST /api/games/{id}/play\n{cards_1: ["attack"]}
+
+API -> Store: load(game_id)
+Store --> API: gm, ai_state
+API -> AI: select_action(state, ai_state)
+
+activate AI
+AI -> AI: Build 14-d input vector\n(card counts, HP, one-hot history)
+AI -> AI: GRU forward → policy logits
+AI -> AI: Mask illegal cards → softmax → argmax
+AI --> API: ("defense", new_hidden_state)
+deactivate AI
+
+API -> API: str_to_card("defense") → CardType.DEFENSE
+API -> GM: play_round([ATTACK], [DEFENSE])
+activate GM
+GM -> GM: Resolve: Attack vs Defense
+GM -> GM: Apply damage, discard cards, check end
+GM --> API: RoundResult
+deactivate GM
+
+API -> Store: save(game_id, gm, new_hidden_state)
+API --> FE: 200 {round_result, state}
+
+FE -> FE: Show reveal:\nYou: Attack vs AI: Defense\nDamage + HP + winner banner
+
+@enduml

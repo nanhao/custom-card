@@ -1,0 +1,40 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+title POST /api/games — Create AI Game
+
+actor Client
+participant "api.py\nPOST /api/games" as API
+participant "ai.registry" as Registry
+participant "GameManager" as GM
+database "SessionStore" as Store
+
+Client -> API: POST /api/games\n{"mode": "pve", "ai": "rnn_v1.1"}
+
+activate API
+
+== Validate ==
+API -> API: mode == "pve" → require "ai" field
+API -> Registry: list_ais()
+Registry --> API: [{"name": "rnn_v1.1", ...}]
+
+alt AI name not in list
+    API --> Client: 400 {"error": "Unknown AI: ...", "code": "UNKNOWN_AI"}
+end
+
+== Initialize ==
+API -> API: game_id = uuid4()
+API -> API: ai_state = [0.0]*8
+note right: init_hidden_state() always\nreturns zeros; hardcode to\navoid loading AI module
+API -> GM: new GameManager(mode="pve")
+API -> GM: start_game()
+
+== Persist ==
+API -> Store: save(game_id, gm, ai_state=ai_state)
+note right: Save file includes:\nmode, ai, ai_state (= [0.0]*8)
+API --> Client: 201 {"game_id": "...", "state": {...}}
+
+deactivate API
+
+@enduml

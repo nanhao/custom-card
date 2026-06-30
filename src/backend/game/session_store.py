@@ -6,15 +6,21 @@ modules.
 
 Per persistence.md, SessionStore uses a config.json file to determine the
 save directory, and stores each game as a single JSON file named by UUID.
+
+Per architecture D3 (intention #2), save() and load() support AI metadata
+(mode, ai, ai_state) for PVE games. Legacy files without mode default to "pvp".
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 
 from src.backend.game.card import CardType, get_initial_hand
 from src.backend.game.game_manager import GameManager, RoundResult
 from src.backend.game.player import Player
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -105,26 +111,50 @@ def _deserialize_round_result(data: dict) -> RoundResult:
     )
 
 
-def _serialize_game_manager(gm: GameManager) -> dict:
+def _serialize_game_manager(gm: GameManager, ai: str | None = None, ai_state: list[float] | None = None) -> dict:
     """Serialize the full GameManager state to a plain dict.
 
+    Args:
+        gm: The GameManager to serialize.
+        ai: AI name for PVE games (optional).
+        ai_state: GRU hidden state for PVE games (optional).
+
     Returns:
-        dict matching the game save JSON structure in persistence.md §5.1.
+        dict matching the game save JSON structure in persistence.md §5.1,
+        extended with mode, ai (if PVE), and ai_state (if PVE).
     """
-    return {
+    data = {
         "round": gm.round_number,
         "player_1": _serialize_player(gm.player_1),
         "player_2": _serialize_player(gm.player_2),
         "is_over": gm.is_over,
         "winner": gm.winner,
         "round_log": [_serialize_round_result(rr) for rr in gm.round_log],
+        "mode": gm.mode,
     }
+    # Only include AI fields for PVE games to keep PVP saves clean.
+    if gm.mode == "pve" and ai is not None:
+        data["ai"] = ai
+    if ai_state is not None:
+        data["ai_state"] = ai_state
+    return data
 
 
-def _deserialize_game_manager(data: dict) -> GameManager:
-    """Reconstruct a GameManager from a dict produced by _serialize_game_manager().
+def _deserialize_game_manager(data: dict) -> tuple[GameManager, dict]:
+    """Reconstruct a GameManager and metadata from a save file dict.
 
-    Raises ValueError if required keys are missing or malformed.
+    Handles legacy files (no mode key) by defaulting to "pvp".
+    Validates ai_state on load (fallback to zeros if invalid).
+
+    Returns:
+        (GameManager, metadata) tuple where metadata has:
+            mode: "pvp" | "pve"
+            ai: AI name or None
+            ai_state: GRU hidden state or None
+
+    Raises:
+        ValueError: If required game state keys are missing, or if
+                    mode is "pve" but ai field is missing.
     """
     required_keys = ("round", "player_1", "player_2", "is_over", "winner", "round_log")
     for key in required_keys:
@@ -133,14 +163,59 @@ def _deserialize_game_manager(data: dict) -> GameManager:
                 f"Missing required game state key: {key!r}"
             )
 
-    gm = GameManager()
+    # ---- Extract mode (default to "pvp" for legacy files) ----
+    mode = data.get("mode", "pvp")
+
+    # ---- Extract AI metadata ----
+    ai = data.get("ai", None)
+    ai_state = data.get("ai_state", None)
+
+    # ---- Validate PVE config ----
+    if mode == "pve":
+        if not ai:
+            raise ValueError(
+                "AI_CONFIG_ERROR: save file has mode='pve' but no 'ai' field"
+            )
+        # Validate ai_state: must be list[float] of length 8, or fallback
+        ai_state = _validate_ai_state(ai_state)
+    else:
+        # PVP: silently ignore any stray ai/ai_state fields
+        ai = None
+        ai_state = None
+
+    # ---- Build GameManager ----
+    gm = GameManager(mode=mode)
     gm.round_number = data["round"]
     gm.player_1 = _deserialize_player(data["player_1"])
     gm.player_2 = _deserialize_player(data["player_2"])
     gm.is_over = data["is_over"]
     gm.winner = data["winner"]
     gm.round_log = [_deserialize_round_result(rr) for rr in data["round_log"]]
-    return gm
+
+    metadata = {"mode": mode, "ai": ai, "ai_state": ai_state}
+    return gm, metadata
+
+
+def _validate_ai_state(ai_state) -> list[float]:
+    """Validate ai_state from a save file.
+
+    Returns the valid ai_state, or a fresh [0.0]*8 if invalid.
+    Logs a warning when fallback occurs.
+    """
+    if ai_state is None:
+        logger.warning("ai_state is missing; defaulting to zeros")
+        return [0.0] * 8
+    if not isinstance(ai_state, list):
+        logger.warning("ai_state is not a list; defaulting to zeros")
+        return [0.0] * 8
+    if len(ai_state) != 8:
+        logger.warning("ai_state length is %d (expected 8); defaulting to zeros", len(ai_state))
+        return [0.0] * 8
+    try:
+        return [float(v) for v in ai_state]
+    except (ValueError, TypeError):
+        logger.warning("ai_state contains non-numeric values; defaulting to zeros")
+        return [0.0] * 8
 
 
 # ---------------------------------------------------------------------------
@@ -178,30 +253,42 @@ class SessionStore:
             self._save_dir = self._resolve_save_dir()
         return self._save_dir
 
-    def save(self, game_id: str, game_manager: GameManager) -> None:
+    def save(self, game_id: str, game_manager: GameManager,
+             ai_state: list[float] | None = None,
+             ai: str | None = None) -> None:
         """Serialize GameManager and write to {save_dir}/{game_id}.json.
 
         Creates the save directory if it does not exist.
         Overwrites the file if it already exists.
+
+        Args:
+            game_id: Unique game identifier (UUID string).
+            game_manager: The GameManager to serialize.
+            ai_state: GRU hidden state for PVE games (optional).
+            ai: AI name for PVE games (optional).
         """
         self._ensure_save_dir()
         file_path = self._file_path(game_id)
-        data = _serialize_game_manager(game_manager)
+        data = _serialize_game_manager(game_manager, ai=ai, ai_state=ai_state)
         file_path.write_text(json.dumps(data, indent=4, ensure_ascii=False))
 
-    def load(self, game_id: str) -> GameManager | None:
+    def load(self, game_id: str) -> tuple[GameManager | None, dict | None]:
         """Read and deserialize from {save_dir}/{game_id}.json.
 
         Returns:
-            A reconstructed GameManager, or None if the file does not exist.
+            A (GameManager, metadata) tuple, or (None, None) if the file
+            does not exist. metadata is a dict with keys:
+                mode: "pvp" | "pve"
+                ai: AI name or None
+                ai_state: GRU hidden state (list[float]) or None
 
         Raises:
             ValueError: If the JSON file exists but is malformed or missing
-                        required keys.
+                        required keys, or if PVE config is inconsistent.
         """
         file_path = self._file_path(game_id)
         if not file_path.exists():
-            return None
+            return None, None
         try:
             data = json.loads(file_path.read_text())
         except json.JSONDecodeError as exc:

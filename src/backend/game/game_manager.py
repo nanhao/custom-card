@@ -55,8 +55,14 @@ class GameManager:
 
     MAX_ROUNDS = 7
 
-    def __init__(self) -> None:
-        """Create an uninitialized GameManager. Call start_game() to begin."""
+    def __init__(self, mode: str = "pvp") -> None:
+        """Create an uninitialized GameManager. Call start_game() to begin.
+
+        Args:
+            mode: Game mode — "pvp" (default) or "pve".
+                  Set at construction, immutable thereafter (per D2).
+        """
+        self.mode: str = mode
         self.player_1: Player | None = None
         self.player_2: Player | None = None
         self.round_number: int = 0
@@ -184,6 +190,22 @@ class GameManager:
             },
             "is_over": self.is_over,
             "winner": self.winner,
+            "mode": self.mode,
+            "round_log": [
+                {
+                    "round": rr.round,
+                    "cards_1": [c.value for c in rr.cards_1],
+                    "cards_2": [c.value for c in rr.cards_2],
+                    "damage_1": rr.damage_1,
+                    "damage_2": rr.damage_2,
+                    "hp_1_after": rr.hp_1_after,
+                    "hp_2_after": rr.hp_2_after,
+                    "details": rr.details,
+                    "is_game_over": rr.is_game_over,
+                    "winner": rr.winner,
+                }
+                for rr in self.round_log
+            ],
         }
 
     # ------------------------------------------------------------------

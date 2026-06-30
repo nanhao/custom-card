@@ -193,7 +193,7 @@ class TestSessionStoreLoad:
     """Tests for SessionStore.load()."""
 
     def test_load_returns_none_for_missing_file(self, temp_dir):
-        """load() returns None when the game file doesn't exist."""
+        """load() returns (None, None) when the game file doesn't exist."""
         from src.backend.game.session_store import SessionStore
 
         saves_dir = temp_dir / "saves"
@@ -202,8 +202,9 @@ class TestSessionStoreLoad:
         config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
 
         store = SessionStore(config_path=str(config_path))
-        result = store.load("nonexistent")
-        assert result is None
+        gm, metadata = store.load("nonexistent")
+        assert gm is None
+        assert metadata is None
 
     def test_load_restores_game_manager(self, temp_dir, populated_gm):
         """load() returns a GameManager with equivalent state to what was saved."""
@@ -216,7 +217,7 @@ class TestSessionStoreLoad:
         store = SessionStore(config_path=str(config_path))
         store.save("game-1", populated_gm)
 
-        restored = store.load("game-1")
+        restored, metadata = store.load("game-1")
         assert restored is not None
         assert isinstance(restored, GameManager)
         assert restored.round_number == populated_gm.round_number
@@ -236,7 +237,7 @@ class TestSessionStoreLoad:
         store = SessionStore(config_path=str(config_path))
         store.save("game-1", populated_gm)
 
-        restored = store.load("game-1")
+        restored, _metadata = store.load("game-1")
         # Player 1 played A and H → 5 remaining cards
         assert len(restored.player_1.hand) == 5
         # Player 2 played D and D → 5 remaining cards
@@ -258,7 +259,7 @@ class TestSessionStoreLoad:
         store = SessionStore(config_path=str(config_path))
         store.save("game-1", populated_gm)
 
-        restored = store.load("game-1")
+        restored, _metadata = store.load("game-1")
         assert restored.player_1.history == [A, H]
         assert restored.player_2.history == [A, D]
 
@@ -273,7 +274,7 @@ class TestSessionStoreLoad:
         store = SessionStore(config_path=str(config_path))
         store.save("game-1", populated_gm)
 
-        restored = store.load("game-1")
+        restored, _metadata = store.load("game-1")
         assert len(restored.round_log) == 2
         r1 = restored.round_log[0]
         assert r1.round == 1
@@ -309,7 +310,7 @@ class TestSessionStoreRoundTrip:
         store.save("game-1", gm)
 
         # Load and continue
-        restored = store.load("game-1")
+        restored, _metadata = store.load("game-1")
         result = restored.play_round([A], [A])
         assert result is not None
         assert restored.round_number == 3
@@ -326,7 +327,7 @@ class TestSessionStoreRoundTrip:
 
         store = SessionStore(config_path=str(config_path))
         store.save("game-1", populated_gm)
-        restored = store.load("game-1")
+        restored, _metadata = store.load("game-1")
 
         restored_state = restored.get_state()
         assert restored_state == original_state
@@ -408,3 +409,243 @@ class TestSessionStoreCorruption:
         store = SessionStore(config_path=str(config_path))
         with pytest.raises(ValueError, match="Missing required game state key"):
             store.load("incomplete")
+
+
+# ---------------------------------------------------------------------------
+# AI Serialization tests (TC-SS1–TC-SS10)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionStoreModeSerialization:
+    """TC-SS1–TC-SS5: Serialize/deserialize mode and AI metadata."""
+
+    def test_round_trip_preserves_mode_pvp(self, temp_dir):
+        """TC-SS1: PVP game round-trip preserves mode='pvp'."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        store = SessionStore(config_path=str(config_path))
+        gm = GameManager(mode="pvp")
+        gm.start_game()
+        store.save("game-1", gm)
+
+        restored, metadata = store.load("game-1")
+        assert restored.mode == "pvp"
+        assert metadata["mode"] == "pvp"
+        assert metadata["ai"] is None
+        assert metadata["ai_state"] is None
+
+    def test_round_trip_preserves_mode_pve(self, temp_dir):
+        """TC-SS2: PVE game round-trip preserves mode='pve'."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        store = SessionStore(config_path=str(config_path))
+        gm = GameManager(mode="pve")
+        gm.start_game()
+        ai_state = [0.1, -0.2, 0.3, 0.0, 0.5, -0.1, 0.2, 0.0]
+        store.save("game-1", gm, ai_state=ai_state, ai="rnn_v1.1")
+
+        restored, metadata = store.load("game-1")
+        assert restored.mode == "pve"
+        assert metadata["mode"] == "pve"
+        assert metadata["ai"] == "rnn_v1.1"
+        assert metadata["ai_state"] == ai_state
+
+    def test_legacy_file_no_mode_defaults_to_pvp(self, temp_dir):
+        """TC-SS3: Legacy save file without mode defaults to 'pvp'."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        saves_dir.mkdir()
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        # Write a legacy file (no mode, no ai, no ai_state)
+        legacy_data = {
+            "round": 1,
+            "player_1": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "player_2": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "is_over": False,
+            "winner": None,
+            "round_log": [],
+        }
+        (saves_dir / "legacy.json").write_text(json.dumps(legacy_data))
+
+        store = SessionStore(config_path=str(config_path))
+        restored, metadata = store.load("legacy")
+        assert restored.mode == "pvp"
+        assert metadata["mode"] == "pvp"
+        assert metadata["ai"] is None
+        assert metadata["ai_state"] is None
+
+    def test_save_file_includes_ai_fields_for_pve(self, temp_dir):
+        """TC-SS4: PVE save file contains ai and ai_state fields."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        store = SessionStore(config_path=str(config_path))
+        gm = GameManager(mode="pve")
+        gm.start_game()
+        store.save("game-1", gm, ai_state=[0.0] * 8, ai="rnn_v1.1")
+
+        data = json.loads((saves_dir / "game-1.json").read_text())
+        assert data["mode"] == "pve"
+        assert data["ai"] == "rnn_v1.1"
+
+    def test_pvp_save_file_has_no_ai_state(self, temp_dir):
+        """TC-SS5: PVP save file does not contain ai_state."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        store = SessionStore(config_path=str(config_path))
+        gm = GameManager(mode="pvp")
+        gm.start_game()
+        store.save("game-1", gm)
+
+        data = json.loads((saves_dir / "game-1.json").read_text())
+        assert data["mode"] == "pvp"
+        assert "ai_state" not in data or data["ai_state"] is None
+
+    def test_pve_missing_ai_state_defaults_to_zeros(self, temp_dir):
+        """TC-SS6: PVE save missing ai_state → load returns [0.0]*8."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        saves_dir.mkdir()
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        data = {
+            "round": 1,
+            "player_1": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "player_2": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "is_over": False,
+            "winner": None,
+            "round_log": [],
+            "mode": "pve",
+            "ai": "rnn_v1.1",
+            # ai_state intentionally missing
+        }
+        (saves_dir / "pve_no_state.json").write_text(json.dumps(data))
+
+        store = SessionStore(config_path=str(config_path))
+        restored, metadata = store.load("pve_no_state")
+        assert metadata["ai_state"] == [0.0] * 8
+
+    def test_pve_corrupted_ai_state_falls_back_to_zeros(self, temp_dir):
+        """TC-SS7: Non-numeric ai_state → fall back to [0.0]*8."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        saves_dir.mkdir()
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        data = {
+            "round": 1,
+            "player_1": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "player_2": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "is_over": False,
+            "winner": None,
+            "round_log": [],
+            "mode": "pve",
+            "ai": "rnn_v1.1",
+            "ai_state": ["abc", 1, 2, 3, 4, 5, 6, 7],  # non-numeric
+        }
+        (saves_dir / "pve_corrupt.json").write_text(json.dumps(data))
+
+        store = SessionStore(config_path=str(config_path))
+        restored, metadata = store.load("pve_corrupt")
+        assert metadata["ai_state"] == [0.0] * 8
+
+    def test_pve_wrong_length_ai_state_falls_back(self, temp_dir):
+        """TC-SS8: ai_state with wrong length → fall back to [0.0]*8."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        saves_dir.mkdir()
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        data = {
+            "round": 1,
+            "player_1": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "player_2": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "is_over": False,
+            "winner": None,
+            "round_log": [],
+            "mode": "pve",
+            "ai": "rnn_v1.1",
+            "ai_state": [0.1, 0.2],  # length 2, not 8
+        }
+        (saves_dir / "pve_short.json").write_text(json.dumps(data))
+
+        store = SessionStore(config_path=str(config_path))
+        restored, metadata = store.load("pve_short")
+        assert metadata["ai_state"] == [0.0] * 8
+
+    def test_pve_missing_ai_field_raises_error(self, temp_dir):
+        """TC-SS9: PVE mode with no 'ai' field → ValueError."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        saves_dir.mkdir()
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        data = {
+            "round": 1,
+            "player_1": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "player_2": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "is_over": False,
+            "winner": None,
+            "round_log": [],
+            "mode": "pve",
+            # ai field intentionally missing
+        }
+        (saves_dir / "pve_no_ai.json").write_text(json.dumps(data))
+
+        store = SessionStore(config_path=str(config_path))
+        with pytest.raises(ValueError, match="AI_CONFIG"):
+            store.load("pve_no_ai")
+
+    def test_pvp_with_stray_ai_state_silently_ignored(self, temp_dir):
+        """TC-SS10: PVP save with stray ai_state → ignored, metadata None."""
+        from src.backend.game.session_store import SessionStore
+
+        saves_dir = temp_dir / "saves"
+        saves_dir.mkdir()
+        config_path = temp_dir / "config.json"
+        config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+
+        data = {
+            "round": 1,
+            "player_1": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "player_2": {"hp": 3, "hand": ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"], "history": []},
+            "is_over": False,
+            "winner": None,
+            "round_log": [],
+            "mode": "pvp",
+            "ai": "rnn_v1.1",
+            "ai_state": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+        }
+        (saves_dir / "pvp_stray.json").write_text(json.dumps(data))
+
+        store = SessionStore(config_path=str(config_path))
+        restored, metadata = store.load("pvp_stray")
+        assert restored.mode == "pvp"
+        assert metadata["ai"] is None
+        assert metadata["ai_state"] is None

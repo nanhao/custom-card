@@ -7,12 +7,19 @@
 
 const API_BASE = '/api';
 
-/** Create a new game session. Returns { game_id, state }. */
-export async function createGame() {
+/**
+ * Create a new game session.
+ *
+ * @param {string} [mode='pvp'] - 'pvp' (default) or 'pve'.
+ * @param {string} [ai=null] - AI name (required for PVE).
+ * @returns {{ game_id: string, state: object }}
+ */
+export async function createGame(mode = 'pvp', ai = null) {
+  const body = mode === 'pve' ? { mode, ai } : {};
   const resp = await fetch(`${API_BASE}/games`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify(body),
   });
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
@@ -27,13 +34,36 @@ export async function getState(gameId) {
   return data;
 }
 
-/** Play a round with both players' cards. Returns { round_result, state }. */
-export async function playRound(gameId, card1, card2) {
+/**
+ * Play a round.
+ *
+ * In PVP mode both card1 and card2 are sent.
+ * In PVE mode only card1 is sent (server auto-computes AI card).
+ *
+ * @param {string} gameId
+ * @param {string} card1 - Player 1's card.
+ * @param {string|null} [card2=null] - Player 2's card (PVP only).
+ * @returns {{ round_result: object, state: object }}
+ */
+export async function playRound(gameId, card1, card2 = null) {
+  const body = { cards_1: [card1] };
+  if (card2 !== null) body.cards_2 = [card2];
   const resp = await fetch(`${API_BASE}/games/${gameId}/play`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cards_1: [card1], cards_2: [card2] }),
+    body: JSON.stringify(body),
   });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+  return data;
+}
+
+/**
+ * List available AI opponents.
+ * @returns {{ ais: Array<{name: string, description: string}> }}
+ */
+export async function listAis() {
+  const resp = await fetch(`${API_BASE}/ais`);
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
   return data;

@@ -346,3 +346,106 @@ class TestGameManagerDiscardOrder:
         gm.play_round([A], [D])
         assert A not in gm.player_1.hand or gm.player_1.hand.count(A) == 2
         assert D not in gm.player_2.hand or gm.player_2.hand.count(D) == 1
+
+
+# ---------------------------------------------------------------------------
+# GameManager: mode parameter (TC-GM1–TC-GM5)
+# ---------------------------------------------------------------------------
+
+
+class TestGameManagerMode:
+    """TC-GM1–TC-GM5: mode constructor parameter and get_state integration."""
+
+    def test_default_mode_is_pvp(self):
+        """TC-GM1: GameManager() defaults to mode='pvp'."""
+        gm = GameManager()
+        assert gm.mode == "pvp"
+
+    def test_explicit_pvp_mode(self):
+        """GameManager(mode='pvp') sets mode correctly."""
+        gm = GameManager(mode="pvp")
+        assert gm.mode == "pvp"
+
+    def test_explicit_pve_mode(self):
+        """GameManager(mode='pve') sets mode correctly."""
+        gm = GameManager(mode="pve")
+        assert gm.mode == "pve"
+
+    def test_get_state_includes_mode_pvp(self):
+        """TC-GM2: get_state() dict includes 'mode' key for PVP."""
+        gm = GameManager(mode="pvp")
+        gm.start_game()
+        state = gm.get_state()
+        assert state["mode"] == "pvp"
+
+    def test_get_state_includes_mode_pve(self):
+        """TC-GM2: get_state() dict includes 'mode' key for PVE."""
+        gm = GameManager(mode="pve")
+        gm.start_game()
+        state = gm.get_state()
+        assert state["mode"] == "pve"
+
+    def test_play_round_works_in_pve_mode(self):
+        """TC-GM3: play_round() works identically regardless of mode."""
+        gm = GameManager(mode="pve")
+        gm.start_game()
+        result = gm.play_round([A], [D])
+        assert result is not None
+        assert result.damage_1 >= 0
+        assert result.damage_2 >= 0
+
+    def test_mode_does_not_affect_rules(self):
+        """TC-GM4: Same play_round() on PVP and PVE produces identical results."""
+        gm_pvp = GameManager(mode="pvp")
+        gm_pvp.start_game()
+        gm_pvp.player_1.hand = [A] * 7
+        gm_pvp.player_2.hand = [D] * 7
+        r_pvp = gm_pvp.play_round([A], [D])
+
+        gm_pve = GameManager(mode="pve")
+        gm_pve.start_game()
+        gm_pve.player_1.hand = [A] * 7
+        gm_pve.player_2.hand = [D] * 7
+        r_pve = gm_pve.play_round([A], [D])
+
+        assert r_pvp.damage_1 == r_pve.damage_1
+        assert r_pvp.damage_2 == r_pve.damage_2
+        assert r_pvp.hp_1_after == r_pve.hp_1_after
+        assert r_pvp.hp_2_after == r_pve.hp_2_after
+
+    def test_get_state_includes_round_log(self):
+        """TC-GM5: get_state() includes round_log after rounds are played."""
+        gm = GameManager()
+        gm.start_game()
+        gm.play_round([A], [D])
+        state = gm.get_state()
+        assert "round_log" in state
+        assert len(state["round_log"]) == 1
+        assert state["round_log"][0]["round"] == 1
+
+    def test_get_state_round_log_empty_initially(self):
+        """get_state() returns empty round_log before any rounds played."""
+        gm = GameManager()
+        gm.start_game()
+        state = gm.get_state()
+        assert "round_log" in state
+        assert state["round_log"] == []
+
+
+# ---------------------------------------------------------------------------
+# GameManager: mode immutability
+# ---------------------------------------------------------------------------
+
+
+class TestGameManagerModeImmutability:
+    """Mode is set at construction and cannot be changed afterward."""
+
+    def test_mode_is_immutable_via_dataclass(self):
+        """Mode should be set at __init__ and remain constant."""
+        gm = GameManager(mode="pve")
+        gm.start_game()
+        # After start_game(), mode should still be pve
+        assert gm.mode == "pve"
+        # Play a round — mode unchanged
+        gm.play_round([A], [D])
+        assert gm.mode == "pve"

@@ -46,6 +46,8 @@ const SAMPLE_STATE = {
   },
   is_over: false,
   winner: null,
+  mode: 'pvp',
+  ai: null,
 };
 
 const SAMPLE_ROUND_RESULT = {
@@ -81,6 +83,22 @@ describe('createGame', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
+    });
+  });
+
+  it('creates PVE game with mode and ai params', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({
+      game_id: 'pve-123',
+      state: { ...SAMPLE_STATE, mode: 'pve', ai: 'rnn_v1.1' },
+    }, true, 201));
+
+    const result = await api.createGame('pve', 'rnn_v1.1');
+    expect(result.state.mode).toBe('pve');
+    expect(result.state.ai).toBe('rnn_v1.1');
+    expect(mockFetch).toHaveBeenCalledWith('/api/games', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'pve', ai: 'rnn_v1.1' }),
     });
   });
 
@@ -130,7 +148,7 @@ describe('getState', () => {
 describe('playRound', () => {
   beforeEach(() => { mockFetch.mockReset(); });
 
-  it('returns round_result and updated state on success', async () => {
+  it('returns round_result and updated state on success (PVP)', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({
       round_result: SAMPLE_ROUND_RESULT,
       state: { ...SAMPLE_STATE, round: 2 },
@@ -146,6 +164,22 @@ describe('playRound', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cards_1: ['attack'], cards_2: ['defense'] }),
+    });
+  });
+
+  it('sends only cards_1 when card2 is null (PVE mode)', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({
+      round_result: SAMPLE_ROUND_RESULT,
+      state: { ...SAMPLE_STATE, round: 2, mode: 'pve', ai: 'rnn_v1.1' },
+    }));
+
+    const result = await api.playRound('abc-123', 'attack');
+    expect(result.round_result.cards_1).toEqual(['attack']);
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/games/abc-123/play', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cards_1: ['attack'] }),
     });
   });
 
@@ -169,6 +203,31 @@ describe('playRound', () => {
     ));
 
     await expect(api.playRound('abc-123', 'heavy', 'defense')).rejects.toThrow('Not all cards');
+  });
+});
+
+// =========================================================================
+// listAis
+// =========================================================================
+
+describe('listAis', () => {
+  beforeEach(() => { mockFetch.mockReset(); });
+
+  it('returns AI list on success', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({
+      ais: [{ name: 'rnn_v1.1', description: 'GRU-based model, random weights (gen1)' }],
+    }));
+
+    const result = await api.listAis();
+    expect(result.ais).toHaveLength(1);
+    expect(result.ais[0].name).toBe('rnn_v1.1');
+    expect(mockFetch).toHaveBeenCalledWith('/api/ais');
+  });
+
+  it('throws on server error', async () => {
+    mockFetch.mockResolvedValueOnce(mockErrorResponse('Server error', 'INTERNAL', 500));
+
+    await expect(api.listAis()).rejects.toThrow('Server error');
   });
 });
 

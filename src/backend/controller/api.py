@@ -6,14 +6,16 @@ Per architecture D10, this module contains NO business logic. It only:
 - Formats and returns HTTP responses (serialize to JSON, set status codes)
 
 Per architecture D11, the face-down protocol is client-side. The API
-receives both cards together via POST /play.
+receives both cards together via POST /play in PVP mode. In PVE mode
+the client sends only cards_1 and the server auto-computes cards_2 via AI.
 
 Routes:
     GET    /                       — Serve the React SPA (production) or dev info
-    POST   /api/games              — Create a new game
+    POST   /api/games              — Create a new game (accepts mode + ai)
     GET    /api/games/{game_id}    — Get current game state
-    POST   /api/games/{game_id}/play  — Play a round
+    POST   /api/games/{game_id}/play  — Play a round (PVP: both cards; PVE: cards_1 only)
     DELETE /api/games/{game_id}    — Delete a game session
+    GET    /api/ais                — List available AI opponents
 
 In development, run the Vite dev server (port 5173) which proxies /api to Flask
 (port 5000). In production, run `npm run build` then Flask serves dist/ at /.
@@ -32,6 +34,7 @@ from flask_cors import CORS
 _FRONTEND_SRC = Path(__file__).resolve().parent.parent.parent / "frontend"
 _FRONTEND_DIST = _FRONTEND_SRC / "dist"
 
+from src.backend.ai.registry import list_ais, load_ai
 from src.backend.controller.serializers import (
     card_to_str,
     error_response,
@@ -112,20 +115,69 @@ def _register_routes(app: Flask) -> None:
     def create_game():
         """Create a new game session and return its initial state.
 
-        Request body: {} (empty)
+        Request body (PVP, backward compatible):
+            {} (empty) or {"mode": "pvp"}
+
+        Request body (PVE):
+            {"mode": "pve", "ai": "rnn_v1.1"}
+
         Success: 201 Created with {"game_id": "<uuid>", "state": {...}}
+        Errors:
+            400 — unknown AI name (UNKNOWN_AI)
+            400 — mode is "pve" but no AI specified
         """
         store: SessionStore = app.config["SESSION_STORE"]
-        game_id = str(uuid.uuid4())
 
-        gm = GameManager()
+        # Parse request body (backward compatible: empty body = PVP)
+        data = request.get_json(silent=True) or {}
+        mode = data.get("mode", "pvp")
+        ai_name = data.get("ai", None)
+
+        # Validate PVE request
+        if mode == "pve":
+            if not ai_name:
+                return jsonify(error_response(
+                    "mode is 'pve' but no 'ai' field provided", "MISSING_AI", 400
+                )), 400
+            # Validate AI name exists (no model loading, just registry check)
+            known_ais = [a["name"] for a in list_ais()]
+            if ai_name not in known_ais:
+                return jsonify(error_response(
+                    f"Unknown AI: {ai_name!r}. Available: {', '.join(known_ais)}",
+                    "UNKNOWN_AI", 400
+                )), 400
+
+        game_id = str(uuid.uuid4())
+        gm = GameManager(mode=mode)
         gm.start_game()
-        store.save(game_id, gm)
+
+        # Hardcode initial ai_state to zeros (init_hidden_state always returns zeros;
+        # avoids loading the AI module at game creation)
+        ai_state = [0.0] * 8 if mode == "pve" else None
+
+        store.save(game_id, gm, ai_state=ai_state, ai=ai_name)
+
+        # Build response state (inject ai from metadata, not from GameManager)
+        state = gm.get_state()
+        state["ai"] = ai_name  # Per api_design.md §6.1
 
         return jsonify({
             "game_id": game_id,
-            "state": gm.get_state(),
+            "state": state,
         }), 201
+
+    # ------------------------------------------------------------------
+    # GET /api/ais — List AI Opponents
+    # ------------------------------------------------------------------
+
+    @app.route("/api/ais", methods=["GET"])
+    def list_ai_opponents():
+        """Return the list of registered AI opponents.
+
+        Success: 200 OK with {"ais": [{"name": "...", "description": "..."}]}
+        """
+        ais = list_ais()
+        return jsonify({"ais": ais}), 200
 
     # ------------------------------------------------------------------
     # GET /api/games/{game_id} — Get State
@@ -136,18 +188,23 @@ def _register_routes(app: Flask) -> None:
         """Return the current game snapshot.
 
         Success: 200 OK with {"game_id": "...", "state": {...}}
+        The state dict includes mode and ai fields per api_design.md §6.1.
         Errors:  404 if game not found
         """
         store: SessionStore = app.config["SESSION_STORE"]
-        gm = store.load(game_id)
+        gm, metadata = store.load(game_id)
         if gm is None:
             return jsonify(error_response(
                 f"Game not found: {game_id}", "GAME_NOT_FOUND", 404
             )), 404
 
+        # Build state with AI metadata injected from save file
+        state = gm.get_state()
+        state["ai"] = metadata["ai"] if metadata else None
+
         return jsonify({
             "game_id": game_id,
-            "state": gm.get_state(),
+            "state": state,
         }), 200
 
     # ------------------------------------------------------------------
@@ -156,19 +213,25 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/api/games/<game_id>/play", methods=["POST"])
     def play_round(game_id: str):
-        """Submit both players' cards and resolve the round.
+        """Submit cards and resolve the round.
 
-        Request body: {"cards_1": ["<card>", ...], "cards_2": ["<card>", ...]}
+        PVP mode (unchanged):
+            Request body: {"cards_1": ["<card>"], "cards_2": ["<card>"]}
+
+        PVE mode (new):
+            Request body: {"cards_1": ["<card>"]}
+            Server auto-computes cards_2 via AI. cards_2 is ignored if sent.
+
         Success: 200 OK with {"round_result": {...}, "state": {...}}
         Errors:
-            400 — invalid card string (INVALID_CARD)
-            400 — card not in hand (CARD_NOT_IN_HAND)
-            400 — game already over (GAME_OVER)
-            400 — game not started (GAME_NOT_STARTED)
+            400 — invalid card (INVALID_CARD), card not in hand (CARD_NOT_IN_HAND),
+                  game over (GAME_OVER), game not started (GAME_NOT_STARTED),
+                  missing cards_1 in PVE (MISSING_CARDS_1)
             404 — game not found
+            500 — AI load failure (AI_LOAD_ERROR), AI inference failure (AI_INFERENCE_ERROR)
         """
         store: SessionStore = app.config["SESSION_STORE"]
-        gm = store.load(game_id)
+        gm, metadata = store.load(game_id)
         if gm is None:
             return jsonify(error_response(
                 f"Game not found: {game_id}", "GAME_NOT_FOUND", 404
@@ -181,24 +244,69 @@ def _register_routes(app: Flask) -> None:
                 "Request body must be valid JSON", "INVALID_JSON", 400
             )), 400
 
-        # ---- Deserialize cards (with INVALID_CARD check) ----
+        # ---- Deserialize Player 1's cards ----
         cards_1_raw = data.get("cards_1", [])
-        cards_2_raw = data.get("cards_2", [])
+        if not cards_1_raw:
+            return jsonify(error_response(
+                "Missing required field: cards_1", "MISSING_CARDS_1", 400
+            )), 400
 
         try:
             cards_1 = [str_to_card(s) for s in cards_1_raw]
-            cards_2 = [str_to_card(s) for s in cards_2_raw]
         except ValueError as exc:
             return jsonify(error_response(
                 str(exc), "INVALID_CARD", 400
             )), 400
 
-        # ---- Delegate to GameManager (catches game-rule violations) ----
+        # ---- Determine Player 2's cards ----
+        if gm.mode == "pve":
+            # PVE: auto-compute via AI
+            try:
+                ai_module = load_ai(metadata["ai"])
+            except (ValueError, ImportError) as exc:
+                return jsonify(error_response(
+                    f"Failed to load AI {metadata.get('ai', 'unknown')!r}: {exc}",
+                    "AI_LOAD_ERROR", 500
+                )), 500
+
+            try:
+                card_str, new_hidden_state = ai_module.select_action(
+                    gm.get_state(), metadata["ai_state"]
+                )
+            except Exception as exc:
+                return jsonify(error_response(
+                    f"AI inference failed: {exc}", "AI_INFERENCE_ERROR", 500
+                )), 500
+
+            # Validate AI output (defense in depth)
+            valid_cards = {"attack", "defense", "heavy", "counter"}
+            if card_str not in valid_cards:
+                return jsonify(error_response(
+                    f"AI returned invalid card: {card_str!r}",
+                    "AI_INFERENCE_ERROR", 500
+                )), 500
+
+            cards_2 = [str_to_card(card_str)]
+        else:
+            # PVP: deserialize cards_2 from request body
+            cards_2_raw = data.get("cards_2", [])
+            if not cards_2_raw:
+                return jsonify(error_response(
+                    "Missing required field: cards_2", "MISSING_CARDS_2", 400
+                )), 400
+
+            try:
+                cards_2 = [str_to_card(s) for s in cards_2_raw]
+            except ValueError as exc:
+                return jsonify(error_response(
+                    str(exc), "INVALID_CARD", 400
+                )), 400
+
+        # ---- Delegate to GameManager ----
         try:
             result = gm.play_round(cards_1, cards_2)
         except ValueError as exc:
             error_msg = str(exc)
-            # Map known error messages to appropriate error codes
             if "game is over" in error_msg.lower():
                 code = "GAME_OVER"
             elif "game not started" in error_msg.lower():
@@ -208,11 +316,18 @@ def _register_routes(app: Flask) -> None:
             return jsonify(error_response(error_msg, code, 400)), 400
 
         # Persist updated state
-        store.save(game_id, gm)
+        if gm.mode == "pve":
+            store.save(game_id, gm, ai_state=new_hidden_state, ai=metadata["ai"])
+        else:
+            store.save(game_id, gm)
+
+        # Build response state with AI metadata
+        state = gm.get_state()
+        state["ai"] = metadata["ai"] if metadata else None
 
         return jsonify({
             "round_result": round_result_to_dict(result),
-            "state": gm.get_state(),
+            "state": state,
         }), 200
 
     # ------------------------------------------------------------------

@@ -425,3 +425,49 @@ body {
 .log-safe {
   color: var(--green);
 }
+
+/* ---- Menu / AI Select Screen ---- */
+.menu-screen {
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 32px 16px;
+}
+.menu-title {
+  font-size: 1.2rem;
+  color: var(--gold);
+  text-align: center;
+}
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+.menu-btn {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 24px;
+}
+.menu-ai-desc {
+  font-size: 0.75rem;
+  font-weight: 400;
+  opacity: 0.7;
+}
+.menu-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ---- Small button variant ---- */
+.btn-small {
+  padding: 6px 18px;
+  font-size: 0.8rem;
+}

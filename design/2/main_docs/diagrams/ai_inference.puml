@@ -1,0 +1,45 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+title AI Inference — select_action()
+
+participant "Controller" as Ctrl
+participant "AI Module\n(rnn_v1/model.py)" as AI
+participant "GRUCardModel" as Model
+
+Ctrl -> AI: select_action(state, hidden_state)
+
+activate AI
+
+== Step 1: Build input vector ==
+AI -> AI: Build 14-d vector from state dict
+note right
+    Card counts: 4 floats (atk/def/heavy/counter)
+    HP: AI HP + Human HP = 2 floats
+    Last moves: AI one-hot(4) + Human one-hot(4) = 8 floats
+    Round 1: both one-hot = [0,0,0,0]
+    Total: 14 floats -> tensor (1, 14)
+end note
+
+== Step 2: Forward pass ==
+AI -> Model: forward(input_tensor, hidden_tensor)
+activate Model
+
+Model -> Model: GRU(input) → gru_output (1, 8)
+Model --> AI: policy_logits (1, 4)\nvalue (1, 1)\nnew_hidden (1, 8)
+
+deactivate Model
+
+== Step 3: Mask illegal actions ==
+AI -> AI: For each card type c:\nif c not in AI hand → logit[c] = -inf
+
+== Step 4: Select action ==
+AI -> AI: probs = softmax(policy_logits)\naction_idx = argmax(probs)\ncard = ["attack","defense","heavy","counter"][action_idx]
+
+== Step 5: Return ==
+AI --> Ctrl: (card_string, new_hidden_as_list)
+
+deactivate AI
+
+@enduml

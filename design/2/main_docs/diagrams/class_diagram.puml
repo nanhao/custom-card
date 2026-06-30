@@ -1,0 +1,115 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+
+package "src/backend/game/" as game #LightBlue {
+    enum CardType {
+        ATTACK
+        DEFENSE
+        HEAVY_STRIKE
+        COUNTER
+    }
+    class Player {
+        +hp: int
+        +hand: list[CardType]
+        +history: list[CardType]
+        +play_cards(cards: list[CardType]): None
+        +take_damage(amount: int): None
+        +has_cards(cards: list[CardType]): bool
+    }
+    class ResolutionResult {
+        +damage_1: int
+        +damage_2: int
+        +details: list[str]
+    }
+    class CardResolver {
+        +{static} resolve(cards_1, cards_2, history_1, history_2): ResolutionResult
+        +{static} get_consecutive_attack(history): int
+        +{static} played_defense_last_round(history): bool
+    }
+    class RoundResult {
+        +round: int
+        +cards_1: list[CardType]
+        +cards_2: list[CardType]
+        +damage_1: int
+        +damage_2: int
+        +hp_1_after: int
+        +hp_2_after: int
+        +details: list[str]
+        +is_game_over: bool
+        +winner: str | None
+    }
+    class GameManager {
+        +player_1: Player
+        +player_2: Player
+        +round_number: int
+        +is_over: bool
+        +winner: str | None
+        +round_log: list[RoundResult]
+        +mode: str {readonly}
+        +__init__(mode: str = "pvp")
+        +start_game(): None
+        +play_round(cards_1, cards_2): RoundResult
+        +get_state(): dict
+    }
+    class SessionStore {
+        +save(game_id, gm, ai_state=None): None
+        +load(game_id): (GameManager, dict)
+        +delete(game_id): bool
+    }
+}
+
+package "src/backend/ai/" as ai #LightGreen {
+    package "rnn_v1/" as rnn {
+        class GRUCardModel {
+            +gru: GRU
+            +fc_policy: Linear
+            +fc_value: Linear
+            +forward(x, hidden): (policy, value, hidden)
+        }
+    }
+    class AIRegistry <<module>> {
+        +list_ais(): list[dict]
+        +load_ai(name: str): object
+    }
+    note right of rnn::GRUCardModel
+        Public functions:
+        init_hidden_state() -> list[float]
+        select_action(state, hidden) -> (str, list[float])
+    end note
+}
+
+package "src/backend/controller/" as ctrl #LightYellow {
+    class api <<Flask routes>> {
+        +GET /api/ais
+        +POST /api/games (mode, ai)
+        +GET /api/games/{id}
+        +POST /api/games/{id}/play
+        +DELETE /api/games/{id}
+    }
+    class serializers <<module>> {
+        +card_to_str(card): str
+        +str_to_card(value): CardType
+        +round_result_to_dict(rr): dict
+        +error_response(msg, code, status): dict
+    }
+}
+
+game::Player --> game::CardType
+game::CardResolver ..> game::ResolutionResult
+game::CardResolver --> game::CardType
+game::GameManager --> game::Player
+game::GameManager --> game::CardResolver
+game::GameManager --> game::RoundResult
+game::SessionStore --> game::GameManager
+
+ctrl::api --> game::GameManager
+ctrl::api --> game::SessionStore
+ctrl::api --> ai::AIRegistry
+ctrl::api --> ctrl::serializers
+ctrl::serializers --> game::CardType
+
+ai::AIRegistry --> rnn::GRUCardModel
+rnn::GRUCardModel ..> game::CardType
+
+@enduml

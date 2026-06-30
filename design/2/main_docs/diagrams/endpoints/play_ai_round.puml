@@ -1,0 +1,59 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+title POST /api/games/{id}/play — AI Round
+
+actor Client
+participant "api.py\nPOST /api/games/{id}/play" as API
+database "SessionStore" as Store
+participant "ai.registry" as Registry
+participant "AI Module" as AI
+participant "GameManager" as GM
+
+Client -> API: POST /api/games/{id}/play\n{"cards_1": ["attack"]}
+
+activate API
+
+== Load ==
+API -> Store: load(game_id)
+Store --> API: (gm, metadata) = (gm, {ai, ai_state})
+
+alt game not found
+    API --> Client: 404 {"error": "Game not found", "code": "GAME_NOT_FOUND"}
+end
+
+== Deserialize human card ==
+API -> API: str_to_card("attack") → CardType.ATTACK
+
+== AI auto-select (PVE) ==
+alt gm.mode == "pve"
+    API -> Registry: load_ai(ai_name)
+    Registry --> API: AI module
+    API -> AI: select_action(state, ai_state)
+
+    activate AI
+    AI -> AI: Build 14-d input vector\n(card counts, HP, one-hot history)
+    AI -> AI: GRU forward → mask → softmax → argmax
+    AI --> API: ("defense", new_hidden_state)
+    deactivate AI
+
+    API -> API: str_to_card("defense") → CardType.DEFENSE
+    API -> API: cards_2 = [CardType.DEFENSE]
+end
+
+== Resolve ==
+API -> GM: play_round([ATTACK], [DEFENSE])
+
+alt ValueError
+    API --> Client: 400 {"error": msg, "code": "..."}
+end
+
+== Persist ==
+API -> Store: save(game_id, gm, ai_state=new_hidden_state)
+
+API --> Client: 200 {"round_result": {...}, "state": {...}}
+
+deactivate API
+
+@enduml

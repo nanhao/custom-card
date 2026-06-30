@@ -27,6 +27,10 @@ src/backend/game/        Pure game logic (no UI, no I/O)
   game_manager.py        Game state machine + round orchestration
   session_store.py       Disk-based game persistence (save/load/delete)
 
+src/backend/ai/           AI opponents (no game logic)
+  registry.py            AI registry: list, load by name
+  rnn_v1/                GRU neural network model (PyTorch)
+
 src/backend/controller/  REST API adapter (thin, no business logic)
   api.py                 Flask routes + static serving
   serializers.py         CardType ⇄ string, RoundResult → dict, error formatting
@@ -36,7 +40,8 @@ src/backend/scripts/     Server entry point
 
 src/frontend/            React SPA (Vite + React 19)
   src/api.js             REST API client
-  src/App.jsx            Main game UI component
+  src/App.jsx            App shell (menu, navigation, game lifecycle)
+  src/GameBoard.jsx      In-game UI (hand area, status, result, log)
   src/App.css            All styles
 
 tests/
@@ -46,7 +51,7 @@ tests/
 
 src/frontend/tests/      Frontend tests (vitest + React Testing Library)
   api.test.js            API client unit tests
-  App.test.jsx            UI component tests
+  App.test.jsx           UI component tests
 ```
 
 ## Quick Start
@@ -82,9 +87,10 @@ Open **http://127.0.0.1:5000** in your browser.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/games` | Create a new game |
+| `GET` | `/api/ais` | List available AI opponents |
+| `POST` | `/api/games` | Create a new game (supports `mode` and `ai` params for PVE) |
 | `GET` | `/api/games/{id}` | Get current game state |
-| `POST` | `/api/games/{id}/play` | Submit cards and resolve a round |
+| `POST` | `/api/games/{id}/play` | Submit cards and resolve a round (PVE: auto-computes AI card) |
 | `DELETE` | `/api/games/{id}` | Delete a game session |
 
 ## Running Tests
@@ -92,7 +98,7 @@ Open **http://127.0.0.1:5000** in your browser.
 ### Backend (Python)
 
 ```bash
-# All backend tests (188 tests)
+# All backend tests (278 tests)
 python -m pytest tests/
 
 # Unit tests only
@@ -107,7 +113,7 @@ python -m pytest tests/integration/
 ```bash
 cd src/frontend
 
-# Run frontend tests once (27 tests)
+# Run frontend tests once (28 tests)
 npm test
 
 # Watch mode (re-run on file changes)
