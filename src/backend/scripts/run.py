@@ -1,8 +1,8 @@
 """Entry point for the Flask game server.
 
-Usage:
-    python run.py              # Start on http://127.0.0.1:5000
-    python run.py --debug      # Start with debug mode (auto-reload)
+Usage (from project root):
+    python src/backend/scripts/run.py              # Start on http://127.0.0.1:5000
+    python src/backend/scripts/run.py --debug      # Start with debug mode (auto-reload)
 
 Before running in production mode, build the React frontend first:
     cd src/frontend && npm run build

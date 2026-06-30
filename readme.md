@@ -31,6 +31,9 @@ src/backend/controller/  REST API adapter (thin, no business logic)
   api.py                 Flask routes + static serving
   serializers.py         CardType ⇄ string, RoundResult → dict, error formatting
 
+src/backend/scripts/     Server entry point
+  run.py                 Start Flask server (python src/backend/scripts/run.py)
+
 src/frontend/            React SPA (Vite + React 19)
   src/api.js             REST API client
   src/App.jsx            Main game UI component
@@ -41,7 +44,9 @@ tests/
   integration/           Integration tests (API routes, full game flows)
   e2e/                   End-to-end tests (future)
 
-run.py                   Server entry point
+src/frontend/tests/      Frontend tests (vitest + React Testing Library)
+  api.test.js            API client unit tests
+  App.test.jsx            UI component tests
 ```
 
 ## Quick Start
@@ -50,7 +55,7 @@ run.py                   Server entry point
 
 ```bash
 # Terminal 1 — start the Flask API server
-python run.py --debug
+python src/backend/scripts/run.py --debug
 
 # Terminal 2 — start the Vite dev server
 cd src/frontend
@@ -68,7 +73,7 @@ Open **http://localhost:5173** in your browser. The Vite dev server proxies
 cd src/frontend && npm run build
 
 # Start the server (serves both API and static frontend)
-cd ../.. && python run.py
+cd ../.. && python src/backend/scripts/run.py
 ```
 
 Open **http://127.0.0.1:5000** in your browser.
@@ -84,8 +89,10 @@ Open **http://127.0.0.1:5000** in your browser.
 
 ## Running Tests
 
+### Backend (Python)
+
 ```bash
-# All tests
+# All backend tests (188 tests)
 python -m pytest tests/
 
 # Unit tests only
@@ -93,4 +100,16 @@ python -m pytest tests/unit/
 
 # Integration tests only
 python -m pytest tests/integration/
+```
+
+### Frontend (JavaScript)
+
+```bash
+cd src/frontend
+
+# Run frontend tests once (27 tests)
+npm test
+
+# Watch mode (re-run on file changes)
+npm run test:watch
 ```
