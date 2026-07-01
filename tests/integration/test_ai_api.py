@@ -451,14 +451,22 @@ class TestFullAIGameFlow:
 
     def test_game_over_prevents_play(self, app_client, ai_game_id):
         """TC-EDGE4: POST /play after game over returns 400."""
-        # Play all 7 rounds
+        # Play until game over, picking cards from the player's actual hand
         for _ in range(7):
+            state_resp = app_client.get(f"/api/games/{ai_game_id}")
+            st = state_resp.get_json()["state"]
+            if st["is_over"]:
+                break
+            # Pick a card from Player 1's actual hand
+            hand = st["players"]["1"]["hand"]
+            if not hand:
+                break
             app_client.post(
                 f"/api/games/{ai_game_id}/play",
-                data=json.dumps({"cards_1": ["attack"]}),
+                data=json.dumps({"cards_1": [hand[0]]}),
                 content_type="application/json",
             )
-        # Extra round attempt
+        # Extra round attempt after game over
         resp = app_client.post(
             f"/api/games/{ai_game_id}/play",
             data=json.dumps({"cards_1": ["defense"]}),

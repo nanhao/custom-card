@@ -35,6 +35,7 @@ _FRONTEND_DIST = _FRONTEND_SRC / "dist"
 
 from src.backend.ai.registry import list_ais
 from src.backend.app.app_manager import AppManager
+from src.backend.app.converter import Converter
 from src.backend.controller.serializers import (
     card_to_str,
     error_response,
@@ -128,7 +129,6 @@ def _register_routes(app: Flask) -> None:
             400 — unknown AI name (UNKNOWN_AI)
             400 — mode is "pve" but no AI specified
         """
-        store: SessionStore = app.config["SESSION_STORE"]
         app_manager: AppManager = app.config["APP_MANAGER"]
 
         # Parse request body (backward compatible: empty body = PVP)
@@ -142,9 +142,9 @@ def _register_routes(app: Flask) -> None:
             game_id, state = app_manager.create_game(mode=mode, ai_name=ai_name)
         except ValueError as exc:
             error_msg = str(exc)
-            if "unknown" in error_msg.lower() or "Unknown" in error_msg:
+            if "unknown" in error_msg.lower():
                 return jsonify(error_response(error_msg, "UNKNOWN_AI", 400)), 400
-            if "missing" in error_msg.lower() or "Missing" in error_msg:
+            if "missing" in error_msg.lower():
                 return jsonify(error_response(error_msg, "MISSING_AI", 400)), 400
             return jsonify(error_response(error_msg, "BAD_REQUEST", 400)), 400
 
@@ -268,8 +268,7 @@ def _register_routes(app: Flask) -> None:
                 )), 500
 
             # Validate AI output (defense in depth)
-            valid_cards = {"attack", "defense", "heavy", "counter"}
-            if card_str not in valid_cards:
+            if card_str not in Converter.ALL_CARD_TYPES:
                 return jsonify(error_response(
                     f"AI returned invalid card: {card_str!r}",
                     "AI_INFERENCE_ERROR", 500

@@ -15,6 +15,7 @@ import importlib
 import uuid
 
 import torch
+import torch.nn as nn
 
 from src.backend.ai.registry import get_ai_info
 from src.backend.app.converter import Converter
@@ -46,7 +47,7 @@ class AppManager:
             session_store: SessionStore instance for save/load/delete.
         """
         self._session_store = session_store
-        self._models: dict[str, object] = {}  # Model cache per design D7
+        self._models: dict[str, nn.Module] = {}  # Model cache per design D7
 
     # ------------------------------------------------------------------
     # Game Lifecycle
@@ -75,6 +76,12 @@ class AppManager:
         Raises:
             ValueError: If mode=="pve" and ai_name is None or unknown.
         """
+        # Validate mode
+        if mode not in ("pvp", "pve"):
+            raise ValueError(
+                f"Invalid mode: {mode!r}. Must be 'pvp' or 'pve'."
+            )
+
         # Validate PVE mode requirements
         if mode == "pve":
             if not ai_name:
@@ -168,7 +175,7 @@ class AppManager:
     # Internal: Model loading and caching
     # ------------------------------------------------------------------
 
-    def _get_model(self, ai_name: str) -> object:
+    def _get_model(self, ai_name: str) -> nn.Module:
         """Load (or retrieve from cache) the AI model for the given name.
 
         Uses registry metadata to import the module, instantiate the
@@ -255,8 +262,9 @@ class AppManager:
         def mask_fn(logits: torch.Tensor) -> torch.Tensor:
             """Set logits to -inf for card types not in the AI's hand."""
             masked = logits.clone()
-            for card_str, idx in Converter._CARD_TO_INDEX.items():
+            for card_str in Converter.ALL_CARD_TYPES:
                 if card_str not in legal_cards:
+                    idx = Converter.card_to_index(card_str)
                     masked[0, idx] = float("-inf")
             return masked
 

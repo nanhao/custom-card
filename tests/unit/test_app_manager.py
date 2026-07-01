@@ -12,6 +12,7 @@ import pytest
 
 from src.backend.app.app_manager import AppManager
 from src.backend.game.session_store import SessionStore
+from tests.helpers import make_game_state
 
 
 # ---------------------------------------------------------------------------
@@ -32,34 +33,6 @@ def session_store(tmp_path):
 def app_manager(session_store):
     """Create an AppManager with a temporary SessionStore."""
     return AppManager(session_store)
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_state(hand_2=None, hp_1=3, hp_2=3,
-                history_1=None, history_2=None, round_num=1):
-    """Build a minimal game state dict for ai_select_action tests."""
-    if hand_2 is None:
-        hand_2 = ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"]
-    if history_1 is None:
-        history_1 = []
-    if history_2 is None:
-        history_2 = []
-
-    return {
-        "round": round_num,
-        "players": {
-            "1": {"hp": hp_1, "hand": ["attack"] * 7, "history": list(history_1)},
-            "2": {"hp": hp_2, "hand": list(hand_2), "history": list(history_2)},
-        },
-        "is_over": False,
-        "winner": None,
-        "mode": "pve",
-        "round_log": [],
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +124,11 @@ class TestCreateGamePVE:
 class TestCreateGamePVEErrors:
     """TC-AM3, TC-AM4: Error handling for PVE game creation."""
 
+    def test_invalid_mode_raises_value_error(self, app_manager):
+        """create_game with invalid mode raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid mode"):
+            app_manager.create_game(mode="pva")
+
     def test_unknown_ai_raises_value_error(self, app_manager):
         """TC-AM3: create_game with unknown AI raises ValueError."""
         with pytest.raises(ValueError):
@@ -218,7 +196,7 @@ class TestAiSelectAction:
 
     def test_returns_tuple_of_str_and_list(self, app_manager):
         """TC-AM6: Returns (card_str, new_hidden) with full hand."""
-        state = _make_state()
+        state = make_game_state()
         h0 = self._get_initial_hidden()
         card_str, new_hidden = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert isinstance(card_str, str)
@@ -227,28 +205,28 @@ class TestAiSelectAction:
 
     def test_card_str_is_valid_card(self, app_manager):
         """TC-AM6: Returned card must be a valid card type."""
-        state = _make_state()
+        state = make_game_state()
         h0 = self._get_initial_hidden()
         card_str, _ = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert card_str in ("attack", "defense", "heavy", "counter")
 
     def test_hidden_state_evolves(self, app_manager):
         """TC-AM6: Hidden state must change after inference."""
-        state = _make_state()
+        state = make_game_state()
         h0 = self._get_initial_hidden()
         _, new_hidden = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert new_hidden != [0.0] * 8, "Hidden state should evolve"
 
     def test_limited_hand_returns_only_legal_card(self, app_manager):
         """TC-AM7: With only one card, must return that card."""
-        state = _make_state(hand_2=["counter"])
+        state = make_game_state(hand_2=["counter"])
         h0 = self._get_initial_hidden()
         card_str, _ = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert card_str == "counter"
 
     def test_hidden_state_evolves_across_calls(self, app_manager):
         """TC-AM8: Hidden state evolves across sequential calls."""
-        state = _make_state()
+        state = make_game_state()
         h0 = self._get_initial_hidden()
         _, h1 = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         _, h2 = app_manager.ai_select_action(state, h1, "rnn_v1.1")
@@ -257,7 +235,7 @@ class TestAiSelectAction:
 
     def test_deterministic_with_same_input(self, app_manager):
         """TC-AM9: Same input → same output (deterministic)."""
-        state = _make_state()
+        state = make_game_state()
         h0 = self._get_initial_hidden()
         card1, h1 = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         card2, h2 = app_manager.ai_select_action(state, h0, "rnn_v1.1")
@@ -266,7 +244,7 @@ class TestAiSelectAction:
 
     def test_single_defense_hand_returns_defense(self, app_manager):
         """TC-AM12: AI with only 'defense' must return 'defense'."""
-        state = _make_state(hand_2=["defense"])
+        state = make_game_state(hand_2=["defense"])
         h0 = self._get_initial_hidden()
         card_str, _ = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert card_str == "defense"
@@ -282,7 +260,7 @@ class TestAiSelectActionErrors:
 
     def test_unknown_ai_raises_value_error(self, app_manager):
         """ai_select_action with unknown AI raises ValueError."""
-        state = _make_state()
+        state = make_game_state()
         h0 = [0.0] * 8
         with pytest.raises(ValueError):
             app_manager.ai_select_action(state, h0, "nonexistent")
@@ -297,18 +275,22 @@ class TestModelCaching:
     """TC-AM11: Model is cached and not reloaded."""
 
     def test_model_cached_between_calls(self, app_manager):
-        """Two ai_select_action calls for same AI use cached model."""
+        """Two ai_select_action calls for same AI use cached model.
+
+        Verifies caching by mocking importlib.import_module — the
+        second call should not trigger a re-import.
+        """
         from unittest.mock import patch
 
-        state = _make_state()
+        state = make_game_state()
         h0 = [0.0] * 8
 
-        # First call loads the model
+        # First call loads the model (importlib is called)
         card1, h1 = app_manager.ai_select_action(state, h0, "rnn_v1.1")
-        # Second call should use cache (verify by checking _models dict)
-        card2, h2 = app_manager.ai_select_action(state, h1, "rnn_v1.1")
-
-        # Verify the model is cached
-        assert "rnn_v1.1" in app_manager._models
         assert card1 in ("attack", "defense", "heavy", "counter")
-        assert card2 in ("attack", "defense", "heavy", "counter")
+
+        # Second call should use cache — verify importlib is NOT called again
+        with patch("importlib.import_module") as mock_import:
+            card2, h2 = app_manager.ai_select_action(state, h1, "rnn_v1.1")
+            mock_import.assert_not_called()
+            assert card2 in ("attack", "defense", "heavy", "counter")

@@ -148,26 +148,25 @@ class TestRegistryNoModelImport:
     def test_registry_import_does_not_import_model(self):
         """Importing ai.registry must not cause model module import.
 
-        Verifies that 'torch' is not in sys.modules after importing
-        only the registry (it may already be imported by other tests,
-        so we check that no model-specific module is loaded).
+        Verifies that the registry source contains no 'import' statements
+        for model modules, torch, or importlib. This ensures the registry
+        is pure metadata with no side-effect imports.
         """
-        import sys
-
-        # The registry module should not have imported the rnn_v1 model
-        model_key = "src.backend.ai.rnn_v1.model"
-        # After importing registry, the model module should NOT be loaded
-        # unless something else already loaded it
-        # We verify by checking that importing registry didn't trigger
-        # model import — but since other tests may have loaded it,
-        # we instead verify that the registry module itself does NOT
-        # contain any model import statements
         import src.backend.ai.registry as reg
         import inspect
 
         source = inspect.getsource(reg)
-        # No importlib or torch should appear in registry source
-        # (after refactoring, registry has no importlib or torch imports)
-        assert "importlib" not in source, (
-            "registry must not import modules dynamically"
-        )
+        # The registry must not contain any import statement at all
+        # (after refactoring, it's pure declarative data + functions)
+        # Check for import statements (excluding those in docstrings/comments)
+        lines = source.splitlines()
+        for line in lines:
+            stripped = line.strip()
+            # Skip comments and docstrings
+            if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'''"):
+                continue
+            if stripped.startswith("import ") or stripped.startswith("from "):
+                # Only flag lines that are actual import statements (not in strings)
+                assert False, (
+                    f"registry must not contain import statements, but found: {stripped}"
+                )

@@ -8,37 +8,7 @@ construction from game state dicts.
 import pytest
 
 from src.backend.app.converter import Converter
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_state(hand_2=None, hp_1=3, hp_2=3,
-                history_1=None, history_2=None, round_num=1):
-    """Build a minimal game state dict matching GameManager.get_state() format.
-
-    All parameters are optional with sensible defaults for a fresh game.
-    """
-    if hand_2 is None:
-        hand_2 = ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"]
-    if history_1 is None:
-        history_1 = []
-    if history_2 is None:
-        history_2 = []
-
-    return {
-        "round": round_num,
-        "players": {
-            "1": {"hp": hp_1, "hand": ["attack"] * 7, "history": list(history_1)},
-            "2": {"hp": hp_2, "hand": list(hand_2), "history": list(history_2)},
-        },
-        "is_over": False,
-        "winner": None,
-        "mode": "pve",
-        "round_log": [],
-    }
+from tests.helpers import make_game_state
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +94,7 @@ class TestBuildInputVector:
 
     def test_round_1_onehot_are_zeros(self):
         """TC-CV5: Round 1 → both one-hot vectors are all zeros."""
-        state = _make_state(history_1=[], history_2=[], round_num=1)
+        state = make_game_state(history_1=[], history_2=[], round_num=1)
         vec = Converter.build_input_vector(state)
         # Indices 6–9: AI last move one-hot
         assert vec[6:10] == [0.0, 0.0, 0.0, 0.0]
@@ -133,7 +103,7 @@ class TestBuildInputVector:
 
     def test_round_2_onehot_reflects_history(self):
         """TC-CV6: Round 2 → one-hot reflects prior round's cards."""
-        state = _make_state(
+        state = make_game_state(
             history_1=["defense"],  # human played defense last round
             history_2=["attack"],   # AI played attack last round
             round_num=2,
@@ -146,7 +116,7 @@ class TestBuildInputVector:
 
     def test_card_counts_reflect_hand(self):
         """TC-CV7: Card counts reflect AI's remaining hand."""
-        state = _make_state(
+        state = make_game_state(
             hand_2=["attack", "attack", "defense"],
             hp_2=2,  # AI HP
             hp_1=1,  # Human HP
@@ -161,14 +131,14 @@ class TestBuildInputVector:
 
     def test_hp_clamped_to_0_3(self):
         """TC-CV8: HP values are clamped to [0, 3] range."""
-        state = _make_state(hp_1=5, hp_2=-2)
+        state = make_game_state(hp_1=5, hp_2=-2)
         vec = Converter.build_input_vector(state)
         assert vec[4] == 0.0  # AI HP: -2 → 0
         assert vec[5] == 3.0  # Human HP: 5 → 3
 
     def test_returns_list_of_14_floats(self):
         """Output must be list[float] of length 14."""
-        state = _make_state()
+        state = make_game_state()
         vec = Converter.build_input_vector(state)
         assert isinstance(vec, list)
         assert len(vec) == 14
@@ -179,3 +149,33 @@ class TestBuildInputVector:
         """Verify Converter has the expected class constants."""
         assert Converter.NUM_CARD_TYPES == 4
         assert Converter.INPUT_SIZE == 14
+        assert Converter.ALL_CARD_TYPES == frozenset({"attack", "defense", "heavy", "counter"})
+
+
+# ---------------------------------------------------------------------------
+# Boundary: malformed state dicts
+# ---------------------------------------------------------------------------
+
+
+class TestBuildInputVectorBoundary:
+    """Boundary tests for build_input_vector with invalid inputs."""
+
+    def test_missing_players_key_raises_key_error(self):
+        """State dict missing 'players' key should raise KeyError."""
+        with pytest.raises(KeyError):
+            Converter.build_input_vector({"round": 1})
+
+    def test_missing_player_2_raises_key_error(self):
+        """State dict missing player '2' should raise KeyError."""
+        with pytest.raises(KeyError):
+            Converter.build_input_vector({"players": {"1": {"hp": 3, "hand": [], "history": []}}})
+
+    def test_index_to_card_raises_on_negative(self):
+        """index_to_card with negative index raises IndexError."""
+        with pytest.raises(IndexError, match="-1"):
+            Converter.index_to_card(-1)
+
+    def test_index_to_card_raises_on_out_of_range(self):
+        """index_to_card with index >= NUM_CARD_TYPES raises IndexError."""
+        with pytest.raises(IndexError, match="4"):
+            Converter.index_to_card(4)

@@ -19,7 +19,10 @@ class Converter:
     NUM_CARD_TYPES: int = 4
     INPUT_SIZE: int = 14
 
-    # Internal mapping tables
+    # Public set of all valid card strings
+    ALL_CARD_TYPES: frozenset[str] = frozenset({"attack", "defense", "heavy", "counter"})
+
+    # Internal mapping tables (use card_to_index / index_to_card instead)
     _CARD_TO_INDEX: dict[str, int] = {
         "attack": 0,
         "defense": 1,
@@ -64,7 +67,14 @@ class Converter:
 
         Returns:
             Corresponding card string.
+
+        Raises:
+            IndexError: If index is outside the valid range [0, 3].
         """
+        if index < 0 or index >= Converter.NUM_CARD_TYPES:
+            raise IndexError(
+                f"Card index {index} out of range [0, {Converter.NUM_CARD_TYPES - 1}]"
+            )
         return Converter._INDEX_TO_CARD[index]
 
     # ------------------------------------------------------------------

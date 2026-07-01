@@ -23,6 +23,27 @@ from src.backend.ai.rnn_v1.model import (
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_weight_path() -> str | None:
+    """Resolve the model weight file path, returning None if not found."""
+    import os
+
+    weight_path = WEIGHT_PATH
+    if os.path.exists(weight_path):
+        return weight_path
+    # Try resolving from the test's working directory
+    weight_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "src", "backend",
+        "ai", "rnn_v1", "gen1", "rnn_v1.pth"
+    )
+    weight_path = os.path.abspath(weight_path)
+    return weight_path if os.path.exists(weight_path) else None
+
+
+# ---------------------------------------------------------------------------
 # TC-M1: Model instantiation [EXISTING, updated]
 # ---------------------------------------------------------------------------
 
@@ -287,19 +308,9 @@ class TestWeightFileLoading:
 
     def test_weights_load_into_model(self):
         """Loading the weight file into a GRUCardModel should succeed."""
-        import os
-        # Resolve weight path relative to project root
-        weight_path = WEIGHT_PATH
-        if not os.path.exists(weight_path):
-            # Try resolving from the test's working directory
-            weight_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "src", "backend",
-                "ai", "rnn_v1", "gen1", "rnn_v1.pth"
-            )
-            weight_path = os.path.abspath(weight_path)
-
-        if not os.path.exists(weight_path):
-            pytest.skip(f"Weight file not found at {weight_path}")
+        weight_path = _resolve_weight_path()
+        if weight_path is None:
+            pytest.skip("Weight file not found")
 
         model = GRUCardModel()
         state_dict = torch.load(weight_path, map_location="cpu", weights_only=True)
@@ -316,17 +327,9 @@ class TestWeightFileLoading:
 
     def test_loaded_model_is_in_eval_mode(self):
         """After loading weights, model should be usable in eval mode."""
-        import os
-        weight_path = WEIGHT_PATH
-        if not os.path.exists(weight_path):
-            weight_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "src", "backend",
-                "ai", "rnn_v1", "gen1", "rnn_v1.pth"
-            )
-            weight_path = os.path.abspath(weight_path)
-
-        if not os.path.exists(weight_path):
-            pytest.skip(f"Weight file not found at {weight_path}")
+        weight_path = _resolve_weight_path()
+        if weight_path is None:
+            pytest.skip("Weight file not found")
 
         model = GRUCardModel()
         state_dict = torch.load(weight_path, map_location="cpu", weights_only=True)
