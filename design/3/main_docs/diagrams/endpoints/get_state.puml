@@ -1,0 +1,27 @@
+@startuml
+skinparam sequenceMessageAlign center
+
+actor Client
+participant "Controller\nGET /api/games/{id}" as Controller
+participant "SessionStore" as Store
+participant "GameManager" as GM
+
+Client -> Controller : GET /api/games/{game_id}
+
+Controller -> Store : load(game_id)
+
+alt game not found
+    Store --> Controller : (None, None)
+    Controller --> Client : 404 GAME_NOT_FOUND
+else game found
+    Store --> Controller : (gm, metadata)
+    
+    Controller -> GM : get_state()
+    GM --> Controller : state dict
+    
+    Controller -> Controller : Inject "ai" from metadata\nstate["ai"] = metadata["ai"]
+    
+    Controller --> Client : 200 OK\n{game_id, state}
+end
+
+@enduml

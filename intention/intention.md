@@ -47,3 +47,22 @@ value head 的输出是一个标量，表示对当前局面（出牌前）的胜
 新增一个 ai 注册文件，在里面注册当前支持的 ai。每个 ai 有一个名字和一个权重文件路径。，第一版的ai叫做 rnn_v1.1，使用上文的随机初始化权重文件。
 
 Ui上增加一个主菜单，可选择 hot-seat pvp，也可以选择人机对战。选择 hot-seat pvp 进入现有界面，选择人机对战进入新界面。需要设计新界面的原型。
+
+# intention_id=3
+这是一个重构任务。
+新增一个包 backend/app，作用是用来桥接 game 包和ai包，从而把 ai 包变成一个纯 ai 包，即不依赖 game。
+本次重构不能改变已有功能。
+其中几个需要注意的要点：
+- app 包里要实现一个 AppManager 类，专门管理 ai_select_action、create_game 等操作
+- 非法动作屏蔽 + softmax 都是模型自身的一部分，应该定义在 forward 里
+- 非法动作屏蔽的方法，在 app 层的 AppManager 里面定义，然后以闭包的形式通过 forward 函数传入到 model 里面，在 forward 当中使用。forward 把 vector 传进去负责屏蔽的方法，该方法返回屏蔽后的 vector 给  forward
+- 把 select_action 的逻辑挪到 app/AppManager.ai_select_action 中，model 只包含模型自身的行为，不再涉及游戏规则和流程方面的知识
+- one-hot 向量与卡牌之间的双向转换逻辑、input 的构造 都放到 app 包的 Converter 类里
+- controller 可以直接使用 ai.registery
+- 重构之后，model.py 只包含模型本身的类定义，不再有其他东西。所有访问方都应该改为调用 app 包中的代码
+- 重构之后，register.py 不再负责加载 model 模块，由 app/AppManager 负责实例化模型类
+- init_hidden_state() 移除，改为作为一个常量定义在模型类中
+
+做设计的时候，只需画以下图：
+- 类图
+- 所有 endpoint 的交互图，放在 diagrams/endpoints

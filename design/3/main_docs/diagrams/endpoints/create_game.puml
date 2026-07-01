@@ -1,0 +1,57 @@
+@startuml
+skinparam sequenceMessageAlign center
+
+actor Client
+participant "Controller\nPOST /api/games" as Controller
+participant "AppManager" as AppMgr
+participant "ai.registry" as Registry
+participant "GameManager" as GM
+participant "SessionStore" as Store
+
+Client -> Controller : POST /api/games\n{mode, ai}
+
+== Mode & AI Validation ==
+
+Controller -> Controller : Parse JSON body\nmode = data["mode"], ai_name = data.get("ai")
+
+alt mode == "pve" and ai_name is None
+    Controller --> Client : 400 MISSING_AI
+end
+
+Controller -> AppMgr : create_game(mode, ai_name)
+
+alt mode == "pve"
+    AppMgr -> Registry : get_ai_info(ai_name)
+    alt AI not found
+        Registry --> AppMgr : ValueError
+        AppMgr --> Controller : ValueError
+        Controller --> Client : 400 UNKNOWN_AI
+    else AI found
+        Registry --> AppMgr : {module, class, weight_path}
+    end
+end
+
+== Game Creation ==
+
+AppMgr -> AppMgr : Generate UUID (game_id)
+
+AppMgr -> GM : new GameManager(mode=mode)
+AppMgr -> GM : start_game()
+
+alt mode == "pve"
+    AppMgr -> AppMgr : ai_state = GRUCardModel.INITIAL_HIDDEN_STATE\n(i.e. [0.0]*8)
+    AppMgr -> Store : save(game_id, gm, ai_state=[0.0]*8, ai=ai_name)
+else mode == "pvp"
+    AppMgr -> Store : save(game_id, gm)
+end
+
+AppMgr -> GM : get_state()
+GM --> AppMgr : state dict
+
+AppMgr -> AppMgr : Inject "ai": ai_name into state
+
+AppMgr --> Controller : (game_id, state)
+
+Controller --> Client : 201 Created\n{game_id, state}
+
+@enduml

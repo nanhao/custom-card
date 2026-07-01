@@ -21,7 +21,6 @@ In development, run the Vite dev server (port 5173) which proxies /api to Flask
 (port 5000). In production, run `npm run build` then Flask serves dist/ at /.
 """
 
-import uuid
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -34,14 +33,14 @@ from flask_cors import CORS
 _FRONTEND_SRC = Path(__file__).resolve().parent.parent.parent / "frontend"
 _FRONTEND_DIST = _FRONTEND_SRC / "dist"
 
-from src.backend.ai.registry import list_ais, load_ai
+from src.backend.ai.registry import list_ais
+from src.backend.app.app_manager import AppManager
 from src.backend.controller.serializers import (
     card_to_str,
     error_response,
     round_result_to_dict,
     str_to_card,
 )
-from src.backend.game.game_manager import GameManager
 from src.backend.game.session_store import SessionStore
 
 # ---------------------------------------------------------------------------
@@ -63,9 +62,12 @@ def create_app(config_path: str = "config.json") -> Flask:
     # Enable CORS for the Vite dev server (different port during development).
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-    # Store a SessionStore instance on the app for all routes to use.
+    # Store a SessionStore and AppManager on the app for all routes to use.
     # Each request reads/writes through the filesystem per DC3/DC4.
-    app.config["SESSION_STORE"] = SessionStore(config_path)
+    # AppManager is created once at startup (per design D8).
+    session_store = SessionStore(config_path)
+    app.config["SESSION_STORE"] = session_store
+    app.config["APP_MANAGER"] = AppManager(session_store)
 
     _register_routes(app)
     return app
@@ -127,39 +129,24 @@ def _register_routes(app: Flask) -> None:
             400 — mode is "pve" but no AI specified
         """
         store: SessionStore = app.config["SESSION_STORE"]
+        app_manager: AppManager = app.config["APP_MANAGER"]
 
         # Parse request body (backward compatible: empty body = PVP)
         data = request.get_json(silent=True) or {}
         mode = data.get("mode", "pvp")
         ai_name = data.get("ai", None)
 
-        # Validate PVE request
-        if mode == "pve":
-            if not ai_name:
-                return jsonify(error_response(
-                    "mode is 'pve' but no 'ai' field provided", "MISSING_AI", 400
-                )), 400
-            # Validate AI name exists (no model loading, just registry check)
-            known_ais = [a["name"] for a in list_ais()]
-            if ai_name not in known_ais:
-                return jsonify(error_response(
-                    f"Unknown AI: {ai_name!r}. Available: {', '.join(known_ais)}",
-                    "UNKNOWN_AI", 400
-                )), 400
-
-        game_id = str(uuid.uuid4())
-        gm = GameManager(mode=mode)
-        gm.start_game()
-
-        # Hardcode initial ai_state to zeros (init_hidden_state always returns zeros;
-        # avoids loading the AI module at game creation)
-        ai_state = [0.0] * 8 if mode == "pve" else None
-
-        store.save(game_id, gm, ai_state=ai_state, ai=ai_name)
-
-        # Build response state (inject ai from metadata, not from GameManager)
-        state = gm.get_state()
-        state["ai"] = ai_name  # Per api_design.md §6.1
+        # Delegate to AppManager for game creation
+        # AppManager handles validation (unknown AI, missing AI for PVE)
+        try:
+            game_id, state = app_manager.create_game(mode=mode, ai_name=ai_name)
+        except ValueError as exc:
+            error_msg = str(exc)
+            if "unknown" in error_msg.lower() or "Unknown" in error_msg:
+                return jsonify(error_response(error_msg, "UNKNOWN_AI", 400)), 400
+            if "missing" in error_msg.lower() or "Missing" in error_msg:
+                return jsonify(error_response(error_msg, "MISSING_AI", 400)), 400
+            return jsonify(error_response(error_msg, "BAD_REQUEST", 400)), 400
 
         return jsonify({
             "game_id": game_id,
@@ -260,19 +247,21 @@ def _register_routes(app: Flask) -> None:
 
         # ---- Determine Player 2's cards ----
         if gm.mode == "pve":
-            # PVE: auto-compute via AI
+            # PVE: auto-compute via AppManager
+            app_manager: AppManager = app.config["APP_MANAGER"]
             try:
-                ai_module = load_ai(metadata["ai"])
-            except (ValueError, ImportError) as exc:
+                card_str, new_hidden_state = app_manager.ai_select_action(
+                    gm.get_state(), metadata["ai_state"], metadata["ai"]
+                )
+            except ValueError as exc:
                 return jsonify(error_response(
                     f"Failed to load AI {metadata.get('ai', 'unknown')!r}: {exc}",
                     "AI_LOAD_ERROR", 500
                 )), 500
-
-            try:
-                card_str, new_hidden_state = ai_module.select_action(
-                    gm.get_state(), metadata["ai_state"]
-                )
+            except RuntimeError as exc:
+                return jsonify(error_response(
+                    f"AI load error: {exc}", "AI_LOAD_ERROR", 500
+                )), 500
             except Exception as exc:
                 return jsonify(error_response(
                     f"AI inference failed: {exc}", "AI_INFERENCE_ERROR", 500

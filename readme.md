@@ -28,8 +28,12 @@ src/backend/game/        Pure game logic (no UI, no I/O)
   session_store.py       Disk-based game persistence (save/load/delete)
 
 src/backend/ai/           AI opponents (no game logic)
-  registry.py            AI registry: list, load by name
+  registry.py            AI registry: list, get metadata
   rnn_v1/                GRU neural network model (PyTorch)
+
+src/backend/app/          Bridge layer (orchestrates game + AI)
+  app_manager.py         Game creation, AI action selection, model lifecycle
+  converter.py           Card ↔ tensor conversion, input vector construction
 
 src/backend/controller/  REST API adapter (thin, no business logic)
   api.py                 Flask routes + static serving
@@ -98,7 +102,7 @@ Open **http://127.0.0.1:5000** in your browser.
 ### Backend (Python)
 
 ```bash
-# All backend tests (278 tests)
+# All backend tests (323 tests)
 python -m pytest tests/
 
 # Unit tests only

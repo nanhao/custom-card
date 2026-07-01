@@ -1,17 +1,17 @@
-"""Unit tests for ai/registry.py — AI registry discovery and loading.
+"""Unit tests for ai/registry.py — AI registry metadata.
 
-Covers TC-REG1 through TC-REG4 from test_cases.md.
-Tests list_ais, load_ai, error handling for unknown names,
-and stability across calls.
+Covers TC-REG1 through TC-REG6 from test_cases.md §2.
+Tests list_ais, get_ai_info, error handling, stability,
+and verifies that no model modules are loaded at import time.
 """
 
 import pytest
 
-from src.backend.ai.registry import list_ais, load_ai
+from src.backend.ai.registry import list_ais, get_ai_info
 
 
 # ---------------------------------------------------------------------------
-# TC-REG1: list_ais returns known AIs
+# TC-REG1: list_ais returns known AIs [EXISTING]
 # ---------------------------------------------------------------------------
 
 
@@ -41,7 +41,7 @@ class TestListAis:
                 break
 
     def test_entries_dont_expose_internal_data(self):
-        """list_ais() must not expose weight_path or module fields."""
+        """list_ais() must not expose weight_path, module, or class fields."""
         for entry in list_ais():
             assert "weight_path" not in entry, (
                 "weight_path is an internal detail"
@@ -49,75 +49,18 @@ class TestListAis:
             assert "module" not in entry, (
                 "module is an internal detail"
             )
+            assert "class" not in entry, (
+                "class is an internal detail"
+            )
 
 
 # ---------------------------------------------------------------------------
-# TC-REG2: load_ai returns callable module
-# ---------------------------------------------------------------------------
-
-
-class TestLoadAi:
-    """TC-REG2: load_ai() returns a module with the required interface."""
-
-    def test_load_ai_returns_object(self):
-        """load_ai('rnn_v1.1') must return an object."""
-        ai_module = load_ai("rnn_v1.1")
-        assert ai_module is not None
-
-    def test_load_ai_has_init_hidden_state(self):
-        """The loaded module must have a callable init_hidden_state."""
-        ai_module = load_ai("rnn_v1.1")
-        assert callable(ai_module.init_hidden_state)
-
-    def test_load_ai_has_select_action(self):
-        """The loaded module must have a callable select_action."""
-        ai_module = load_ai("rnn_v1.1")
-        assert callable(ai_module.select_action)
-
-    def test_init_hidden_state_returns_zeros(self):
-        """Calling init_hidden_state through the registry must work."""
-        ai_module = load_ai("rnn_v1.1")
-        result = ai_module.init_hidden_state()
-        assert result == [0.0] * 8
-
-    def test_load_ai_is_cached(self):
-        """Loading the same AI twice returns the same object (cached)."""
-        ai1 = load_ai("rnn_v1.1")
-        ai2 = load_ai("rnn_v1.1")
-        assert ai1 is ai2
-
-
-# ---------------------------------------------------------------------------
-# TC-REG3: load_ai raises on unknown name
-# ---------------------------------------------------------------------------
-
-
-class TestLoadAiUnknown:
-    """TC-REG3: load_ai() raises ValueError for unknown AI names."""
-
-    def test_raises_value_error_for_unknown_name(self):
-        """load_ai('nonexistent_ai') must raise ValueError."""
-        with pytest.raises(ValueError, match="Unknown AI"):
-            load_ai("nonexistent_ai")
-
-    def test_error_message_contains_name(self):
-        """The error message must include the requested name."""
-        with pytest.raises(ValueError, match="nonexistent_ai"):
-            load_ai("nonexistent_ai")
-
-    def test_error_message_suggests_available(self):
-        """The error message should list available AIs."""
-        with pytest.raises(ValueError, match="Available"):
-            load_ai("nonexistent_ai")
-
-
-# ---------------------------------------------------------------------------
-# TC-REG4: list_ais is stable
+# TC-REG5: list_ais is stable [EXISTING]
 # ---------------------------------------------------------------------------
 
 
 class TestListAisStability:
-    """TC-REG4: list_ais() returns identical results across calls."""
+    """TC-REG5: list_ais() returns identical results across calls."""
 
     def test_list_ais_stable_across_calls(self):
         """Multiple calls to list_ais() must return identical lists."""
@@ -130,3 +73,101 @@ class TestListAisStability:
         result1 = list_ais()
         result2 = list_ais()
         assert [a["name"] for a in result1] == [a["name"] for a in result2]
+
+
+# ---------------------------------------------------------------------------
+# TC-REG3: get_ai_info returns full entry
+# ---------------------------------------------------------------------------
+
+
+class TestGetAiInfo:
+    """TC-REG3: get_ai_info() returns full registry entry with internal fields."""
+
+    def test_returns_full_entry(self):
+        """get_ai_info('rnn_v1.1') must return dict with all 5 keys."""
+        info = get_ai_info("rnn_v1.1")
+        assert isinstance(info, dict)
+        assert "name" in info
+        assert "description" in info
+        assert "weight_path" in info
+        assert "module" in info
+        assert "class" in info
+
+    def test_module_is_valid_import_path(self):
+        """The 'module' field must be a valid module path string."""
+        info = get_ai_info("rnn_v1.1")
+        assert isinstance(info["module"], str)
+        assert len(info["module"]) > 0
+        # Must be a dotted module path
+        assert "." in info["module"]
+
+    def test_class_field_is_correct(self):
+        """The 'class' field must be 'GRUCardModel'."""
+        info = get_ai_info("rnn_v1.1")
+        assert info["class"] == "GRUCardModel"
+
+    def test_weight_path_is_string(self):
+        """The 'weight_path' field must be a valid path string."""
+        info = get_ai_info("rnn_v1.1")
+        assert isinstance(info["weight_path"], str)
+        assert len(info["weight_path"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# TC-REG4: get_ai_info raises on unknown name
+# ---------------------------------------------------------------------------
+
+
+class TestGetAiInfoUnknown:
+    """TC-REG4: get_ai_info() raises ValueError for unknown AI names."""
+
+    def test_raises_value_error_for_unknown_name(self):
+        """get_ai_info('nonexistent') must raise ValueError."""
+        with pytest.raises(ValueError, match="Unknown AI"):
+            get_ai_info("nonexistent")
+
+    def test_error_message_contains_name(self):
+        """The error message must include the requested name."""
+        with pytest.raises(ValueError, match="nonexistent"):
+            get_ai_info("nonexistent")
+
+    def test_error_message_suggests_available(self):
+        """The error message should list available AI names."""
+        with pytest.raises(ValueError, match="Available"):
+            get_ai_info("nonexistent")
+
+
+# ---------------------------------------------------------------------------
+# TC-REG6: No module import at registry load time
+# ---------------------------------------------------------------------------
+
+
+class TestRegistryNoModelImport:
+    """TC-REG6: Registry import must not trigger model loading."""
+
+    def test_registry_import_does_not_import_model(self):
+        """Importing ai.registry must not cause model module import.
+
+        Verifies that 'torch' is not in sys.modules after importing
+        only the registry (it may already be imported by other tests,
+        so we check that no model-specific module is loaded).
+        """
+        import sys
+
+        # The registry module should not have imported the rnn_v1 model
+        model_key = "src.backend.ai.rnn_v1.model"
+        # After importing registry, the model module should NOT be loaded
+        # unless something else already loaded it
+        # We verify by checking that importing registry didn't trigger
+        # model import — but since other tests may have loaded it,
+        # we instead verify that the registry module itself does NOT
+        # contain any model import statements
+        import src.backend.ai.registry as reg
+        import inspect
+
+        source = inspect.getsource(reg)
+        # No importlib or torch should appear in registry source
+        # (after refactoring, registry has no importlib or torch imports)
+        assert "importlib" not in source, (
+            "registry must not import modules dynamically"
+        )

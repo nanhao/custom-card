@@ -1,0 +1,122 @@
+@startuml
+skinparam packageStyle rectangle
+
+package "controller/" {
+    class "create_app()" as ControllerFactory {
+        + create_app(config_path): Flask
+        --
+        Creates Flask app with SessionStore and AppManager.
+        Registers all routes.
+    }
+    note right of ControllerFactory
+        Route handlers call AppManager
+        for game/AI operations
+    end note
+}
+
+package "app/" {
+    class AppManager {
+        - _session_store: SessionStore
+        - _models: dict[str, nn.Module]
+        --
+        + __init__(session_store)
+        + create_game(mode, ai_name): (str, dict)
+        + ai_select_action(state, hidden, ai_name): (str, list)
+    }
+
+    class Converter {
+        {static} + card_to_index(card_str): int
+        {static} + index_to_card(index): str
+        {static} + build_input_vector(state): list[float]
+        --
+        {static} + NUM_CARD_TYPES: int = 4
+        {static} + INPUT_SIZE: int = 14
+    }
+}
+
+package "ai/" {
+    package "registry" {
+        class "ai.registry" as AIRegistry {
+            + list_ais(): list[dict]
+            + get_ai_info(name): dict
+        }
+    }
+
+    package "rnn_v1/" {
+        class GRUCardModel {
+            {static} + INITIAL_HIDDEN_STATE: list[float]
+            + gru: nn.GRU
+            + fc_policy: nn.Linear
+            + fc_value: nn.Linear
+            --
+            + __init__()
+            + forward(x, hidden, mask_fn): (probs, value, new_hidden)
+        }
+    }
+}
+
+package "game/" {
+    class GameManager {
+        + mode: str
+        + player_1: Player
+        + player_2: Player
+        + round_number: int
+        + is_over: bool
+        + winner: str
+        --
+        + __init__(mode)
+        + start_game()
+        + play_round(cards_1, cards_2): RoundResult
+        + get_state(): dict
+    }
+
+    class SessionStore {
+        + save_dir: Path
+        --
+        + __init__(config_path)
+        + save(game_id, gm, ai_state, ai)
+        + load(game_id): (GameManager, dict)
+        + delete(game_id): bool
+    }
+
+    enum CardType {
+        ATTACK = "attack"
+        DEFENSE = "defense"
+        HEAVY_STRIKE = "heavy"
+        COUNTER = "counter"
+    }
+}
+
+' === Dependencies ===
+
+ControllerFactory --> AppManager : "creates and calls"
+ControllerFactory --> SessionStore : "creates"
+ControllerFactory --> AIRegistry : "imports list_ais()"
+ControllerFactory --> GameManager : "uses via SessionStore"
+
+AppManager --> SessionStore : "delegates persistence"
+AppManager --> GameManager : "creates, reads state"
+AppManager --> AIRegistry : "imports get_ai_info()"
+AppManager --> Converter : "uses for conversion"
+AppManager --> GRUCardModel : "instantiates, caches"
+
+Converter --> CardType : "uses for mapping"
+
+GRUCardModel --> "torch" : "depends on"
+AIRegistry : "no imports from\nany project module"
+
+note top of AppManager
+    *** Bridge Layer ***
+    Orchestrates game creation
+    and AI card selection.
+    Owns model lifecycle.
+end note
+
+note top of GRUCardModel
+    *** Pure AI Package ***
+    Zero dependencies on
+    game/, app/, or controller/.
+    Only depends on torch.
+end note
+
+@enduml

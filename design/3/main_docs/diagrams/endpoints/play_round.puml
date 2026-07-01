@@ -1,0 +1,112 @@
+@startuml
+skinparam sequenceMessageAlign center
+
+actor Client
+participant "Controller\nPOST /api/games/{id}/play" as Controller
+participant "SessionStore" as Store
+participant "GameManager" as GM
+participant "AppManager" as AppMgr
+participant "ai.registry" as Registry
+participant "Converter" as Conv
+participant "GRUCardModel" as Model
+
+Client -> Controller : POST /api/games/{id}/play\n{cards_1}
+
+== Load Game ==
+
+Controller -> Store : load(game_id)
+alt game not found
+    Store --> Controller : (None, None)
+    Controller --> Client : 404 GAME_NOT_FOUND
+end
+Store --> Controller : (gm, metadata)
+
+== Parse cards_1 ==
+
+Controller -> Controller : cards_1 = [str_to_card(s) for s in cards_1_raw]
+alt invalid card
+    Controller --> Client : 400 INVALID_CARD
+end
+
+== PVE: Auto-compute AI's card ==
+
+alt gm.mode == "pve"
+    Controller -> GM : get_state()
+    GM --> Controller : state dict
+
+    Controller -> AppMgr : ai_select_action(state, metadata["ai_state"], metadata["ai"])
+
+    ' Load model (cached after first call)
+    AppMgr -> Registry : get_ai_info(ai_name)
+    Registry --> AppMgr : {module, class, weight_path}
+
+    alt model not cached
+        AppMgr -> AppMgr : import module\ninstantiate class\nload weights from weight_path
+    end
+
+    ' Build input vector
+    AppMgr -> Conv : build_input_vector(state)
+    Conv --> AppMgr : input_vector (14 floats)
+
+    ' Create mask_fn closure from AI's hand
+    AppMgr -> AppMgr : Create mask_fn(logits)\nbased on state["players"]["2"]["hand"]
+
+    ' Convert to tensors
+    AppMgr -> AppMgr : x = tensor(input_vector)\nh = tensor(hidden_state)
+
+    ' Forward pass
+    AppMgr -> Model : forward(x, h, mask_fn=mask_fn)
+    Model -> Model : GRU → fc_policy → mask_fn → softmax\nGRU → fc_value → tanh
+    Model --> AppMgr : (probs, value, new_hidden)
+
+    ' Select action via argmax
+    AppMgr -> AppMgr : idx = argmax(probs)
+
+    ' Convert index to card string
+    AppMgr -> Conv : index_to_card(idx)
+    Conv --> AppMgr : card_str
+
+    AppMgr --> Controller : (card_str, new_hidden)
+
+    ' Validate AI output
+    Controller -> Controller : cards_2 = [str_to_card(card_str)]
+    alt card_str not in valid set
+        Controller --> Client : 500 AI_INFERENCE_ERROR
+    end
+
+else gm.mode == "pvp"
+    ' PVP: deserialize cards_2 from request
+    Controller -> Controller : cards_2 = [str_to_card(s) for s in cards_2_raw]
+    alt missing cards_2
+        Controller --> Client : 400 MISSING_CARDS_2
+    end
+end
+
+== Play Round ==
+
+Controller -> GM : play_round(cards_1, cards_2)
+
+alt game over / card not in hand
+    GM --> Controller : ValueError
+    Controller --> Client : 400 (GAME_OVER / CARD_NOT_IN_HAND)
+end
+
+GM --> Controller : RoundResult
+
+== Persist ==
+
+alt gm.mode == "pve"
+    Controller -> Store : save(game_id, gm, ai_state=new_hidden, ai=metadata["ai"])
+else
+    Controller -> Store : save(game_id, gm)
+end
+
+== Build Response ==
+
+Controller -> GM : get_state()
+GM --> Controller : state dict
+Controller -> Controller : Inject "ai": metadata["ai"] into state
+
+Controller --> Client : 200 OK\n{round_result, state}
+
+@enduml
