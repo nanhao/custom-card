@@ -8,7 +8,7 @@ All card values use the `CardType.value` string (e.g. "attack", "defense").
 """
 
 from src.backend.game.card import CardType
-from src.backend.game.game_manager import RoundResult
+from src.backend.game.game_core import RoundResult
 
 # ---------------------------------------------------------------------------
 # CardType ↔ string

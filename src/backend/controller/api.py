@@ -290,7 +290,7 @@ def _register_routes(app: Flask) -> None:
                     str(exc), "INVALID_CARD", 400
                 )), 400
 
-        # ---- Delegate to GameManager ----
+        # ---- Delegate to GameCore ----
         try:
             result = gm.play_round(cards_1, cards_2)
         except ValueError as exc:

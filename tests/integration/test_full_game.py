@@ -1,7 +1,7 @@
 """Integration tests for the custom card game.
 
 Tests full multi-round game flows that exercise the entire stack:
-CardType → Player → CardResolver → GameManager.
+CardType → Player → CardResolver → GameCore.
 
 These tests verify that all modules work together correctly across
 complete game playthroughs, covering scenarios from test_cases.md
@@ -12,7 +12,7 @@ import pytest
 from src.backend.game.card import CardType, get_initial_hand
 from src.backend.game.player import Player
 from src.backend.game.resolver import CardResolver, ResolutionResult
-from src.backend.game.game_manager import GameManager, RoundResult
+from src.backend.game.game_core import GameCore, RoundResult
 
 # Short aliases
 A = CardType.ATTACK
@@ -30,7 +30,7 @@ class TestFullGamePlaythroughs:
 
     def test_draw_after_seven_defensive_rounds_custom(self):
         """Full game: 7 rounds of DEF vs DEF → draw (3-3 HP)."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.player_1.hand = [D] * 7
         gm.player_2.hand = [D] * 7
@@ -52,7 +52,7 @@ class TestFullGamePlaythroughs:
 
     def test_quick_draw_three_attack_rounds(self):
         """Full game: 3 rounds ATK vs ATK → draw after R2 (both HP→0)."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         # R1: both take 1 → HP 2
         r1 = gm.play_round([A], [A])
@@ -73,7 +73,7 @@ class TestFullGamePlaythroughs:
 
     def test_a_wins_by_hp_advantage_after_7_rounds(self):
         """Full game: A leads 3-2 after R1, 6 DEF rounds → A wins after R7."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         # R1: HS vs DEF (no prev) → B takes 1
         gm.play_round([H], [D])
@@ -97,7 +97,7 @@ class TestFullGamePlaythroughs:
         R3: CTR vs ATK (0-1) → HP 2-1
         R4: ATK vs ATK (1-2) → HP 1-0 → A's ATK is consec=2, B's ATK is consec=1 → B dies, A wins
         """
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         
         r1 = gm.play_round([A], [D])
@@ -128,7 +128,7 @@ class TestFullGamePlaythroughs:
 
     def test_counter_vs_counter_no_damage(self):
         """Multiple counter-vs-counter rounds produce no damage."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.player_1.hand = [C] * 7
         gm.player_2.hand = [C] * 7
@@ -151,7 +151,7 @@ class TestStateConsistency:
 
     def test_hand_sizes_decrement_each_round(self):
         """Each round removes exactly one card from each player's hand."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         assert len(gm.player_1.hand) == 7
         assert len(gm.player_2.hand) == 7
@@ -166,7 +166,7 @@ class TestStateConsistency:
 
     def test_history_grows_each_round(self):
         """Each round appends the played card to history."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         
         gm.play_round([A], [D])
@@ -183,7 +183,7 @@ class TestStateConsistency:
 
     def test_round_log_matches_round_number(self):
         """Round log entries match the round numbers they were played at."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.player_1.hand = [D] * 7
         gm.player_2.hand = [D] * 7
@@ -196,7 +196,7 @@ class TestStateConsistency:
 
     def test_hp_never_negative(self):
         """HP must never go below 0 regardless of damage (D5)."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.player_1.hp = 1
         # B plays ATK with 3× consecutive → 3 damage to A (1 HP)
@@ -208,7 +208,7 @@ class TestStateConsistency:
 
     def test_game_not_over_mid_sequence(self):
         """Game is not over after playing partial rounds."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.player_1.hand = [D] * 7
         gm.player_2.hand = [D] * 7
@@ -223,7 +223,7 @@ class TestStateConsistency:
 
     def test_cannot_play_after_game_over(self):
         """play_round() raises ValueError after the game has ended."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.player_1.hp = 1
         gm.player_2.hp = 1
@@ -235,7 +235,7 @@ class TestStateConsistency:
 
     def test_cannot_play_before_start(self):
         """play_round() raises ValueError if start_game() was not called."""
-        gm = GameManager()
+        gm = GameCore()
         with pytest.raises(ValueError, match="game not started"):
             gm.play_round([A], [A])
 
@@ -244,12 +244,12 @@ class TestStateConsistency:
 # Resolution-GameManager bridge tests
 # ---------------------------------------------------------------------------
 
-class TestResolverGameManagerBridge:
-    """Verify that CardResolver and GameManager interact correctly."""
+class TestResolverGameCoreBridge:
+    """Verify that CardResolver and GameCore interact correctly."""
 
     def test_resolver_damage_directly_reflected_in_hp(self):
         """Damage returned by CardResolver is exactly what's applied to HP."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         
         # Manual resolution to compare
@@ -263,15 +263,15 @@ class TestResolverGameManagerBridge:
 
     def test_resolver_details_in_round_result(self):
         """Resolution details are passed through to RoundResult."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         r = gm.play_round([A], [D])
         assert len(r.details) > 0
         assert any("Defense" in d or "block" in d.lower() for d in r.details)
 
     def test_custom_hand_and_resolver_consistency(self):
-        """Custom hands don't break the resolver-game_manager contract."""
-        gm = GameManager()
+        """Custom hands don't break the resolver-game_core contract."""
+        gm = GameCore()
         gm.start_game()
         gm.player_1.hand = [A, D, H, C]
         gm.player_2.hand = [A, D, H, C]
@@ -297,7 +297,7 @@ class TestRoundSequenceBoundaries:
 
     def test_max_damage_never_exceeds_3(self):
         """In a standard game, max damage per round is 3 (consecutive ATK ×3)."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.player_1.history = [A, A]  # Consecutive=2, playing ATK → ×3
         gm.player_2.history = [A, A]  # Consecutive=2, playing ATK → ×3
@@ -307,7 +307,7 @@ class TestRoundSequenceBoundaries:
 
     def test_consecutive_streak_persists_across_rounds(self):
         """Consecutive attack count carries over correctly between plays."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         # Set HP high enough to survive multiple rounds of increasing damage
         gm.player_1.hp = 10
@@ -334,7 +334,7 @@ class TestRoundSequenceBoundaries:
 
     def test_defense_streak_resets_on_non_defense(self):
         """Playing a non-Defense card breaks the consecutive-Defense streak."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.player_1.hand = [D, D, A, D, H, D, D]
         gm.player_2.hand = [H] * 7  # B always plays HS
@@ -358,7 +358,7 @@ class TestGetStateIntegration:
 
     def test_get_state_mid_game(self):
         """get_state reflects accurate state mid-game."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.play_round([A], [D])
         gm.play_round([H], [C])
@@ -375,7 +375,7 @@ class TestGetStateIntegration:
 
     def test_get_state_after_game_over(self):
         """get_state returns correct winner info after game ends."""
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.player_1.hp = 1
         r = gm.play_round([A], [A])

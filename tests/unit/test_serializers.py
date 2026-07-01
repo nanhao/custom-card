@@ -9,7 +9,7 @@ These are pure functions — no I/O, no HTTP, no side effects.
 import pytest
 
 from src.backend.game.card import CardType
-from src.backend.game.game_manager import RoundResult
+from src.backend.game.game_core import RoundResult
 
 # All imports are deferred until serializers.py is implemented:
 # from src.backend.controller.serializers import (

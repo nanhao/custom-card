@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 
 from src.backend.game.card import CardType, get_initial_hand
-from src.backend.game.game_manager import GameManager, RoundResult
+from src.backend.game.game_core import GameCore, RoundResult
 from src.backend.game.player import Player
 
 logger = logging.getLogger(__name__)
@@ -111,11 +111,11 @@ def _deserialize_round_result(data: dict) -> RoundResult:
     )
 
 
-def _serialize_game_manager(gm: GameManager, ai: str | None = None, ai_state: list[float] | None = None) -> dict:
-    """Serialize the full GameManager state to a plain dict.
+def _serialize_game_core(gm: GameCore, ai: str | None = None, ai_state: list[float] | None = None) -> dict:
+    """Serialize the full GameCore state to a plain dict.
 
     Args:
-        gm: The GameManager to serialize.
+        gm: The GameCore to serialize.
         ai: AI name for PVE games (optional).
         ai_state: GRU hidden state for PVE games (optional).
 
@@ -140,14 +140,14 @@ def _serialize_game_manager(gm: GameManager, ai: str | None = None, ai_state: li
     return data
 
 
-def _deserialize_game_manager(data: dict) -> tuple[GameManager, dict]:
-    """Reconstruct a GameManager and metadata from a save file dict.
+def _deserialize_game_core(data: dict) -> tuple[GameCore, dict]:
+    """Reconstruct a GameCore and metadata from a save file dict.
 
     Handles legacy files (no mode key) by defaulting to "pvp".
     Validates ai_state on load (fallback to zeros if invalid).
 
     Returns:
-        (GameManager, metadata) tuple where metadata has:
+        (GameCore, metadata) tuple where metadata has:
             mode: "pvp" | "pve"
             ai: AI name or None
             ai_state: GRU hidden state or None
@@ -183,8 +183,8 @@ def _deserialize_game_manager(data: dict) -> tuple[GameManager, dict]:
         ai = None
         ai_state = None
 
-    # ---- Build GameManager ----
-    gm = GameManager(mode=mode)
+    # ---- Build GameCore ----
+    gm = GameCore(mode=mode)
     gm.round_number = data["round"]
     gm.player_1 = _deserialize_player(data["player_1"])
     gm.player_2 = _deserialize_player(data["player_2"])
@@ -253,30 +253,30 @@ class SessionStore:
             self._save_dir = self._resolve_save_dir()
         return self._save_dir
 
-    def save(self, game_id: str, game_manager: GameManager,
+    def save(self, game_id: str, game_core: GameCore,
              ai_state: list[float] | None = None,
              ai: str | None = None) -> None:
-        """Serialize GameManager and write to {save_dir}/{game_id}.json.
+        """Serialize GameCore and write to {save_dir}/{game_id}.json.
 
         Creates the save directory if it does not exist.
         Overwrites the file if it already exists.
 
         Args:
             game_id: Unique game identifier (UUID string).
-            game_manager: The GameManager to serialize.
+            game_core: The GameCore to serialize.
             ai_state: GRU hidden state for PVE games (optional).
             ai: AI name for PVE games (optional).
         """
         self._ensure_save_dir()
         file_path = self._file_path(game_id)
-        data = _serialize_game_manager(game_manager, ai=ai, ai_state=ai_state)
+        data = _serialize_game_core(game_core, ai=ai, ai_state=ai_state)
         file_path.write_text(json.dumps(data, indent=4, ensure_ascii=False))
 
-    def load(self, game_id: str) -> tuple[GameManager | None, dict | None]:
+    def load(self, game_id: str) -> tuple[GameCore | None, dict | None]:
         """Read and deserialize from {save_dir}/{game_id}.json.
 
         Returns:
-            A (GameManager, metadata) tuple, or (None, None) if the file
+            A (GameCore, metadata) tuple, or (None, None) if the file
             does not exist. metadata is a dict with keys:
                 mode: "pvp" | "pve"
                 ai: AI name or None
@@ -295,7 +295,7 @@ class SessionStore:
             raise ValueError(
                 f"Failed to parse game file: {file_path}"
             ) from exc
-        return _deserialize_game_manager(data)
+        return _deserialize_game_core(data)
 
     def delete(self, game_id: str) -> bool:
         """Remove {save_dir}/{game_id}.json.

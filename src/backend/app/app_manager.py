@@ -21,9 +21,9 @@ from src.backend.ai.registry import get_ai_info
 from src.backend.app.converter import Converter
 
 # Lazy imports (imported when needed to avoid circular dependencies)
-#   GameManager — game state machine
+#   GameCore — game state machine
 #   SessionStore — game persistence
-from src.backend.game.game_manager import GameManager
+from src.backend.game.game_core import GameCore
 from src.backend.game.session_store import SessionStore
 
 
@@ -71,7 +71,7 @@ class AppManager:
         Returns:
             (game_id, state) tuple:
                 game_id: UUID string.
-                state: dict from GameManager.get_state() with "ai" injected.
+                state: dict from GameCore.get_state() with "ai" injected.
 
         Raises:
             ValueError: If mode=="pve" and ai_name is None or unknown.
@@ -93,7 +93,7 @@ class AppManager:
 
         # Create and initialize game
         game_id = str(uuid.uuid4())
-        gm = GameManager(mode=mode)
+        gm = GameCore(mode=mode)
         gm.start_game()
 
         # Prepare AI metadata for PVE
@@ -129,7 +129,7 @@ class AppManager:
         5. Selects card via argmax, converts index to string via Converter
 
         Args:
-            state: Game state dict (same format as GameManager.get_state()).
+            state: Game state dict (same format as GameCore.get_state()).
             hidden_state: Current GRU hidden state as list of 8 floats.
             ai_name: AI name (e.g. "rnn_v1.1").
 

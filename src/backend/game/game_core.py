@@ -4,7 +4,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 Per architecture D11, the face-down selection protocol is handled
 by external adapter layers (script/ or controller/).
 
-The GameManager is the only stateful component in the game/ module.
+The GameCore is the only stateful component in the game/ module.
 It orchestrates the round flow: validate → resolve → damage → discard
 → record → check end → return result.
 """
@@ -18,7 +18,7 @@ from src.backend.game.resolver import CardResolver, ResolutionResult
 
 @dataclass
 class RoundResult:
-    """Value object returned by GameManager.play_round().
+    """Value object returned by GameCore.play_round().
 
     Contains all data needed by adapter layers to display the round outcome.
     Uses list[CardType] for cards_1/cards_2 to support future multi-card
@@ -37,7 +37,7 @@ class RoundResult:
     winner: str | None
 
 
-class GameManager:
+class GameCore:
     """Manages the full game lifecycle.
 
     This is the only stateful component in the game/ module (architecture D9).
@@ -56,7 +56,7 @@ class GameManager:
     MAX_ROUNDS = 7
 
     def __init__(self, mode: str = "pvp") -> None:
-        """Create an uninitialized GameManager. Call start_game() to begin.
+        """Create an uninitialized GameCore. Call start_game() to begin.
 
         Args:
             mode: Game mode — "pvp" (default) or "pve".

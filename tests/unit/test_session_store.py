@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from src.backend.game.card import CardType
-from src.backend.game.game_manager import GameManager, RoundResult
+from src.backend.game.game_core import GameCore, RoundResult
 
 # Import is deferred until SessionStore is implemented
 # from src.backend.game.session_store import SessionStore
@@ -37,14 +37,14 @@ def temp_dir(tmp_path):
 
 @pytest.fixture
 def populated_gm():
-    """Create a GameManager with 2 completed rounds and return it.
+    """Create a GameCore with 2 completed rounds and return it.
 
     State after setup:
         round_number = 3 (after 2 completed rounds, game not over)
         player_1: hp=2, hand=[A,A,D,D,H,C], history=[A,H]
         player_2: hp=1, hand=[A,A,D,D,H,C],  history=[A,D]
     """
-    gm = GameManager()
+    gm = GameCore()
     gm.start_game()
     # R1: ATK vs ATK → 1-1, HP: 2-2
     gm.play_round([A], [A])
@@ -149,7 +149,7 @@ class TestSessionStoreSave:
         store = SessionStore(config_path=str(config_path))
 
         # Save first state
-        gm1 = GameManager()
+        gm1 = GameCore()
         gm1.start_game()
         store.save("game-1", gm1)
 
@@ -169,7 +169,7 @@ class TestSessionStoreSave:
         config_path = temp_dir / "config.json"
         config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
 
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.play_round([A], [A])  # 3→2
         gm.play_round([A], [A])  # 2→0 → draw
@@ -206,8 +206,8 @@ class TestSessionStoreLoad:
         assert gm is None
         assert metadata is None
 
-    def test_load_restores_game_manager(self, temp_dir, populated_gm):
-        """load() returns a GameManager with equivalent state to what was saved."""
+    def test_load_restores_game_core(self, temp_dir, populated_gm):
+        """load() returns a GameCore with equivalent state to what was saved."""
         from src.backend.game.session_store import SessionStore
 
         saves_dir = temp_dir / "saves"
@@ -219,7 +219,7 @@ class TestSessionStoreLoad:
 
         restored, metadata = store.load("game-1")
         assert restored is not None
-        assert isinstance(restored, GameManager)
+        assert isinstance(restored, GameCore)
         assert restored.round_number == populated_gm.round_number
         assert restored.player_1.hp == populated_gm.player_1.hp
         assert restored.player_2.hp == populated_gm.player_2.hp
@@ -304,7 +304,7 @@ class TestSessionStoreRoundTrip:
         store = SessionStore(config_path=str(config_path))
 
         # Start and play one round
-        gm = GameManager()
+        gm = GameCore()
         gm.start_game()
         gm.play_round([A], [D])
         store.save("game-1", gm)
@@ -428,7 +428,7 @@ class TestSessionStoreModeSerialization:
         config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
 
         store = SessionStore(config_path=str(config_path))
-        gm = GameManager(mode="pvp")
+        gm = GameCore(mode="pvp")
         gm.start_game()
         store.save("game-1", gm)
 
@@ -447,7 +447,7 @@ class TestSessionStoreModeSerialization:
         config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
 
         store = SessionStore(config_path=str(config_path))
-        gm = GameManager(mode="pve")
+        gm = GameCore(mode="pve")
         gm.start_game()
         ai_state = [0.1, -0.2, 0.3, 0.0, 0.5, -0.1, 0.2, 0.0]
         store.save("game-1", gm, ai_state=ai_state, ai="rnn_v1.1")
@@ -494,7 +494,7 @@ class TestSessionStoreModeSerialization:
         config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
 
         store = SessionStore(config_path=str(config_path))
-        gm = GameManager(mode="pve")
+        gm = GameCore(mode="pve")
         gm.start_game()
         store.save("game-1", gm, ai_state=[0.0] * 8, ai="rnn_v1.1")
 
@@ -511,7 +511,7 @@ class TestSessionStoreModeSerialization:
         config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
 
         store = SessionStore(config_path=str(config_path))
-        gm = GameManager(mode="pvp")
+        gm = GameCore(mode="pvp")
         gm.start_game()
         store.save("game-1", gm)
 

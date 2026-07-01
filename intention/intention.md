@@ -66,3 +66,6 @@ Ui上增加一个主菜单，可选择 hot-seat pvp，也可以选择人机对�
 做设计的时候，只需画以下图：
 - 类图
 - 所有 endpoint 的交互图，放在 diagrams/endpoints
+
+# intention_id=4
+refactor: reanme GameManager to GameCore. don't forget to also rename the file

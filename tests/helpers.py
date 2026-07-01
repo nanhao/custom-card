@@ -7,7 +7,7 @@ used across multiple test modules.
 
 def make_game_state(hand_2=None, hp_1=3, hp_2=3,
                     history_1=None, history_2=None, round_num=1):
-    """Build a minimal game state dict matching GameManager.get_state() format.
+    """Build a minimal game state dict matching GameCore.get_state() format.
 
     All parameters are optional with sensible defaults for a fresh game.
     The AI is always Player "2" (index "2" in the players dict).
@@ -21,7 +21,7 @@ def make_game_state(hand_2=None, hp_1=3, hp_2=3,
         round_num: Current round number. Defaults to 1.
 
     Returns:
-        dict matching GameManager.get_state() output format.
+        dict matching GameCore.get_state() output format.
     """
     if hand_2 is None:
         hand_2 = ["attack", "attack", "attack", "defense", "defense", "heavy", "counter"]
