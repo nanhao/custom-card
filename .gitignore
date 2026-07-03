@@ -42,3 +42,6 @@ coverage/
 tmp/
 *.tmp
 saves/
+
+temp/
+samples/
