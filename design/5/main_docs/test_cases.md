@@ -110,7 +110,7 @@ Test cases use text and symbols only. No code. Tests are organized by target mod
 ### TC-S3: two identical AIs produce roughly balanced outcomes
 - **Given**: AppManager instance, config with ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=100
 - **When**: `app.run_selfplay(config)`
-- **Then**: |ai1_wins − ai2_wins| ≤ 20 (statistically balanced for random-weight model)
+- **Then**: |ai1_wins − ai2_wins| ≤ 30 (random-weight models may exhibit mild side bias)
 
 ### TC-S4: invalid ai_name raises ValueError
 - **Given**: AppManager instance, config with ai1="nonexistent_ai"

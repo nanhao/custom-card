@@ -208,8 +208,12 @@ class SelfPlayRunner:
                 gm.play_round(
                     [CardType(card1)], [CardType(card2)]
                 )
-            except ValueError:
-                break  # Safety: should never happen in self-play
+            except ValueError as exc:
+                print(
+                    f"  [WARN] Game {game_idx}: "
+                    f"play_round() failed — {exc}"
+                )
+                break
 
             # Record PPO samples (if sample output is configured)
             if sample_fh is not None:

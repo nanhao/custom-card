@@ -35,12 +35,16 @@ class SelfPlayConfig:
         """Validate field values after initialization.
 
         Raises:
-            ValueError: If temp_side is not a valid value.
+            ValueError: If temp_side is invalid or temperature is negative.
         """
         if self.temp_side not in ("player1", "player2", "both"):
             raise ValueError(
                 f"Invalid temp_side: {self.temp_side!r}. "
                 f"Must be 'player1', 'player2', or 'both'."
+            )
+        if self.temperature < 0.0:
+            raise ValueError(
+                f"temperature must be >= 0, got {self.temperature!r}"
             )
 
 

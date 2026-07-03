@@ -95,12 +95,12 @@ class AppManager:
         ai_name: str,
         temperature: float,
         player_key: str = "2",
-    ) -> tuple[str, list[float], float | None]:
+    ) -> tuple[str, list[float], float | None, float]:
         """Select an AI action with temperature-based sampling.
 
         When temperature > 0:
             Samples from softmax(logits / temperature) distribution.
-            Returns log_prob of the selected action.
+            Returns log_prob of the selected action and the value estimate.
         When temperature = 0:
             Greedy argmax (same as ai_select_action).
             Returns log_prob = None.
@@ -113,8 +113,9 @@ class AppManager:
             player_key: Which player the AI controls — "1" or "2".
 
         Returns:
-            (card_str, new_hidden_state, log_prob) tuple.
+            (card_str, new_hidden_state, log_prob, value) tuple.
             log_prob is float if temperature > 0, else None.
+            value is the model's win-rate estimate in [-1, 1].
         """
 
     # --- New: self-play game loop (thin delegation wrapper) ---
