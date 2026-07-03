@@ -1,10 +1,13 @@
-"""Integration tests for PPO sample output in self-play runs.
+"""Integration tests for PPO sample output — structure, rewards, content.
 
-Covers TC-P1 through TC-P7, and TC-T1 through TC-T4 from
-design/5 test_cases.md.
+Covers TC-F1 through TC-F8 (structure), TC-R1 through TC-R4 (rewards),
+and TC-S1 through TC-S7 (step content) from design/7 test_cases.md.
 
-Tests exercise sample JSONL file format, reward assignment, temp_step
-and temp_side configuration. Uses tmp_path for file output.
+Tests exercise the new JSON array format (game → perspective → steps
+hierarchy). Uses tmp_path for file output — no real data files affected.
+
+For file output (TC-O1–O4) and boundary tests (TC-T1–T3), see
+test_selfplay_samples_output.py.
 """
 
 import json
@@ -29,16 +32,47 @@ def _init_logger(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# TC-P1: sample_output produces valid JSONL file
+# Helper: read and validate the sample JSON array file
 # ---------------------------------------------------------------------------
 
 
-class TestSampleOutputFile:
-    """TC-P1, TC-P2: sample_output produces valid JSONL."""
+def _read_samples(path):
+    """Read a sample output file as a JSON array.
 
-    def test_sample_output_creates_valid_jsonl(self, app_manager, tmp_path):
-        """File exists; each line is valid JSON with required keys."""
-        sample_path = tmp_path / "samples.jsonl"
+    Args:
+        path: Path to the sample file.
+
+    Returns:
+        Parsed list of game dicts.
+
+    Raises:
+        AssertionError: If file cannot be parsed as valid JSON array.
+    """
+    content = path.read_text(encoding="utf-8")
+    data = json.loads(content)
+    assert isinstance(data, list), (
+        f"Expected JSON array (list), got {type(data).__name__}"
+    )
+    return data
+
+
+# ---------------------------------------------------------------------------
+# TC-F1 through TC-F8: Sample File Structure
+# ---------------------------------------------------------------------------
+
+
+class TestSampleFileStructure:
+    """TC-F1–F8: Sample file structure validation.
+
+    Validates the game → perspective → step hierarchy and all field
+    constraints defined in design/7 interfaces.md §2.
+    """
+
+    def test_output_is_valid_json_array_with_correct_count(
+        self, app_manager, tmp_path,
+    ):
+        """TC-F1: File exists; top-level is JSON array with N elements."""
+        sample_path = tmp_path / "samples.json"
         config = SelfPlayConfig(
             ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=3, sample_output=str(sample_path),
@@ -46,109 +80,112 @@ class TestSampleOutputFile:
         app_manager.run_selfplay(config)
 
         assert sample_path.exists()
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        assert len(lines) > 0
+        games = _read_samples(sample_path)
+        assert len(games) == 3
 
-        required_keys = {"state", "action", "reward", "value", "log_prob"}
-        for line in lines:
-            obj = json.loads(line)
-            assert required_keys.issubset(obj.keys())
-
-    def test_sample_line_count_matches_rounds(self, app_manager, tmp_path):
-        """TC-P2: Each game step produces one sample per player."""
-        sample_path = tmp_path / "samples2.jsonl"
+    def test_each_game_has_required_top_level_keys(
+        self, app_manager, tmp_path,
+    ):
+        """TC-F2: Each game has keys game_id, winner, rounds, perspectives."""
+        sample_path = tmp_path / "keys.json"
         config = SelfPlayConfig(
             ai1="rnn_v1.1", ai2="rnn_v1.1",
-            game_count=1, temperature=0.0,
-            sample_output=str(sample_path),
-        )
-        result = app_manager.run_selfplay(config)
-
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        # Each round produces 2 sample lines (one per player)
-        expected_lines = int(result.avg_rounds) * 2
-        assert len(lines) == expected_lines
-
-
-# ---------------------------------------------------------------------------
-# TC-P3, TC-P4: Rewards in PPO samples
-# ---------------------------------------------------------------------------
-
-
-class TestSampleRewards:
-    """TC-P3, TC-P4: Rewards in PPO samples match game outcome."""
-
-    def test_winning_side_gets_positive_reward(self, app_manager, tmp_path):
-        """Winner's steps have reward=1.0, loser's have reward=-1.0."""
-        sample_path = tmp_path / "reward_samples.jsonl"
-        config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
-            game_count=5, temperature=0.0,
-            sample_output=str(sample_path),
+            game_count=3, sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
 
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        rewards = set()
-        for line in lines:
-            obj = json.loads(line)
-            rewards.add(obj["reward"])
-
-        assert rewards, "Sample file should not be empty"
-
-    def test_reward_values_are_valid(self, app_manager, tmp_path):
-        """All reward values are 1.0, -1.0, or 0.0."""
-        sample_path = tmp_path / "reward_check.jsonl"
-        config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
-            game_count=3, temperature=0.0,
-            sample_output=str(sample_path),
-        )
-        app_manager.run_selfplay(config)
-
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        for line in lines:
-            obj = json.loads(line)
-            assert obj["reward"] in (1.0, -1.0, 0.0)
-
-
-# ---------------------------------------------------------------------------
-# TC-P6: log_prob is None for greedy steps
-# ---------------------------------------------------------------------------
-
-
-class TestGreedyLogProb:
-    """TC-P6: log_prob is null (None→null in JSON) for temperature=0."""
-
-    def test_greedy_steps_have_null_log_prob(self, app_manager, tmp_path):
-        """All sample lines have log_prob: null when temperature=0."""
-        sample_path = tmp_path / "greedy_samples.jsonl"
-        config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
-            game_count=1, temperature=0.0,
-            sample_output=str(sample_path),
-        )
-        app_manager.run_selfplay(config)
-
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        for line in lines:
-            obj = json.loads(line)
-            assert obj["log_prob"] is None, (
-                f"Expected null log_prob for greedy, got {obj['log_prob']}"
+        games = _read_samples(sample_path)
+        required = {"game_id", "winner", "rounds", "perspectives"}
+        for game in games:
+            assert set(game.keys()) == required, (
+                f"Expected keys {required}, got {set(game.keys())}"
             )
 
+    def test_game_ids_are_sequential_from_one(self, app_manager, tmp_path):
+        """TC-F3: game_id values are [1, 2, 3, ...]."""
+        sample_path = tmp_path / "ids.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=3, sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
 
-# ---------------------------------------------------------------------------
-# TC-P7: state vector length is 14
-# ---------------------------------------------------------------------------
+        games = _read_samples(sample_path)
+        ids = [g["game_id"] for g in games]
+        assert ids == [1, 2, 3]
 
+    def test_each_game_has_exactly_two_perspectives(
+        self, app_manager, tmp_path,
+    ):
+        """TC-F4: Every game's perspectives array has length 2."""
+        sample_path = tmp_path / "perspectives.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=3, sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
 
-class TestStateVectorLength:
-    """TC-P7: Every sample's state array has exactly 14 elements."""
+        games = _read_samples(sample_path)
+        for game in games:
+            assert len(game["perspectives"]) == 2, (
+                f"Game {game['game_id']}: expected 2 perspectives, "
+                f"got {len(game['perspectives'])}"
+            )
 
-    def test_state_vector_length_is_14(self, app_manager, tmp_path):
-        """All sample lines have state arrays of length 14."""
-        sample_path = tmp_path / "state_length.jsonl"
+    def test_perspectives_have_correct_player_assignments(
+        self, app_manager, tmp_path,
+    ):
+        """TC-F5: perspectives[0].player == "1", perspectives[1].player == "2"."""
+        sample_path = tmp_path / "player_assign.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=3, sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = _read_samples(sample_path)
+        for game in games:
+            assert game["perspectives"][0]["player"] == "1"
+            assert game["perspectives"][1]["player"] == "2"
+
+    def test_perspectives_contain_ai_names(self, app_manager, tmp_path):
+        """TC-F6: Player "1" has ai=ai1, player "2" has ai=ai2."""
+        sample_path = tmp_path / "ai_names.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=2, sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = _read_samples(sample_path)
+        for game in games:
+            assert game["perspectives"][0]["ai"] == "rnn_v1.1"
+            assert game["perspectives"][1]["ai"] == "rnn_v1.1"
+
+    def test_each_step_has_required_keys(self, app_manager, tmp_path):
+        """TC-F7: Every step has keys state, action, reward, value, log_prob."""
+        sample_path = tmp_path / "step_keys.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=2, sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = _read_samples(sample_path)
+        required = {"state", "action", "reward", "value", "log_prob"}
+        for game in games:
+            for p in game["perspectives"]:
+                for step in p["steps"]:
+                    assert set(step.keys()) == required, (
+                        f"Expected step keys {required}, "
+                        f"got {set(step.keys())}"
+                    )
+
+    def test_state_vector_length_is_14_in_all_steps(
+        self, app_manager, tmp_path,
+    ):
+        """TC-F8: Every step's state array has exactly 14 elements."""
+        sample_path = tmp_path / "state_len.json"
         config = SelfPlayConfig(
             ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=2, temperature=1.0,
@@ -156,111 +193,249 @@ class TestStateVectorLength:
         )
         app_manager.run_selfplay(config)
 
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        for line in lines:
-            obj = json.loads(line)
-            assert len(obj["state"]) == 14, (
-                f"Expected 14 elements, got {len(obj['state'])}"
-            )
+        games = _read_samples(sample_path)
+        for game in games:
+            for p in game["perspectives"]:
+                for step in p["steps"]:
+                    assert len(step["state"]) == 14, (
+                        f"Expected 14 elements, got {len(step['state'])}"
+                    )
 
 
 # ---------------------------------------------------------------------------
-# TC-T1: temp_step=2 switches to greedy after round 2
+# TC-R1 through TC-R4: Reward Assignment
 # ---------------------------------------------------------------------------
 
 
-class TestTempStep:
-    """TC-T1, TC-T2: temp_step controls when sampling stops."""
+class TestSampleRewards:
+    """TC-R1–R4: Reward assignment matches game outcome.
 
-    def test_temp_step_switches_to_greedy(self, app_manager, tmp_path):
-        """TC-T1: Some samples have non-null and some have null log_prob."""
-        sample_path = tmp_path / "temp_step.jsonl"
+    Rewards are assigned by game outcome, not by step-level action.
+    All steps within a perspective share the same reward.
+    """
+
+    def test_rewards_match_game_outcome(self, app_manager, tmp_path):
+        """Winning perspective gets reward=1.0, losing gets -1.0."""
+        sample_path = tmp_path / "rewards.json"
         config = SelfPlayConfig(
             ai1="rnn_v1.1", ai2="rnn_v1.1",
-            game_count=10, temperature=1.0,
-            temp_step=2, temp_side="both",
+            game_count=5, temperature=0.0,
             sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
 
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        non_null = [line for line in lines
-                     if json.loads(line)["log_prob"] is not None]
-        null = [line for line in lines
-                if json.loads(line)["log_prob"] is None]
+        games = _read_samples(sample_path)
+        for game in games:
+            winner = game["winner"]
+            p1_steps = game["perspectives"][0]["steps"]
+            p2_steps = game["perspectives"][1]["steps"]
 
-        assert len(non_null) > 0, "Expected some non-null log_probs"
-        assert len(null) > 0, "Expected some null log_probs (greedy steps)"
+            if winner == "1":
+                for s in p1_steps:
+                    assert s["reward"] == 1.0
+                for s in p2_steps:
+                    assert s["reward"] == -1.0
+            elif winner == "2":
+                for s in p1_steps:
+                    assert s["reward"] == -1.0
+                for s in p2_steps:
+                    assert s["reward"] == 1.0
+            else:  # draw
+                for s in p1_steps:
+                    assert s["reward"] == 0.0
+                for s in p2_steps:
+                    assert s["reward"] == 0.0
 
-    def test_temp_step_none_samples_all(self, app_manager, tmp_path):
-        """TC-T2: temp_step=None → all rounds have non-null log_prob."""
-        sample_path = tmp_path / "no_step.jsonl"
+    def test_reward_consistent_within_perspective(
+        self, app_manager, tmp_path,
+    ):
+        """TC-R4: All steps within a perspective share the same reward."""
+        sample_path = tmp_path / "consistent.json"
         config = SelfPlayConfig(
             ai1="rnn_v1.1", ai2="rnn_v1.1",
-            game_count=5, temperature=1.0,
+            game_count=3, temperature=0.0,
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = _read_samples(sample_path)
+        for game in games:
+            for p in game["perspectives"]:
+                rewards = {s["reward"] for s in p["steps"]}
+                assert len(rewards) == 1, (
+                    f"Game {game['game_id']}, player {p['player']}: "
+                    f"expected single reward, got {rewards}"
+                )
+
+    def test_reward_values_are_valid(self, app_manager, tmp_path):
+        """All reward values are 1.0, -1.0, or 0.0."""
+        sample_path = tmp_path / "valid_rewards.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=3, temperature=0.0,
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = _read_samples(sample_path)
+        for game in games:
+            for p in game["perspectives"]:
+                for step in p["steps"]:
+                    assert step["reward"] in (1.0, -1.0, 0.0), (
+                        f"Invalid reward: {step['reward']}"
+                    )
+
+
+# ---------------------------------------------------------------------------
+# TC-S1 through TC-S7: Step Content
+# ---------------------------------------------------------------------------
+
+
+class TestSampleContent:
+    """TC-S1–S7: Step-level content validation.
+
+    Validates step counts, action validity, log_prob behavior,
+    value range, and round count accuracy.
+    """
+
+    def test_total_step_count_matches_rounds_times_two(
+        self, app_manager, tmp_path,
+    ):
+        """TC-S1: Total steps = rounds_played × 2."""
+        sample_path = tmp_path / "step_count.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=3, temperature=0.0,
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = _read_samples(sample_path)
+        for game in games:
+            total_steps = sum(
+                len(p["steps"]) for p in game["perspectives"]
+            )
+            expected = game["rounds"] * 2
+            assert total_steps == expected, (
+                f"Game {game['game_id']}: expected {expected} steps, "
+                f"got {total_steps}"
+            )
+
+    def test_player1_actions_are_valid(self, app_manager, tmp_path):
+        """TC-S2: P1 actions are from valid card set."""
+        sample_path = tmp_path / "p1_actions.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=2, temperature=1.0,
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        valid_actions = {"attack", "defense", "heavy", "counter"}
+        games = _read_samples(sample_path)
+        for game in games:
+            for step in game["perspectives"][0]["steps"]:
+                assert step["action"] in valid_actions, (
+                    f"Invalid P1 action: {step['action']}"
+                )
+
+    def test_player2_actions_are_valid(self, app_manager, tmp_path):
+        """TC-S3: P2 actions are from valid card set."""
+        sample_path = tmp_path / "p2_actions.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=2, temperature=1.0,
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        valid_actions = {"attack", "defense", "heavy", "counter"}
+        games = _read_samples(sample_path)
+        for game in games:
+            for step in game["perspectives"][1]["steps"]:
+                assert step["action"] in valid_actions, (
+                    f"Invalid P2 action: {step['action']}"
+                )
+
+    def test_greedy_steps_have_null_log_prob(self, app_manager, tmp_path):
+        """TC-S4: log_prob is null (None) when temperature=0."""
+        sample_path = tmp_path / "greedy.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=2, temperature=0.0,
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = _read_samples(sample_path)
+        for game in games:
+            for p in game["perspectives"]:
+                for step in p["steps"]:
+                    assert step["log_prob"] is None, (
+                        "Expected null log_prob for greedy step"
+                    )
+
+    def test_sampled_steps_have_float_log_prob(self, app_manager, tmp_path):
+        """TC-S5: log_prob is a finite float when temperature>0 and both sides."""
+        sample_path = tmp_path / "sampled.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=2, temperature=1.0,
             temp_step=None, temp_side="both",
             sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
 
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        for line in lines:
-            obj = json.loads(line)
-            assert obj["log_prob"] is not None, (
-                "All rounds should have non-null log_prob"
+        games = _read_samples(sample_path)
+        for game in games:
+            for p in game["perspectives"]:
+                for step in p["steps"]:
+                    assert isinstance(step["log_prob"], float), (
+                        f"Expected float log_prob, "
+                        f"got {type(step['log_prob']).__name__}"
+                    )
+                    assert step["log_prob"] <= 0, (
+                        f"log_prob should be ≤ 0, got {step['log_prob']}"
+                    )
+
+    def test_value_in_range(self, app_manager, tmp_path):
+        """TC-S6: Every step's value satisfies -1.0 ≤ value ≤ 1.0."""
+        sample_path = tmp_path / "value_range.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=2, temperature=1.0,
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = _read_samples(sample_path)
+        for game in games:
+            for p in game["perspectives"]:
+                for step in p["steps"]:
+                    assert -1.0 <= step["value"] <= 1.0, (
+                        f"Value {step['value']} out of [-1.0, 1.0]"
+                    )
+
+    def test_round_count_is_accurate(self, app_manager, tmp_path):
+        """TC-S7: Game's rounds field equals actual rounds played."""
+        sample_path = tmp_path / "rounds.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=3, temperature=0.0,
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = _read_samples(sample_path)
+        for game in games:
+            p1_step_count = len(game["perspectives"][0]["steps"])
+            p2_step_count = len(game["perspectives"][1]["steps"])
+            # Each player has one step per round
+            assert game["rounds"] == p1_step_count, (
+                f"Game {game['game_id']}: rounds={game['rounds']}, "
+                f"P1 steps={p1_step_count}"
             )
-
-
-# ---------------------------------------------------------------------------
-# TC-T3, TC-T4: temp_side controls which player is sampled
-# ---------------------------------------------------------------------------
-
-
-class TestTempSide:
-    """TC-T3, TC-T4: temp_side controls which player gets sampling."""
-
-    def test_temp_side_player1_only_samples_p1(self, app_manager, tmp_path):
-        """TC-T3: Only P1 sample lines have non-null log_prob."""
-        sample_path = tmp_path / "side_p1.jsonl"
-        config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
-            game_count=5, temperature=1.0,
-            temp_side="player1",
-            sample_output=str(sample_path),
-        )
-        app_manager.run_selfplay(config)
-
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        for i, line in enumerate(lines):
-            obj = json.loads(line)
-            if i % 2 == 0:  # P1 samples (even indices)
-                assert obj["log_prob"] is not None, (
-                    f"P1 sample at index {i} should have non-null log_prob"
-                )
-            else:
-                assert obj["log_prob"] is None, (
-                    f"P2 sample at index {i} should have null log_prob"
-                )
-
-    def test_temp_side_player2_only_samples_p2(self, app_manager, tmp_path):
-        """TC-T4: Only P2 sample lines have non-null log_prob."""
-        sample_path = tmp_path / "side_p2.jsonl"
-        config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
-            game_count=5, temperature=1.0,
-            temp_side="player2",
-            sample_output=str(sample_path),
-        )
-        app_manager.run_selfplay(config)
-
-        lines = sample_path.read_text(encoding="utf-8").strip().split("\n")
-        for i, line in enumerate(lines):
-            obj = json.loads(line)
-            if i % 2 == 0:  # P1 samples
-                assert obj["log_prob"] is None, (
-                    f"P1 sample at index {i} should have null log_prob"
-                )
-            else:  # P2 samples
-                assert obj["log_prob"] is not None, (
-                    f"P2 sample at index {i} should have non-null log_prob"
-                )
+            assert game["rounds"] == p2_step_count, (
+                f"Game {game['game_id']}: rounds={game['rounds']}, "
+                f"P2 steps={p2_step_count}"
+            )

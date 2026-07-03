@@ -1,0 +1,49 @@
+@startuml
+!theme plain
+
+class SelfPlayRunner {
+  +__init__(sample_action_fn)
+  +run(config: SelfPlayConfig): SelfPlayResult
+  {static} +_build_game_sample(game_samples, game_id, winner, rounds_played, p1_reward, p2_reward, ai1, ai2): dict
+}
+
+class SelfPlayConfig <<dataclass>> {
+  +ai1: str
+  +ai2: str
+  +game_count: int
+  +sample_output: str | None
+  +temperature: float
+  +temp_step: int | None
+  +temp_seed: int | None
+  +temp_side: str
+}
+
+class SelfPlayResult <<dataclass>> {
+  +total_games: int
+  +ai1_wins: int
+  +ai2_wins: int
+  +draws: int
+  +avg_rounds: float
+}
+
+SelfPlayRunner ..> SelfPlayConfig : uses
+SelfPlayRunner ..> SelfPlayResult : returns
+
+note right of SelfPlayRunner
+  REMOVED: _write_samples()
+  REPLACED BY: _build_game_sample()
+  which returns a structured dict
+  instead of writing JSONL lines
+end note
+
+note bottom of SelfPlayConfig
+  from app/selfplay_config.py
+  unchanged
+end note
+
+note bottom of SelfPlayResult
+  from app/selfplay_config.py
+  unchanged
+end note
+
+@enduml

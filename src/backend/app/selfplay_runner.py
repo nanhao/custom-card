@@ -1,15 +1,15 @@
 """Self-play game loop — runs N AI-vs-AI games with temperature sampling.
 
-Per design/5 D1, the game loop is business logic and lives in the app/
-layer. SelfPlayRunner encapsulates the loop: creating GameCore instances,
+Per design/5 D1, the game loop lives in the app/ layer.
+SelfPlayRunner encapsulates the loop: creating GameCore instances,
 querying both AIs via AppManager.ai_sample_action(), recording PPO
 samples, and producing aggregate statistics.
 
-This module is separate from app_manager.py to respect the 500-line
-file limit (code_rule.md).
-
 Per design/6: emits structured log events via LoggerBuilder.get_logger()
-at key lifecycle points. See architecture.md §6 for the full event catalog.
+at key lifecycle points.
+
+Per design/7: sample output uses game → perspective → steps hierarchy
+written as a single JSON array file.
 """
 
 import json
@@ -28,12 +28,11 @@ from src.backend.log.structured_logger import LoggerBuilder
 class SelfPlayRunner:
     """Execute self-play games and collect results.
 
-    Receives a sample_action callable (dependency injection) rather
-    than depending on AppManager directly. This breaks the bidirectional
-    dependency between AppManager and SelfPlayRunner.
+    Receives a sample_action callable (dependency injection) to break
+    the bidirectional dependency with AppManager.
 
-    Creates GameCore instances for game simulation. Handles PPO
-    sample recording and progress logging.
+    Creates GameCore instances, handles PPO sample recording via the
+    game → perspective → steps hierarchy (design/7), and logs progress.
 
     Attributes:
         _sample_action: Callable matching AppManager.ai_sample_action
@@ -53,18 +52,8 @@ class SelfPlayRunner:
     def run(self, config: SelfPlayConfig) -> SelfPlayResult:
         """Execute all self-play games with structured logging.
 
-        Retrieves the logger via LoggerBuilder.get_logger().
-        When logging is disabled (init called with enabled=False),
-        all log() calls are no-ops — no conditional checks needed.
-
-        Events emitted (see architecture.md §6 for details):
-            selfplay.run_start, selfplay.ai_validated, selfplay.model_loaded,
-            selfplay.game_start, selfplay.round_action, selfplay.round_result,
-            selfplay.game_end, selfplay.sample_write, selfplay.error,
-            selfplay.run_end
-
-        Args:
-            config: SelfPlayConfig with all run parameters.
+        Collects game sample dicts in memory and writes a single
+        JSON array file at the end (design/7 D3).
 
         Returns:
             SelfPlayResult with win/loss/draw counts and avg rounds.
@@ -111,21 +100,22 @@ class SelfPlayRunner:
         # Track which AI models have been loaded (for model_loaded event)
         loaded_models: set[str] = set()
 
-        # Open sample output file handle if configured
-        sample_fh = None
-        if config.sample_output:
-            sample_path = Path(config.sample_output)
-            sample_path.parent.mkdir(parents=True, exist_ok=True)
-            sample_fh = sample_path.open("w", encoding="utf-8")
+        # Collect structured game sample dicts in memory.
+        # Per design/7 D3, all games are buffered and written as a
+        # single JSON array file at the end (replaces per-game JSONL).
+        all_game_samples: list[dict] = []
 
         try:
             for game_idx in range(1, config.game_count + 1):
-                rounds_played, winner, p1_reward, p2_reward = (
+                rounds_played, winner, p1_reward, p2_reward, game_sample = (
                     self._play_one_game(
-                        config, game_idx, sample_fh, loaded_models,
+                        config, game_idx, loaded_models,
                     )
                 )
                 total_rounds += rounds_played
+
+                if game_sample is not None:
+                    all_game_samples.append(game_sample)
 
                 if winner == "1":
                     ai1_wins += 1
@@ -135,8 +125,27 @@ class SelfPlayRunner:
                     draws += 1
 
         finally:
-            if sample_fh is not None:
-                sample_fh.close()
+            # Write all game samples as a single JSON array file.
+            # Per design/7 D3, file is only created if sample_output
+            # is configured. For game_count=0, this writes [] (TC-O4).
+            if config.sample_output:
+                sample_path = Path(config.sample_output)
+                sample_path.parent.mkdir(parents=True, exist_ok=True)
+                with sample_path.open("w", encoding="utf-8") as fh:
+                    json.dump(
+                        all_game_samples, fh,
+                        ensure_ascii=False,
+                    )
+                # Log sample_write event with total count
+                total_steps = sum(
+                    sum(len(p["steps"]) for p in g["perspectives"])
+                    for g in all_game_samples
+                )
+                logger.log(
+                    "DEBUG", "selfplay.sample_write",
+                    game_count=len(all_game_samples),
+                    total_steps=total_steps,
+                )
 
         # 4. Compute and return aggregate result
         total_games = config.game_count
@@ -176,24 +185,26 @@ class SelfPlayRunner:
         self,
         config: SelfPlayConfig,
         game_idx: int,
-        sample_fh,
         loaded_models: set[str],
-    ) -> tuple[int, str | None, float, float]:
+    ) -> tuple[int, str | None, float, float, dict | None]:
         """Play one complete self-play game.
 
         Creates a GameCore, runs the round loop with AI actions,
         records PPO samples, emits structured log events, and
-        returns game outcome.
+        returns game outcome plus the structured game sample.
+
+        Per design/7, the game sample follows the game → perspective
+        → steps hierarchy.
 
         Args:
             config: Self-play configuration.
             game_idx: 1-based game index (for logging).
-            sample_fh: Open file handle for PPO sample JSONL, or None.
             loaded_models: Set of AI names whose models are already
                 loaded. Updated in-place when a model is first used.
 
         Returns:
-            (rounds_played, winner, p1_reward, p2_reward) tuple.
+            (rounds_played, winner, p1_reward, p2_reward, game_sample)
+            tuple. game_sample is None if sample_output is not configured.
         """
         logger = LoggerBuilder.get_logger()
 
@@ -304,7 +315,7 @@ class SelfPlayRunner:
                 )
 
             # Record PPO samples (if sample output is configured)
-            if sample_fh is not None:
+            if config.sample_output is not None:
                 state_vec_p1 = Converter.build_input_vector(
                     pre_state, player_key="1"
                 )
@@ -337,10 +348,18 @@ class SelfPlayRunner:
 
         rounds_played = gm.round_log[-1].round if gm.round_log else 0
 
-        # e. Write samples with rewards and log sample_write
-        if sample_fh is not None and game_samples:
-            self._write_samples(
-                sample_fh, game_samples, p1_reward, p2_reward
+        # e. Build structured game sample and log sample_write
+        game_sample = None
+        if config.sample_output is not None and game_samples:
+            game_sample = self._build_game_sample(
+                game_samples=game_samples,
+                game_id=game_idx,
+                winner=winner,
+                rounds_played=rounds_played,
+                p1_reward=p1_reward,
+                p2_reward=p2_reward,
+                ai1=config.ai1,
+                ai2=config.ai2,
             )
             logger.log(
                 "DEBUG", "selfplay.sample_write",
@@ -368,43 +387,76 @@ class SelfPlayRunner:
             rounds=rounds_played,
         )
 
-        return rounds_played, winner, p1_reward, p2_reward
+        return rounds_played, winner, p1_reward, p2_reward, game_sample
 
     # ------------------------------------------------------------------
-    # Internal: Sample writing
+    # Internal: Sample building
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _write_samples(
-        sample_fh,
+    def _build_game_sample(
         game_samples: list[dict],
+        game_id: int,
+        winner: str | None,
+        rounds_played: int,
         p1_reward: float,
         p2_reward: float,
-    ) -> None:
-        """Write PPO sample JSONL lines for one game.
+        ai1: str,
+        ai2: str,
+    ) -> dict:
+        """Build a structured game sample dict from per-step samples.
 
-        Assigns the appropriate reward to each player's steps and writes
-        one JSON object per line: {state, action, reward, value, log_prob}.
+        Splits the flat game_samples list into two perspective groups
+        (by the 'player' field) and assigns the appropriate reward to
+        each step. The output follows the game → perspective → steps
+        hierarchy defined in design/7 interfaces.md §2.
 
         Args:
-            sample_fh: Open file handle in write mode.
             game_samples: List of per-step sample dicts with keys
-                player, state, action, value, log_prob.
+                player, state, action, value, log_prob (as built in
+                _play_one_game).
+            game_id: 1-based game index.
+            winner: "1", "2", or None (draw).
+            rounds_played: Number of rounds in this game.
             p1_reward: Reward for all player 1 steps.
             p2_reward: Reward for all player 2 steps.
+            ai1: AI name for player 1.
+            ai2: AI name for player 2.
+
+        Returns:
+            dict with keys game_id, winner, rounds, perspectives.
+            Each perspective is {player, ai, steps}.
+            Each step is {state, action, reward, value, log_prob}.
         """
+        # Split steps by player and assign rewards
+        p1_steps: list[dict] = []
+        p2_steps: list[dict] = []
         for entry in game_samples:
             reward = (
                 p1_reward if entry["player"] == "1" else p2_reward
             )
-            line = json.dumps({
+            step = {
                 "state": entry["state"],
                 "action": entry["action"],
                 "reward": reward,
                 "value": entry["value"],
                 "log_prob": entry["log_prob"],
-            }, ensure_ascii=False)
-            sample_fh.write(line + "\n")
+            }
+            if entry["player"] == "1":
+                p1_steps.append(step)
+            else:
+                p2_steps.append(step)
+
+        # Build the structured game sample dict
+        return {
+            "game_id": game_id,
+            "winner": winner,
+            "rounds": rounds_played,
+            "perspectives": [
+                {"player": "1", "ai": ai1, "steps": p1_steps},
+                {"player": "2", "ai": ai2, "steps": p2_steps},
+            ],
+        }
 
     # ------------------------------------------------------------------
     # Internal: Summary printing

@@ -105,7 +105,7 @@ python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1
 # With temperature sampling and PPO sample output
 python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
     --game 200 --temperature 0.5 --temp_step 3 --temp_side both \
-    --sample_output data/samples.jsonl --temp_seed 42
+    --sample_output data/samples.json --temp_seed 42
 ```
 
 **Structured Logging:** Set `enabled` to `true` in `src/backend/config/backend.json`
@@ -125,7 +125,7 @@ design/6/main_docs/ for the full specification.
 | `--temp_step` | `int` | *(none)* | First N rounds use sampling, then switch to greedy. Omit for no limit |
 | `--temp_side` | `str` | `both` | Which side to apply temperature sampling: `player1`, `player2`, or `both` |
 | `--temp_seed` | `int` | *(none)* | Random seed for reproducible sampling |
-| `--sample_output` | `str` | *(none)* | File path for PPO sample JSONL output. Omit to skip sample recording |
+| `--sample_output` | `str` | *(none)* | File path for PPO sample JSON array output (game → perspective → steps hierarchy). Omit to skip sample recording |
 
 ## API Endpoints
 
@@ -142,7 +142,7 @@ design/6/main_docs/ for the full specification.
 ### Backend (Python)
 
 ```bash
-# All backend tests (418 tests)
+# All backend tests (461 tests)
 python -m pytest tests/
 
 # Unit tests only

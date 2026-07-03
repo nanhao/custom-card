@@ -15,7 +15,7 @@ class SelfPlayConfig:
         ai1: AI name for player 1 (from registry).
         ai2: AI name for player 2 (from registry).
         game_count: Number of games to play (>=1).
-        sample_output: Path for PPO sample JSONL file, or None.
+        sample_output: Path for PPO sample JSON array file, or None.
         temperature: Sampling temperature (0.0 = greedy).
         temp_step: First N rounds use sampling, then greedy. None = no limit.
         temp_seed: Random seed for sampling reproducibility, or None.

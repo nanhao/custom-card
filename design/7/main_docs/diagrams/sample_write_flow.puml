@@ -1,0 +1,48 @@
+@startuml
+!theme plain
+
+title Sample Write Flow — SelfPlayRunner.run()
+
+participant "SelfPlayRunner" as Runner
+participant "GameCore" as Game
+participant "Memory Buffer\n(all_games: list)" as Buffer
+participant "File System" as FS
+
+== Game Loop (per game) ==
+
+Runner -> Game: start_game()
+activate Game
+
+loop for each round
+  Runner -> Runner: _sample_action() for P1
+  Runner -> Runner: _sample_action() for P2
+  Runner -> Game: play_round(card1, card2)
+  Runner -> Buffer: append step dicts\n{player, state, action, value, log_prob}
+end
+
+Game --> Runner: winner, rounds_played
+deactivate Game
+
+Runner -> Runner: determine p1_reward, p2_reward
+Runner -> Runner: _build_game_sample(\n  game_samples, game_id, winner,\n  rounds, p1_reward, p2_reward,\n  ai1, ai2)
+
+note right of Runner
+  _build_game_sample():
+  1. Split game_samples by 'player' field
+  2. Assign reward to each step
+  3. Build structured dict:
+     {game_id, winner, rounds, perspectives}
+end note
+
+Runner -> Buffer: append game dict
+
+== Write Phase (after all games) ==
+
+Runner -> FS: json.dump(all_games, fh)
+note right of FS
+  Single JSON array file:
+  [{game1}, {game2}, ...]
+  NOT JSONL flat lines
+end note
+
+@enduml
