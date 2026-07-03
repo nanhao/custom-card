@@ -80,3 +80,19 @@ refactor: reanme GameManager to GameCore. don't forget to also rename the file
 - temp_step 每一局的前几步进行采样，当 step_count > temp_step 时，切换到不采样恶贪婪模式
 - temp-seed 采用种子，便于复现
 - temp-side 采样方，可选值 player1, player2, both 三种。默认值 both
+
+# intention_id=6
+add logs into the whole lifesycle of scripts/selfplay.py.
+add a switch to controll whether logs are enabled. The switch should be placed in a config file which in under src/backend/config/.
+the log destination defaults to logs and can be overrided by config file.
+the file name of the log is {yyyy}-{mm}-{dd}.log.
+the writing logic of logging should be encapsulated into a class.
+The logs should meet the following critiria:
+- each line includes a unique traceId which representing a request of a cli running instance
+- each line includes a threadId and processId
+- each line includes a timestamp which is of miliseconds
+- the content of logs should be able to be used to imply the correctness of the code
+- all logs should following a consistant format so that scripts can easily read them and analyse them. It also should be easy to append so don't use json
+
+# intention_id=7
+现在的 sample 文件有问题，首先，每一局游戏应该组成一个单元，然后每局游戏里应该有两个玩家视角，每个玩家视角的动作序列应该又组成一个子单元才对。因为训练的时候，是按照子单元为单位喂给模型的。一个子单元喂完，h要清空重来的。

@@ -12,3 +12,4 @@ trigger: always_on
 - d:\projects\custom-card/src/frontend 前端代码目录
 - d:\projects\custom-card/src/frontend/tests 前端测试代码目录
 - d:\projects\custom-card/readme.md 项目介绍文件
+- d:\projects\custom-card/logs 日志文件

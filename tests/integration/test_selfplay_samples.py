@@ -14,11 +14,21 @@ import pytest
 from src.backend.app.app_manager import AppManager
 from src.backend.app.selfplay_config import SelfPlayConfig
 from src.backend.game.session_store import SessionStore
+from src.backend.log.structured_logger import LoggerBuilder
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _init_logger(tmp_path):
+    """Initialize LoggerBuilder as disabled before each test."""
+    LoggerBuilder._reset()
+    LoggerBuilder.init(enabled=False, log_dir=str(tmp_path / "logs"))
+    yield
+    LoggerBuilder._reset()
 
 
 @pytest.fixture

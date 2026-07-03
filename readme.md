@@ -27,6 +27,9 @@ src/backend/game/        Pure game logic (no UI, no I/O)
   game_manager.py        Game state machine + round orchestration
   session_store.py       Disk-based game persistence (save/load/delete)
 
+src/backend/config/       Backend-wide configuration
+  backend.json           Shared config (logging, future: database, API)
+
 src/backend/ai/           AI opponents (no game logic)
   registry.py            AI registry: list, get metadata
   rnn_v1/                GRU neural network model (PyTorch)
@@ -36,6 +39,9 @@ src/backend/app/          Bridge layer (orchestrates game + AI)
   converter.py           Card ↔ tensor conversion, input vector construction
   selfplay_config.py     SelfPlayConfig and SelfPlayResult dataclasses
   selfplay_runner.py     Self-play game loop (AI vs AI, PPO sample generation)
+
+src/backend/log/          Structured logging facility (generic)
+  structured_logger.py   StructuredLogger + LoggerBuilder singleton
 
 src/backend/controller/  REST API adapter (thin, no business logic)
   api.py                 Flask routes + static serving
@@ -102,6 +108,12 @@ python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
     --sample_output data/samples.jsonl --temp_seed 42
 ```
 
+**Structured Logging:** Set `enabled` to `true` in `src/backend/config/backend.json`
+to enable machine-parseable event logging to `logs/{yyyy}-{mm}-{dd}.log`.
+When enabled, the self-play lifecycle events (run_start, game_start, round_action,
+etc.) are written with a unique traceId for post-hoc analysis. See
+design/6/main_docs/ for the full specification.
+
 **Parameters:**
 
 | Parameter | Type | Default | Description |
@@ -130,7 +142,7 @@ python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
 ### Backend (Python)
 
 ```bash
-# All backend tests (377 tests)
+# All backend tests (418 tests)
 python -m pytest tests/
 
 # Unit tests only

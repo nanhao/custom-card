@@ -16,11 +16,25 @@ import pytest
 from src.backend.app.app_manager import AppManager
 from src.backend.app.selfplay_config import SelfPlayConfig
 from src.backend.game.session_store import SessionStore
+from src.backend.log.structured_logger import LoggerBuilder
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _init_logger(tmp_path):
+    """Initialize LoggerBuilder as disabled before each test.
+
+    SelfPlayRunner.run() now requires LoggerBuilder to be initialized.
+    We init with enabled=False so existing tests behave as before.
+    """
+    LoggerBuilder._reset()
+    LoggerBuilder.init(enabled=False, log_dir=str(tmp_path / "logs"))
+    yield
+    LoggerBuilder._reset()
 
 
 @pytest.fixture

@@ -3,6 +3,8 @@
 Per design/5 D1, this script contains NO business logic — only argument
 parsing and delegation. The game loop lives in app/selfplay_runner.py.
 
+NEW (design/6): reads config/backend.json, calls LoggerBuilder.init().
+
 Usage:
     python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1
     python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 200
@@ -12,6 +14,7 @@ Usage:
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -23,6 +26,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from src.backend.app.app_manager import AppManager
 from src.backend.app.selfplay_config import SelfPlayConfig
 from src.backend.game.session_store import SessionStore
+from src.backend.log.structured_logger import LoggerBuilder
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -69,10 +73,43 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_logging_config() -> tuple[bool, str]:
+    """Load logging configuration from config/backend.json.
+
+    Returns (enabled, log_dir) tuple. Defaults to (False, "logs")
+    if the config file is missing, malformed, or has no logging section.
+
+    Returns:
+        (enabled, log_dir) where enabled is bool and log_dir is str.
+    """
+    config_path = _PROJECT_ROOT / "src" / "backend" / "config" / "backend.json"
+    try:
+        if not config_path.exists():
+            return False, "logs"
+        raw = config_path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (json.JSONDecodeError, OSError):
+        # Malformed config or read error → default to disabled
+        return False, "logs"
+
+    logging_cfg = data.get("logging")
+    if not isinstance(logging_cfg, dict):
+        return False, "logs"
+
+    enabled = bool(logging_cfg.get("enabled", False))
+    log_dir = str(logging_cfg.get("log_dir", "logs"))
+    return enabled, log_dir
+
+
 def main() -> None:
     """Parse CLI arguments and delegate to AppManager.run_selfplay()."""
     parser = _build_parser()
     args = parser.parse_args()
+
+    # Per design/6 D4: initialize the logger singleton from config.
+    # Defaults to disabled if config is missing or logging section absent.
+    logging_enabled, log_dir = _load_logging_config()
+    LoggerBuilder.init(enabled=logging_enabled, log_dir=log_dir)
 
     # Build immutable config from CLI args
     config = SelfPlayConfig(

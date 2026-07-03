@@ -1,0 +1,76 @@
+@startuml
+title Self-Play Structured Logging Lifecycle
+
+actor CLI as "scripts/selfplay.py"
+participant Config as "config/backend.json"
+participant Builder as "LoggerBuilder"
+participant Logger as "StructuredLogger\n(singleton)"
+participant AppMgr as "AppManager"
+participant Runner as "SelfPlayRunner"
+participant Disk as "{project_root}/logs/{date}.log"
+
+== Startup ==
+
+CLI -> Config : read backend.json
+Config --> CLI : {logging: {enabled, log_dir}}
+CLI -> Builder : init(enabled, log_dir)
+Builder -> Logger : new(enabled, log_dir)
+Logger -> Logger : generate traceId (8-char hex)
+CLI -> CLI : build SelfPlayConfig from CLI args
+
+CLI -> AppMgr : run_selfplay(config)
+AppMgr -> Runner : new(self.ai_sample_action)
+AppMgr -> Runner : run(config)
+
+== AI Validation ==
+
+Runner -> Builder : get_logger()
+Builder --> Runner : singleton StructuredLogger
+Runner -> Logger : log("INFO", "selfplay.run_start", ai1=..., ai2=..., ...)
+Logger -> Disk : write line
+
+Runner -> Runner : validate ai1, ai2 in registry
+Runner -> Logger : log("INFO", "selfplay.ai_validated", ai1=..., ai2=...)
+Logger -> Disk : write line
+
+== Game Loop (per game) ==
+
+loop for game_idx in 1..game_count
+  Runner -> Logger : log("INFO", "selfplay.game_start", game_idx=..., game_count=...)
+  Logger -> Disk : write line
+
+  loop per round
+    Runner -> Runner : query AI actions
+    Runner -> Logger : log("DEBUG", "selfplay.round_action", round=..., card1=..., card2=..., temp1=..., temp2=...)
+    Logger -> Disk : write line
+
+    Runner -> Runner : play_round()
+    Runner -> Logger : log("DEBUG", "selfplay.round_result", round=..., dmg1=..., dmg2=..., hp1=..., hp2=...)
+    Logger -> Disk : write line
+  end
+
+  alt play_round raises ValueError
+    Runner -> Logger : log("ERROR", "selfplay.error", error_type="ValueError", msg="play_round failed", game_idx=..., round=...)
+    Logger -> Disk : write line
+  end
+
+  Runner -> Logger : log("INFO", "selfplay.game_end", game_idx=..., winner=..., rounds=...)
+  Logger -> Disk : write line
+
+  opt sample_output configured
+    Runner -> Logger : log("DEBUG", "selfplay.sample_write", game_idx=..., count=...)
+    Logger -> Disk : write line
+  end
+end
+
+== Summary ==
+
+Runner -> Logger : log("INFO", "selfplay.run_end", total_games=..., ai1_wins=..., ai2_wins=..., draws=..., avg_rounds=...)
+Logger -> Disk : write line
+
+Runner --> AppMgr : SelfPlayResult
+AppMgr --> CLI : SelfPlayResult
+
+CLI -> CLI : print summary to stdout (unchanged)
+
+@enduml

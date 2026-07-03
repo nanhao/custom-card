@@ -1,0 +1,98 @@
+@startuml
+skinparam classAttributeIconSize 0
+
+' --- Shared config (read by scripts/selfplay.py) ---
+
+class "config/backend.json" <<json>> {
+  logging.enabled: bool
+  logging.log_dir: str
+}
+
+' --- Log package ---
+
+package "log/" as log_pkg {
+  class StructuredLogger {
+    + trace_id: str
+    --
+    + __init__(enabled: bool, log_dir: str)
+    + log(level: str, event: str, **kwargs)
+  }
+
+  class LoggerBuilder {
+    + {static} init(enabled: bool, log_dir: str)
+    + {static} get_logger(): StructuredLogger
+  }
+}
+
+LoggerBuilder --> StructuredLogger : "creates & holds singleton"
+
+' --- App layer ---
+
+class SelfPlayConfig <<dataclass, frozen>> {
+  + ai1: str
+  + ai2: str
+  + game_count: int = 100
+  + sample_output: str | None = None
+  + temperature: float = 1.0
+  + temp_step: int | None = None
+  + temp_seed: int | None = None
+  + temp_side: str = "both"
+}
+
+class SelfPlayResult <<dataclass>> {
+  + total_games: int
+  + ai1_wins: int
+  + ai2_wins: int
+  + draws: int
+  + avg_rounds: float
+}
+
+class AppManager {
+  + run_selfplay(config: SelfPlayConfig): SelfPlayResult
+}
+
+class SelfPlayRunner {
+  + run(config: SelfPlayConfig): SelfPlayResult
+}
+
+' --- Script layer ---
+
+class "scripts/selfplay.py" as SelfPlayScript <<script>> {
+  reads backend.json
+  calls LoggerBuilder.init()
+  delegates to AppManager
+}
+
+' --- Relationships ---
+
+SelfPlayScript ..> "config/backend.json" : "reads logging section"
+SelfPlayScript --> LoggerBuilder : "calls init()"
+SelfPlayScript --> AppManager : "calls run_selfplay(config)"
+AppManager --> SelfPlayRunner : "delegates to run(config)"
+SelfPlayRunner --> LoggerBuilder : "calls get_logger()"
+SelfPlayRunner ..> StructuredLogger : "calls log(level, event, **kwargs)"
+StructuredLogger --> "{project_root}/logs/{yyyy}-{mm}-{dd}.log" : "writes"
+AppManager --> SelfPlayConfig : "accepts"
+AppManager --> SelfPlayResult : "returns"
+SelfPlayRunner --> SelfPlayConfig : "accepts"
+SelfPlayRunner --> SelfPlayResult : "returns"
+
+note top of StructuredLogger
+  Generic low-level logger.
+  Zero game/AI dependencies.
+  Pipe-delimited envelope:
+  {timestamp} | {traceId} | {pid} | {tid} | {level} | {event} | {message}
+  Message format: key=value pairs,
+  space-separated, values quoted if
+  they contain spaces.
+  No-op when enabled=False.
+end note
+
+note right of LoggerBuilder
+  Global singleton manager.
+  init() called once at startup.
+  get_logger() accessible from
+  any module anywhere.
+end note
+
+@enduml
