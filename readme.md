@@ -102,6 +102,19 @@ python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
     --sample_output data/samples.jsonl --temp_seed 42
 ```
 
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--ai1` | `str` | *(required)* | AI name for player 1 (e.g. `rnn_v1.1`) |
+| `--ai2` | `str` | *(required)* | AI name for player 2 (e.g. `rnn_v1.1`) |
+| `--game` | `int` | `100` | Number of games to play |
+| `--temperature` | `float` | `1.0` | Sampling temperature (`0` = greedy, `>0` = stochastic). Higher values flatten the distribution (more exploration) |
+| `--temp_step` | `int` | *(none)* | First N rounds use sampling, then switch to greedy. Omit for no limit |
+| `--temp_side` | `str` | `both` | Which side to apply temperature sampling: `player1`, `player2`, or `both` |
+| `--temp_seed` | `int` | *(none)* | Random seed for reproducible sampling |
+| `--sample_output` | `str` | *(none)* | File path for PPO sample JSONL output. Omit to skip sample recording |
+
 ## API Endpoints
 
 | Method | Path | Description |
