@@ -386,5 +386,5 @@ class AppManager:
         Raises:
             ValueError: If ai1 or ai2 is not found in the registry.
         """
-        runner = SelfPlayRunner(self)
+        runner = SelfPlayRunner(self.ai_sample_action)
         return runner.run(config)

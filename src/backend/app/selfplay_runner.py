@@ -24,21 +24,27 @@ from src.backend.game.game_core import GameCore
 class SelfPlayRunner:
     """Execute self-play games and collect results.
 
-    Uses AppManager for AI action selection (both greedy and temperature-
-    based). Creates GameCore instances for game simulation. Handles PPO
+    Receives a sample_action callable (dependency injection) rather
+    than depending on AppManager directly. This breaks the bidirectional
+    dependency between AppManager and SelfPlayRunner.
+
+    Creates GameCore instances for game simulation. Handles PPO
     sample recording and progress logging.
 
     Attributes:
-        _app: AppManager instance for AI action queries.
+        _sample_action: Callable matching AppManager.ai_sample_action
+            signature: (state, hidden, ai_name, temp, player_key)
+            → (card_str, new_hidden, log_prob, value).
     """
 
-    def __init__(self, app_manager):
-        """Create a SelfPlayRunner backed by the given AppManager.
+    def __init__(self, sample_action_fn):
+        """Create a SelfPlayRunner with a sample-action callable.
 
         Args:
-            app_manager: AppManager instance (used for ai_sample_action).
+            sample_action_fn: Callable with the same signature as
+                AppManager.ai_sample_action().
         """
-        self._app = app_manager
+        self._sample_action = sample_action_fn
 
     def run(self, config: SelfPlayConfig) -> SelfPlayResult:
         """Execute all self-play games and return aggregate results.
@@ -180,7 +186,7 @@ class SelfPlayRunner:
                     and config.temp_side in ("player1", "both"))
                 else 0.0
             )
-            card1, h1, lp1, val1 = self._app.ai_sample_action(
+            card1, h1, lp1, val1 = self._sample_action(
                 pre_state, h1, config.ai1,
                 temperature=temp_p1, player_key="1",
             )
@@ -192,7 +198,7 @@ class SelfPlayRunner:
                     and config.temp_side in ("player2", "both"))
                 else 0.0
             )
-            card2, h2, lp2, val2 = self._app.ai_sample_action(
+            card2, h2, lp2, val2 = self._sample_action(
                 pre_state, h2, config.ai2,
                 temperature=temp_p2, player_key="2",
             )
