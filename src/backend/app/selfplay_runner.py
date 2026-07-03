@@ -346,11 +346,19 @@ class SelfPlayRunner:
         else:  # draw
             p1_reward, p2_reward = 0.0, 0.0
 
-        rounds_played = gm.round_log[-1].round if gm.round_log else 0
+        # Derive rounds_played from round log, or from sample count
+        # if round 1 errored before completing (round_log empty).
+        if gm.round_log:
+            rounds_played = gm.round_log[-1].round
+        elif game_samples:
+            rounds_played = len(game_samples) // 2
+        else:
+            rounds_played = 0
 
-        # e. Build structured game sample and log sample_write
+        # e. Build structured game sample.
+        # Per design/7 §2, rounds must be ≥1 — skip if none completed.
         game_sample = None
-        if config.sample_output is not None and game_samples:
+        if config.sample_output is not None and game_samples and rounds_played > 0:
             game_sample = self._build_game_sample(
                 game_samples=game_samples,
                 game_id=game_idx,
@@ -362,7 +370,7 @@ class SelfPlayRunner:
                 ai2=config.ai2,
             )
             logger.log(
-                "DEBUG", "selfplay.sample_write",
+                "DEBUG", "selfplay.sample_game_built",
                 game_idx=game_idx, count=len(game_samples),
             )
 
@@ -404,29 +412,10 @@ class SelfPlayRunner:
         ai1: str,
         ai2: str,
     ) -> dict:
-        """Build a structured game sample dict from per-step samples.
+        """Build a structured game sample dict (game → perspective → steps).
 
-        Splits the flat game_samples list into two perspective groups
-        (by the 'player' field) and assigns the appropriate reward to
-        each step. The output follows the game → perspective → steps
-        hierarchy defined in design/7 interfaces.md §2.
-
-        Args:
-            game_samples: List of per-step sample dicts with keys
-                player, state, action, value, log_prob (as built in
-                _play_one_game).
-            game_id: 1-based game index.
-            winner: "1", "2", or None (draw).
-            rounds_played: Number of rounds in this game.
-            p1_reward: Reward for all player 1 steps.
-            p2_reward: Reward for all player 2 steps.
-            ai1: AI name for player 1.
-            ai2: AI name for player 2.
-
-        Returns:
-            dict with keys game_id, winner, rounds, perspectives.
-            Each perspective is {player, ai, steps}.
-            Each step is {state, action, reward, value, log_prob}.
+        Splits flat game_samples by 'player' field, assigns rewards,
+        and returns the hierarchy defined in design/7 interfaces.md §2.
         """
         # Split steps by player and assign rewards
         p1_steps: list[dict] = []

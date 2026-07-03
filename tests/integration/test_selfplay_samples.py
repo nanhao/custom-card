@@ -10,12 +10,11 @@ For file output (TC-O1–O4) and boundary tests (TC-T1–T3), see
 test_selfplay_samples_output.py.
 """
 
-import json
-
 import pytest
 
 from src.backend.app.selfplay_config import SelfPlayConfig
 from src.backend.log.structured_logger import LoggerBuilder
+from tests.helpers import read_sample_file
 
 
 # ---------------------------------------------------------------------------
@@ -29,31 +28,6 @@ from src.backend.log.structured_logger import LoggerBuilder
 def _init_logger(tmp_path):
     """Initialize LoggerBuilder as disabled for sample output tests."""
     LoggerBuilder.init(enabled=False, log_dir=str(tmp_path / "logs"))
-
-
-# ---------------------------------------------------------------------------
-# Helper: read and validate the sample JSON array file
-# ---------------------------------------------------------------------------
-
-
-def _read_samples(path):
-    """Read a sample output file as a JSON array.
-
-    Args:
-        path: Path to the sample file.
-
-    Returns:
-        Parsed list of game dicts.
-
-    Raises:
-        AssertionError: If file cannot be parsed as valid JSON array.
-    """
-    content = path.read_text(encoding="utf-8")
-    data = json.loads(content)
-    assert isinstance(data, list), (
-        f"Expected JSON array (list), got {type(data).__name__}"
-    )
-    return data
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +54,7 @@ class TestSampleFileStructure:
         app_manager.run_selfplay(config)
 
         assert sample_path.exists()
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         assert len(games) == 3
 
     def test_each_game_has_required_top_level_keys(
@@ -94,7 +68,7 @@ class TestSampleFileStructure:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         required = {"game_id", "winner", "rounds", "perspectives"}
         for game in games:
             assert set(game.keys()) == required, (
@@ -110,7 +84,7 @@ class TestSampleFileStructure:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         ids = [g["game_id"] for g in games]
         assert ids == [1, 2, 3]
 
@@ -125,7 +99,7 @@ class TestSampleFileStructure:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             assert len(game["perspectives"]) == 2, (
                 f"Game {game['game_id']}: expected 2 perspectives, "
@@ -143,7 +117,7 @@ class TestSampleFileStructure:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             assert game["perspectives"][0]["player"] == "1"
             assert game["perspectives"][1]["player"] == "2"
@@ -157,7 +131,7 @@ class TestSampleFileStructure:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             assert game["perspectives"][0]["ai"] == "rnn_v1.1"
             assert game["perspectives"][1]["ai"] == "rnn_v1.1"
@@ -171,7 +145,7 @@ class TestSampleFileStructure:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         required = {"state", "action", "reward", "value", "log_prob"}
         for game in games:
             for p in game["perspectives"]:
@@ -193,7 +167,7 @@ class TestSampleFileStructure:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for p in game["perspectives"]:
                 for step in p["steps"]:
@@ -224,7 +198,7 @@ class TestSampleRewards:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             winner = game["winner"]
             p1_steps = game["perspectives"][0]["steps"]
@@ -258,7 +232,7 @@ class TestSampleRewards:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for p in game["perspectives"]:
                 rewards = {s["reward"] for s in p["steps"]}
@@ -277,7 +251,7 @@ class TestSampleRewards:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for p in game["perspectives"]:
                 for step in p["steps"]:
@@ -310,7 +284,7 @@ class TestSampleContent:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             total_steps = sum(
                 len(p["steps"]) for p in game["perspectives"]
@@ -332,7 +306,7 @@ class TestSampleContent:
         app_manager.run_selfplay(config)
 
         valid_actions = {"attack", "defense", "heavy", "counter"}
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for step in game["perspectives"][0]["steps"]:
                 assert step["action"] in valid_actions, (
@@ -350,7 +324,7 @@ class TestSampleContent:
         app_manager.run_selfplay(config)
 
         valid_actions = {"attack", "defense", "heavy", "counter"}
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for step in game["perspectives"][1]["steps"]:
                 assert step["action"] in valid_actions, (
@@ -367,7 +341,7 @@ class TestSampleContent:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for p in game["perspectives"]:
                 for step in p["steps"]:
@@ -386,7 +360,7 @@ class TestSampleContent:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for p in game["perspectives"]:
                 for step in p["steps"]:
@@ -408,7 +382,7 @@ class TestSampleContent:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for p in game["perspectives"]:
                 for step in p["steps"]:
@@ -426,7 +400,7 @@ class TestSampleContent:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             p1_step_count = len(game["perspectives"][0]["steps"])
             p2_step_count = len(game["perspectives"][1]["steps"])

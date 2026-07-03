@@ -336,11 +336,11 @@ class TestSampleWriteEvents:
     """TC-R11, TC-R12: sample_write logging."""
 
     def test_sample_write_logged_when_configured(self, app_manager, log_dir, tmp_path):
-        """TC-R11: sample_write event logged when sample_output is set.
+        """TC-R11: sample events logged when sample_output is set.
 
-        Per design/7, two sample_write events are emitted:
-        1. Per-game event (from _play_one_game) with game_idx and count.
-        2. Final event (from run) with game_count and total_steps.
+        Per design/7, two distinct events are emitted:
+        1. Per-game: selfplay.sample_game_built (game_idx, count).
+        2. Final: selfplay.sample_write (game_count, total_steps).
         """
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         sample_path = tmp_path / "samples.json"
@@ -351,29 +351,31 @@ class TestSampleWriteEvents:
             sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
-        sample_lines = _lines_with_event(log_dir, "selfplay.sample_write")
-        # Expect 2 events: per-game + final
-        assert len(sample_lines) == 2
 
-        # Per-game message has game_idx and count
-        per_game_msg = sample_lines[0].split(" | ")[6]
-        assert "game_idx=" in per_game_msg
-        assert "count=" in per_game_msg
+        # Per-game event: selfplay.sample_game_built
+        built_lines = _lines_with_event(log_dir, "selfplay.sample_game_built")
+        assert len(built_lines) == 1
+        built_msg = built_lines[0].split(" | ")[6]
+        assert "game_idx=" in built_msg
+        assert "count=" in built_msg
 
-        # Final message has game_count and total_steps
-        final_msg = sample_lines[1].split(" | ")[6]
-        assert "game_count=" in final_msg
-        assert "total_steps=" in final_msg
+        # Final event: selfplay.sample_write
+        write_lines = _lines_with_event(log_dir, "selfplay.sample_write")
+        assert len(write_lines) == 1
+        write_msg = write_lines[0].split(" | ")[6]
+        assert "game_count=" in write_msg
+        assert "total_steps=" in write_msg
 
     def test_no_sample_write_when_none(self, app_manager, log_dir):
-        """TC-R12: no sample_write when sample_output is None."""
+        """TC-R12: no sample events when sample_output is None."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
             ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1, sample_output=None
         )
         app_manager.run_selfplay(config)
-        sample_lines = _lines_with_event(log_dir, "selfplay.sample_write")
-        assert len(sample_lines) == 0
+        # Neither the per-game nor final event should appear
+        assert len(_lines_with_event(log_dir, "selfplay.sample_game_built")) == 0
+        assert len(_lines_with_event(log_dir, "selfplay.sample_write")) == 0
 
 
 # ---------------------------------------------------------------------------

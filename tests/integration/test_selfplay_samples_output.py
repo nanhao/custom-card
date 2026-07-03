@@ -14,6 +14,7 @@ import pytest
 
 from src.backend.app.selfplay_config import SelfPlayConfig
 from src.backend.log.structured_logger import LoggerBuilder
+from tests.helpers import read_sample_file
 
 
 # ---------------------------------------------------------------------------
@@ -25,28 +26,6 @@ from src.backend.log.structured_logger import LoggerBuilder
 def _init_logger(tmp_path):
     """Initialize LoggerBuilder as disabled for sample output tests."""
     LoggerBuilder.init(enabled=False, log_dir=str(tmp_path / "logs"))
-
-
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
-
-
-def _read_samples(path):
-    """Read a sample output file as a JSON array.
-
-    Args:
-        path: Path to the sample file.
-
-    Returns:
-        Parsed list of game dicts.
-    """
-    content = path.read_text(encoding="utf-8")
-    data = json.loads(content)
-    assert isinstance(data, list), (
-        f"Expected JSON array (list), got {type(data).__name__}"
-    )
-    return data
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +71,7 @@ class TestSampleFileOutput:
 
         assert sample_path.exists()
         # Verify it's valid JSON
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         assert isinstance(games, list)
 
     def test_file_is_valid_json_not_jsonl(self, app_manager, tmp_path):
@@ -141,7 +120,7 @@ class TestSampleFileOutput:
         app_manager.run_selfplay(config)
 
         assert sample_path.exists()
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         assert games == []
 
 
@@ -169,7 +148,7 @@ class TestSampleBoundaries:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for p in game["perspectives"]:
                 step_count = len(p["steps"])
@@ -188,7 +167,7 @@ class TestSampleBoundaries:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             p1 = game["perspectives"][0]
             p2 = game["perspectives"][1]
@@ -210,7 +189,7 @@ class TestSampleBoundaries:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         assert len(games) == 3
         # Each game is a separate dict
         for i, game in enumerate(games):
@@ -237,7 +216,7 @@ class TestTempStep:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         all_steps = [
             s for g in games
             for p in g["perspectives"]
@@ -260,7 +239,7 @@ class TestTempStep:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for p in game["perspectives"]:
                 for step in p["steps"]:
@@ -288,7 +267,7 @@ class TestTempSide:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for step in game["perspectives"][0]["steps"]:
                 assert step["log_prob"] is not None, (
@@ -310,7 +289,7 @@ class TestTempSide:
         )
         app_manager.run_selfplay(config)
 
-        games = _read_samples(sample_path)
+        games = read_sample_file(sample_path)
         for game in games:
             for step in game["perspectives"][0]["steps"]:
                 assert step["log_prob"] is None, (

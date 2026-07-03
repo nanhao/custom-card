@@ -1,8 +1,33 @@
 """Shared test helpers for unit and integration tests.
 
 Provides factory functions for constructing realistic game state dicts
-used across multiple test modules.
+and utility functions for reading test output files.
 """
+
+import json
+
+
+def read_sample_file(path):
+    """Read a sample output file as a JSON array.
+
+    Validates that the file contains a valid JSON array before returning.
+    Used by integration tests for self-play sample output.
+
+    Args:
+        path: Path to the sample file.
+
+    Returns:
+        Parsed list of game dicts.
+
+    Raises:
+        AssertionError: If file cannot be parsed as valid JSON array.
+    """
+    content = path.read_text(encoding="utf-8")
+    data = json.loads(content)
+    assert isinstance(data, list), (
+        f"Expected JSON array (list), got {type(data).__name__}"
+    )
+    return data
 
 
 def make_game_state(hand_1=None, hand_2=None, hp_1=3, hp_2=3,
