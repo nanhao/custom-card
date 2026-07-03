@@ -11,34 +11,21 @@ import json
 
 import pytest
 
-from src.backend.app.app_manager import AppManager
 from src.backend.app.selfplay_config import SelfPlayConfig
-from src.backend.game.session_store import SessionStore
 from src.backend.log.structured_logger import LoggerBuilder
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# LoggerBuilder must be initialized (even disabled) so SelfPlayRunner
+# can call LoggerBuilder.get_logger() without raising RuntimeError.
+# conftest.py resets the singleton before/after every test.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
 def _init_logger(tmp_path):
-    """Initialize LoggerBuilder as disabled before each test."""
-    LoggerBuilder._reset()
+    """Initialize LoggerBuilder as disabled for sample output tests."""
     LoggerBuilder.init(enabled=False, log_dir=str(tmp_path / "logs"))
-    yield
-    LoggerBuilder._reset()
-
-
-@pytest.fixture
-def app_manager(tmp_path):
-    """Create an AppManager with a temporary SessionStore."""
-    saves_dir = tmp_path / "saves"
-    config_path = tmp_path / "config.json"
-    config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
-    store = SessionStore(config_path=str(config_path))
-    return AppManager(store)
 
 
 # ---------------------------------------------------------------------------

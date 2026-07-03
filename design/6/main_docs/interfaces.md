@@ -60,7 +60,9 @@ class StructuredLogger:
         Args:
             enabled: If False, all log() calls are no-ops.
             log_dir: Directory path for log files (relative to project root,
-                     or absolute). Created if absent on first write.
+                     or absolute). Created if absent at construction time.
+                     Raises OSError if directory cannot be created
+                     or is not writable (fail-fast).
         """
 
     @property

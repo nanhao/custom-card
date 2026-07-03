@@ -9,40 +9,24 @@ and produces no log when disabled.
 All file I/O uses temporary directories (test rule: never touch real data).
 """
 
-import json
 import re
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from src.backend.app.app_manager import AppManager
 from src.backend.app.selfplay_config import SelfPlayConfig
-from src.backend.game.session_store import SessionStore
 from src.backend.log.structured_logger import LoggerBuilder
+
+# NOTE: conftest.py provides autouse _reset_logger_builder and
+# app_manager fixtures. We add _init_logger_disabled as a convenience
+# that can be overridden per test.
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def reset_logger_builder():
-    """Reset LoggerBuilder state before and after each test."""
-    LoggerBuilder._reset()
-    yield
-    LoggerBuilder._reset()
-
-
-@pytest.fixture
-def app_manager(tmp_path):
-    """Create an AppManager with a temporary SessionStore."""
-    saves_dir = tmp_path / "saves"
-    config_path = tmp_path / "config.json"
-    config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
-    store = SessionStore(config_path=str(config_path))
-    return AppManager(store)
 
 
 @pytest.fixture
@@ -201,25 +185,82 @@ class TestErrorEvents:
     """TC-R7, TC-R8: error logging on exceptions."""
 
     def test_error_event_when_play_round_raises(self, app_manager, log_dir):
-        """TC-R7: error event logged for ValueError in play_round.
+        """TC-R7: error event logged with correct fields on ValueError.
 
-        We can't easily force a ValueError, but if one occurs during
-        normal gameplay (which shouldn't happen with valid AI actions),
-        the error event should still be logged. Since we rely on the
-        runner's try/except in the round loop, we just verify the
-        error event field format is present in the impl.
+        Patches GameCore.play_round to raise ValueError mid-game,
+        then verifies the selfplay.error event is logged with
+        error_type=ValueError, msg (double-quoted), game_idx, and round.
         """
+        from src.backend.game.game_core import GameCore
+
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
-        # Run normally — errors may or may not occur, but at minimum
-        # we verify the log structure is sound
         config = SelfPlayConfig(
             ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
         )
-        app_manager.run_selfplay(config)
-        # No explicit assertion on error count — just verify run completes
-        events = _read_log_events(log_dir)
-        assert "selfplay.run_start" in events
-        assert "selfplay.run_end" in events
+
+        # Force play_round to raise ValueError on the first actual call.
+        # The game loop calls play_round after logging round_action;
+        # we intercept only the first call so the game breaks early.
+        original = GameCore.play_round
+        call_count = [0]
+
+        def _raise_on_first(self, cards1, cards2):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise ValueError("play_round failed")
+            return original(self, cards1, cards2)
+
+        with patch.object(GameCore, "play_round", _raise_on_first):
+            app_manager.run_selfplay(config)
+
+        # Verify selfplay.error event exists in the log
+        error_lines = _lines_with_event(log_dir, "selfplay.error")
+        assert len(error_lines) == 1, (
+            f"Expected 1 error line, got {len(error_lines)}"
+        )
+        # Verify envelope fields
+        fields = error_lines[0].split(" | ")
+        assert fields[4] == "ERROR"
+        assert fields[5] == "selfplay.error"
+        # Verify message fields per TC-R7
+        msg = fields[6]
+        assert "error_type=ValueError" in msg
+        assert "game_idx=1" in msg
+        assert "round=" in msg
+
+    def test_error_message_is_double_quoted(self, app_manager, log_dir):
+        """TC-R8: error msg with spaces is double-quoted.
+
+        Forces a ValueError whose message contains spaces,
+        then verifies msg is double-quoted in the log output.
+        """
+        from src.backend.game.game_core import GameCore
+
+        LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
+        )
+
+        call_count = [0]
+        original = GameCore.play_round
+
+        def _raise_msg_spaces(self, cards1, cards2):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise ValueError("play_round failed")
+            return original(self, cards1, cards2)
+
+        with patch.object(GameCore, "play_round", _raise_msg_spaces):
+            app_manager.run_selfplay(config)
+
+        error_lines = _lines_with_event(log_dir, "selfplay.error")
+        assert len(error_lines) == 1
+        msg = error_lines[0].split(" | ")[6]
+        # Per the message format spec §3.2, values containing spaces
+        # are double-quoted
+        assert 'msg="play_round failed"' in msg, (
+            f"Expected double-quoted msg, got: {msg}"
+        )
 
 
 # ---------------------------------------------------------------------------

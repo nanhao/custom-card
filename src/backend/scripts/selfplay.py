@@ -96,7 +96,15 @@ def _load_logging_config() -> tuple[bool, str]:
     if not isinstance(logging_cfg, dict):
         return False, "logs"
 
-    enabled = bool(logging_cfg.get("enabled", False))
+    # Explicit type check for enabled: only accept Python bool.
+    # Avoid bool() coercion which would treat non-empty strings
+    # (e.g., "false") and non-zero ints as True.
+    raw_enabled = logging_cfg.get("enabled", False)
+    if not isinstance(raw_enabled, bool):
+        enabled = False
+    else:
+        enabled = raw_enabled
+
     log_dir = str(logging_cfg.get("log_dir", "logs"))
     return enabled, log_dir
 

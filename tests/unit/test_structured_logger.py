@@ -270,20 +270,35 @@ class TestFileManagement:
         assert len(lines) == 5
 
     def test_date_rollover_different_days(self, tmp_path):
-        """TC-F3: logging on different dates creates separate files."""
+        """TC-F3: logging on different dates creates separate files.
+
+        Mocks datetime.now() to simulate writing on two different
+        dates, then verifies two distinct daily log files exist.
+        """
         log_dir = tmp_path / "logs"
         logger = StructuredLogger(enabled=True, log_dir=str(log_dir))
         today = datetime.now()
         yesterday = today - timedelta(days=1)
-        today_str = today.strftime("%Y-%m-%d")
+        tomorrow = today + timedelta(days=1)
+
+        with patch(
+            "src.backend.log.structured_logger.datetime"
+        ) as mock_dt_class:
+            # First call to now() returns yesterday, second returns tomorrow
+            mock_dt_class.now.side_effect = [yesterday, tomorrow]
+            logger.log("INFO", "first", day="yesterday")
+            logger.log("INFO", "second", day="tomorrow")
+
+        # Verify two separate files exist
         yesterday_str = yesterday.strftime("%Y-%m-%d")
-        # Use _get_daily_path internally (we mock _write_line to verify file path)
-        # Instead, we use the internal method directly
-        path1 = logger._get_daily_path(yesterday)
-        path2 = logger._get_daily_path(today)
-        assert path1 != path2
-        assert yesterday_str in str(path1)
-        assert today_str in str(path2)
+        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+        yesterday_file = log_dir / f"{yesterday_str}.log"
+        tomorrow_file = log_dir / f"{tomorrow_str}.log"
+        assert yesterday_file.exists(), f"Expected {yesterday_file}"
+        assert tomorrow_file.exists(), f"Expected {tomorrow_file}"
+        # Each file should have exactly one line
+        assert len(yesterday_file.read_text(encoding="utf-8").strip().split("\n")) == 1
+        assert len(tomorrow_file.read_text(encoding="utf-8").strip().split("\n")) == 1
 
     def test_same_date_writes_to_same_file(self, tmp_path):
         """TC-F4: 3 writes on the same date → 1 file with 3 lines."""

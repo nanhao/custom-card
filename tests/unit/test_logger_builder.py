@@ -11,23 +11,8 @@ import pytest
 
 from src.backend.log.structured_logger import LoggerBuilder, StructuredLogger
 
-
-# ---------------------------------------------------------------------------
-# Reset helper — LoggerBuilder is singleton, must reset between tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def reset_logger_builder():
-    """Reset LoggerBuilder state before each test.
-
-    LoggerBuilder is a singleton; without resetting, test order matters
-    and tests fail unpredictably. This fixture uses _reset() to clear
-    the internal state between tests.
-    """
-    LoggerBuilder._reset()
-    yield
-    LoggerBuilder._reset()
+# NOTE: conftest.py provides an autouse _reset_logger_builder fixture
+# that resets LoggerBuilder singleton before/after every test.
 
 
 # ---------------------------------------------------------------------------

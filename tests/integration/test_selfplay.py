@@ -7,44 +7,26 @@ For PPO sample output tests (TC-P1–P7, TC-T1–T4), see
 test_selfplay_samples.py.
 """
 
-import json
 import sys
 from io import StringIO
 
 import pytest
 
-from src.backend.app.app_manager import AppManager
 from src.backend.app.selfplay_config import SelfPlayConfig
-from src.backend.game.session_store import SessionStore
 from src.backend.log.structured_logger import LoggerBuilder
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# The _reset_logger_builder fixture in tests/conftest.py resets
+# LoggerBuilder before/after every test. We additionally init
+# it as disabled so SelfPlayRunner.run() doesn't fail.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
 def _init_logger(tmp_path):
-    """Initialize LoggerBuilder as disabled before each test.
-
-    SelfPlayRunner.run() now requires LoggerBuilder to be initialized.
-    We init with enabled=False so existing tests behave as before.
-    """
-    LoggerBuilder._reset()
+    """Initialize LoggerBuilder as disabled for existing self-play tests."""
     LoggerBuilder.init(enabled=False, log_dir=str(tmp_path / "logs"))
-    yield
-    LoggerBuilder._reset()
-
-
-@pytest.fixture
-def app_manager(tmp_path):
-    """Create an AppManager with a temporary SessionStore."""
-    saves_dir = tmp_path / "saves"
-    config_path = tmp_path / "config.json"
-    config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
-    store = SessionStore(config_path=str(config_path))
-    return AppManager(store)
 
 
 # ---------------------------------------------------------------------------
