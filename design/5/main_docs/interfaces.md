@@ -156,14 +156,21 @@ Samples saved to: data/samples.jsonl
 ## 4. `app/selfplay_runner.py` — SelfPlayRunner
 
 Encapsulates the self-play game loop (per design D1). Created and invoked
-by `AppManager.run_selfplay()`.
+by `AppManager.run_selfplay()`. Receives a `sample_action_fn` callable via
+dependency injection rather than holding a reference to AppManager.
 
 ```
 class SelfPlayRunner:
     """Execute self-play games and collect results."""
 
-    def __init__(self, app_manager: AppManager):
-        """Create a runner backed by the given AppManager."""
+    def __init__(self, sample_action_fn):
+        """Create a runner with a sample-action callable.
+
+        Args:
+            sample_action_fn: Callable matching AppManager.ai_sample_action
+                signature: (state, hidden, ai_name, temp, player_key)
+                → (card_str, new_hidden, log_prob, value).
+        """
 
     def run(self, config: SelfPlayConfig) -> SelfPlayResult:
         """Execute all self-play games and return aggregate results.

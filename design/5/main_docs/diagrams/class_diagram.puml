@@ -30,9 +30,9 @@ package "app/" {
         + avg_rounds: float
     }
 
-    note "selfplay_runner.py" as N3
+    note "selfplay_runner.py\n(depends on callable, not AppManager)" as N3
     class SelfPlayRunner {
-        + __init__(app_manager)
+        + __init__(sample_action_fn: Callable)
         + run(config: SelfPlayConfig): SelfPlayResult
     }
 
@@ -80,7 +80,8 @@ AppManager --> SelfPlayRunner : run_selfplay() delegates to
 SelfPlayRunner ..> SelfPlayConfig : uses
 SelfPlayRunner ..> SelfPlayResult : returns
 SelfPlayRunner --> Converter : builds input vectors
-SelfPlayRunner --> GRUCardModel : via AppManager
+' SelfPlayRunner receives a callable (AppManager.ai_sample_action);
+' it does NOT hold a reference to AppManager itself.
 SelfPlayRunner --> GameCore : creates and drives
 AppManager --> Converter : builds input vectors
 AppManager --> GRUCardModel : loads and infers
