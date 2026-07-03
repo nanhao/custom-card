@@ -1,0 +1,52 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+
+title Temperature Sampling Flow\n(AppManager.ai_sample_action internal)
+
+participant "SelfPlayRunner" as SR
+participant "AppManager" as AM
+participant "Converter" as CV
+participant "GRUCardModel" as MD
+
+SR -> AM: ai_sample_action(state, hidden, ai_name, temperature, player_key)
+
+AM -> AM: _get_model(ai_name)\n(load or retrieve from cache)
+
+AM -> CV: build_input_vector(state, player_key)
+CV --> AM: input_vector (14 floats)
+
+AM -> AM: _make_mask_fn(hand)\n(build mask closure from player's hand)
+
+AM -> MD: forward(x, h, mask_fn, temperature)
+
+group GRUCardModel.forward() internals
+    MD -> MD: gru(x, h) → gru_out, new_hidden
+    MD -> MD: fc_policy(gru_out) → logits (1,4)
+    MD -> MD: mask_fn(logits) → masked_logits
+
+    alt temperature == 0
+        MD -> MD: argmax → one-hot probs\nlog_probs = 0 at argmax, -inf elsewhere
+    else temperature > 0
+        MD -> MD: scaled_logits = masked_logits / temperature
+        MD -> MD: log_probs = log_softmax(scaled_logits)
+        MD -> MD: probs = exp(log_probs)
+    end
+
+    MD -> MD: fc_value(gru_out) → tanh → value
+end
+
+MD --> AM: probs, log_probs, value, new_hidden
+
+alt temperature > 0
+    AM -> AM: sample action_idx from Categorical(probs)
+    AM -> AM: log_prob = log_probs[action_idx]
+else temperature == 0
+    AM -> AM: action_idx = argmax(probs)
+    AM -> AM: log_prob = None
+end
+
+AM -> AM: card_str = Converter.index_to_card(action_idx)
+
+AM --> SR: card_str, new_hidden (flat list), log_prob
+
+@enduml

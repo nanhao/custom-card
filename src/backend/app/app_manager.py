@@ -6,9 +6,16 @@ startup (D8) and holds:
     - A SessionStore reference for game persistence
     - A model cache for AI model instances (D7)
 
-Public interface (per design/3 interfaces.md §4):
+Per design/5, AppManager also encapsulates the self-play game loop
+(run_selfplay) and temperature-based action sampling (ai_sample_action).
+The actual game loop logic lives in selfplay_runner.py to keep file
+size under 500 lines.
+
+Public interface (per design/3 interfaces.md §4, design/5 interfaces.md §3):
     create_game(mode, ai_name=None) → (game_id, state)
     ai_select_action(state, hidden_state, ai_name) → (card_str, new_hidden)
+    ai_sample_action(state, hidden, ai_name, temperature, player_key) → (card_str, new_hidden, log_prob, value)
+    run_selfplay(config) → SelfPlayResult
 """
 
 import importlib
@@ -19,6 +26,8 @@ import torch.nn as nn
 
 from src.backend.ai.registry import get_ai_info
 from src.backend.app.converter import Converter
+from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
+from src.backend.app.selfplay_runner import SelfPlayRunner
 
 # Lazy imports (imported when needed to avoid circular dependencies)
 #   GameCore — game state machine
@@ -26,6 +35,10 @@ from src.backend.app.converter import Converter
 from src.backend.game.game_core import GameCore
 from src.backend.game.session_store import SessionStore
 
+
+# ---------------------------------------------------------------------------
+# AppManager
+# ---------------------------------------------------------------------------
 
 class AppManager:
     """Bridge layer orchestrating game creation and AI action selection.
@@ -159,7 +172,7 @@ class AppManager:
 
         # --- Forward pass ---
         with torch.inference_mode():
-            probs, _value, new_hidden = model(x, h, mask_fn=mask_fn)
+            probs, _log_probs, _value, new_hidden = model(x, h, mask_fn=mask_fn)
             # probs shape: (1, 4) — already softmaxed + masked
             action_idx = int(torch.argmax(probs, dim=-1).item())
 
@@ -269,3 +282,109 @@ class AppManager:
             return masked
 
         return mask_fn
+
+    # ------------------------------------------------------------------
+    # AI temperature-based action sampling (design/5 D2)
+    # ------------------------------------------------------------------
+
+    def ai_sample_action(
+        self,
+        state: dict,
+        hidden_state: list[float],
+        ai_name: str,
+        temperature: float,
+        player_key: str = "2",
+    ) -> tuple[str, list[float], float | None, float]:
+        """Select an AI action with temperature-based sampling.
+
+        When temperature > 0:
+            Samples from softmax(logits / temperature) distribution.
+            Returns log_prob of the selected action (for PPO training).
+        When temperature = 0:
+            Greedy argmax (same outcome as ai_select_action).
+            Returns log_prob = None.
+
+        Per design/5 D2: accepts player_key for perspective-aware
+        input vector construction and hand-based action masking.
+
+        Args:
+            state: Game state dict from GameCore.get_state().
+            hidden_state: Current GRU hidden state as list of 8 floats.
+            ai_name: AI name from registry (e.g. "rnn_v1.1").
+            temperature: Sampling temperature. 0 = greedy.
+            player_key: Which player the AI controls — "1" or "2".
+
+        Returns:
+            (card_str, new_hidden_state, log_prob, value) tuple:
+                card_str: Selected card string.
+                new_hidden_state: Updated hidden state (list of 8 floats).
+                log_prob: Log-probability of selected action (float if
+                    temperature > 0, else None).
+                value: Model's win-rate estimate in [-1, 1].
+
+        Raises:
+            ValueError: If ai_name is not found in registry.
+            RuntimeError: If model loading or inference fails.
+        """
+        # --- Load or retrieve cached model ---
+        model = self._get_model(ai_name)
+
+        # --- Build input vector from player's perspective ---
+        input_vector = Converter.build_input_vector(state, player_key=player_key)
+
+        # --- Prepare tensors ---
+        # x: (1, 1, 14) — seq_len=1, batch=1, features=14
+        x = torch.tensor(
+            input_vector, dtype=torch.float32
+        ).view(1, 1, Converter.INPUT_SIZE)
+        # h: (1, 1, 8) — num_layers=1, batch=1, hidden=8
+        h = torch.tensor(hidden_state, dtype=torch.float32).view(1, 1, 8)
+
+        # --- Create mask function from the player's hand ---
+        mask_fn = self._make_mask_fn(state["players"][player_key]["hand"])
+
+        # --- Forward pass with temperature ---
+        with torch.inference_mode():
+            probs, log_probs, value, new_hidden = model(
+                x, h, mask_fn=mask_fn, temperature=temperature
+            )
+
+            if temperature == 0.0:
+                # Greedy: probs is one-hot, argmax gives the selected index
+                action_idx = int(torch.argmax(probs, dim=-1).item())
+                log_prob = None
+            else:
+                # Sample from the probability distribution
+                action_idx = int(torch.multinomial(probs, 1).item())
+                log_prob = float(log_probs[0, action_idx].item())
+
+        # --- Convert index to card string ---
+        card_str = Converter.index_to_card(action_idx)
+
+        # --- Extract new hidden state and value as Python scalars ---
+        new_hidden_list = new_hidden.squeeze(1).squeeze(0).tolist()
+        value_float = float(value.item())
+
+        return card_str, new_hidden_list, log_prob, value_float
+
+    # ------------------------------------------------------------------
+    # Self-play game loop (design/5 D1)
+    # ------------------------------------------------------------------
+
+    def run_selfplay(self, config: SelfPlayConfig) -> SelfPlayResult:
+        """Execute all self-play games and return aggregate results.
+
+        Thin wrapper that delegates to SelfPlayRunner. The actual game
+        loop logic lives in selfplay_runner.py per design/5 D1.
+
+        Args:
+            config: SelfPlayConfig with all run parameters.
+
+        Returns:
+            SelfPlayResult with win/loss/draw counts and avg rounds.
+
+        Raises:
+            ValueError: If ai1 or ai2 is not found in the registry.
+        """
+        runner = SelfPlayRunner(self)
+        return runner.run(config)

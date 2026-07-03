@@ -1,0 +1,96 @@
+"""AI Self-Play CLI — thin wrapper around AppManager.run_selfplay().
+
+Per design/5 D1, this script contains NO business logic — only argument
+parsing and delegation. The game loop lives in app/selfplay_runner.py.
+
+Usage:
+    python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1
+    python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 200
+    python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \\
+        --temperature 0.5 --temp_step 3 --temp_side both \\
+        --sample_output data/samples.jsonl --temp_seed 42
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+# Ensure the project root is on sys.path for `src.*` imports.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from src.backend.app.app_manager import AppManager
+from src.backend.app.selfplay_config import SelfPlayConfig
+from src.backend.game.session_store import SessionStore
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser with all self-play options.
+
+    Returns:
+        Configured ArgumentParser instance.
+    """
+    parser = argparse.ArgumentParser(
+        description="AI Self-Play — pit two AIs against each other."
+    )
+    parser.add_argument(
+        "--ai1", required=True,
+        help="AI name for player 1 (e.g. rnn_v1.1)",
+    )
+    parser.add_argument(
+        "--ai2", required=True,
+        help="AI name for player 2 (e.g. rnn_v1.1)",
+    )
+    parser.add_argument(
+        "--game", type=int, default=100,
+        help="Number of games to play (default: 100)",
+    )
+    parser.add_argument(
+        "--temperature", type=float, default=1.0,
+        help="Sampling temperature. 0 = greedy (default: 1.0)",
+    )
+    parser.add_argument(
+        "--temp_step", type=int, default=None,
+        help="First N rounds use sampling, then greedy (default: no limit)",
+    )
+    parser.add_argument(
+        "--temp_side", choices=["player1", "player2", "both"], default="both",
+        help="Which side to sample (default: both)",
+    )
+    parser.add_argument(
+        "--temp_seed", type=int, default=None,
+        help="Random seed for reproducibility",
+    )
+    parser.add_argument(
+        "--sample_output", type=str, default=None,
+        help="Path for PPO sample JSONL output file",
+    )
+    return parser
+
+
+def main() -> None:
+    """Parse CLI arguments and delegate to AppManager.run_selfplay()."""
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    # Build immutable config from CLI args
+    config = SelfPlayConfig(
+        ai1=args.ai1,
+        ai2=args.ai2,
+        game_count=args.game,
+        temperature=args.temperature,
+        temp_step=args.temp_step,
+        temp_side=args.temp_side,
+        temp_seed=args.temp_seed,
+        sample_output=args.sample_output,
+    )
+
+    # Create AppManager and run
+    store = SessionStore()
+    app = AppManager(store)
+    app.run_selfplay(config)
+
+
+if __name__ == "__main__":
+    main()

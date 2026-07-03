@@ -82,50 +82,60 @@ class Converter:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def build_input_vector(state: dict) -> list[float]:
+    def build_input_vector(state: dict, player_key: str = "2") -> list[float]:
         """Build the 14-d input vector from a game state dict.
 
-        Per design/3 interfaces.md §3:
-            indices 0–3:   AI card counts (attack, defense, heavy, counter)
-            indices 4–5:   HP values (AI HP, human HP), clamped [0,3]
-            indices 6–9:   One-hot of AI's last move (zeros in round 1)
-            indices 10–13: One-hot of human's last move (zeros in round 1)
+        Per design/3 interfaces.md §3 and design/5 D3:
+            indices 0–3:   This player's card counts (attack, defense, heavy, counter)
+            indices 4–5:   HP values (this player, opponent), clamped [0,3]
+            indices 6–9:   One-hot of this player's last move (zeros in round 1)
+            indices 10–13: One-hot of opponent's last move (zeros in round 1)
 
         Args:
-            state: Game state dict from GameManager.get_state(). The AI
-                   always plays as Player "2".
+            state: Game state dict from GameCore.get_state().
+            player_key: Which player's perspective — "1" or "2".
+                        Default "2" preserves backward compatibility.
 
         Returns:
             list[float] of length 14.
+
+        Raises:
+            ValueError: If player_key is not "1" or "2".
         """
-        ai_player = state["players"]["2"]
-        human_player = state["players"]["1"]
+        if player_key not in ("1", "2"):
+            raise ValueError(
+                f"Invalid player_key: {player_key!r}. Must be '1' or '2'."
+            )
+
+        this_player = state["players"][player_key]
+        opponent_key = "2" if player_key == "1" else "1"
+        opp_player = state["players"][opponent_key]
 
         # ---- Card counts (indices 0–3) ----
         counts = [0.0] * Converter.NUM_CARD_TYPES
-        for card_str in ai_player["hand"]:
+        for card_str in this_player["hand"]:
             idx = Converter._CARD_TO_INDEX.get(card_str)
             if idx is not None:
                 counts[idx] += 1.0
 
         # ---- HP values (indices 4–5), clamped to [0, 3] ----
-        ai_hp = max(0.0, min(3.0, float(ai_player["hp"])))
-        human_hp = max(0.0, min(3.0, float(human_player["hp"])))
+        this_hp = max(0.0, min(3.0, float(this_player["hp"])))
+        opp_hp = max(0.0, min(3.0, float(opp_player["hp"])))
 
         # ---- One-hot of last moves (indices 6–13) ----
-        ai_last = [0.0] * Converter.NUM_CARD_TYPES
-        human_last = [0.0] * Converter.NUM_CARD_TYPES
+        this_last = [0.0] * Converter.NUM_CARD_TYPES
+        opp_last = [0.0] * Converter.NUM_CARD_TYPES
 
-        if ai_player["history"]:
-            last_card = ai_player["history"][-1]
+        if this_player["history"]:
+            last_card = this_player["history"][-1]
             onehot_idx = Converter._CARD_TO_INDEX.get(last_card)
             if onehot_idx is not None:
-                ai_last[onehot_idx] = 1.0
+                this_last[onehot_idx] = 1.0
 
-        if human_player["history"]:
-            last_card = human_player["history"][-1]
+        if opp_player["history"]:
+            last_card = opp_player["history"][-1]
             onehot_idx = Converter._CARD_TO_INDEX.get(last_card)
             if onehot_idx is not None:
-                human_last[onehot_idx] = 1.0
+                opp_last[onehot_idx] = 1.0
 
-        return counts + [ai_hp, human_hp] + ai_last + human_last
+        return counts + [this_hp, opp_hp] + this_last + opp_last

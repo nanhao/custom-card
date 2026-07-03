@@ -9,9 +9,10 @@ Architecture:
     Input(14) → GRU(8) → ┬→ FC(8→4) → (optional mask_fn) → softmax   (policy head)
                           └→ FC(8→1) → tanh                           (value head)
 
-Public interface (per design/3 interfaces.md §1):
+Public interface (per design/3 interfaces.md §1, updated per design/5):
     GRUCardModel.INITIAL_HIDDEN_STATE: list[float]
-    model.forward(x, hidden, mask_fn=None) → tuple[Tensor, Tensor, Tensor]
+    model.forward(x, hidden, mask_fn=None, temperature=1.0) → tuple[Tensor, Tensor, Tensor, Tensor]
+        Returns (probs, log_probs, value, new_hidden)
 """
 
 from collections.abc import Callable
@@ -74,23 +75,32 @@ class GRUCardModel(nn.Module):
         x: torch.Tensor,
         hidden: torch.Tensor,
         mask_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Run one GRU step, apply optional mask, softmax, return results.
+        temperature: float = 1.0,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Run one GRU step, apply optional mask and temperature, return results.
 
         Per design D3, the mask function is passed as a parameter. The caller
         (AppManager) constructs it as a closure with domain knowledge of the
         AI's hand. The model applies it internally before softmax.
+
+        Per design/5 D4: temperature parameter controls softmax scaling.
+        temperature=0 → greedy (one-hot probs).
+        temperature>0 → softmax(logits / temperature).
+        Also returns log_probs for PPO sample generation.
 
         Args:
             x: Input tensor of shape (1, 1, 14).
             hidden: Hidden state tensor of shape (1, 1, 8).
             mask_fn: Optional callable that takes policy logits (1,4) and
                      returns masked logits (1,4). If None, no masking applied.
+            temperature: Temperature for softmax scaling. 0 = greedy argmax.
+                         Default 1.0 (standard softmax).
 
         Returns:
-            (probs, value, new_hidden) tuple:
-                probs: (1, 4) softmax probabilities over 4 card types.
+            (probs, log_probs, value, new_hidden) tuple:
+                probs: (1, 4) probability distribution over 4 card types.
                        Already masked if mask_fn is provided.
+                log_probs: (1, 4) log-probabilities over 4 card types.
                 value: (1, 1) win-rate estimate in [-1, 1].
                 new_hidden: (1, 1, 8) updated GRU hidden state.
         """
@@ -99,13 +109,26 @@ class GRUCardModel(nn.Module):
         # gru_out shape: (1, 1, 8) → squeeze to (1, 8)
         gru_out = gru_out.squeeze(0)
 
-        # Policy head: raw logits → optional mask → softmax
+        # Policy head: raw logits → optional mask → temperature → softmax
         policy_logits = self.fc_policy(gru_out)  # (1, 4)
         if mask_fn is not None:
             policy_logits = mask_fn(policy_logits)
-        probs = torch.softmax(policy_logits, dim=-1)  # (1, 4)
+
+        if temperature == 0.0:
+            # Greedy mode: one-hot at argmax position
+            argmax_idx = torch.argmax(policy_logits, dim=-1, keepdim=True)  # (1, 1)
+            probs = torch.zeros_like(policy_logits)
+            probs.scatter_(1, argmax_idx, 1.0)
+            # log_probs: 0 at argmax, -inf elsewhere
+            log_probs = torch.full_like(policy_logits, float("-inf"))
+            log_probs.scatter_(1, argmax_idx, 0.0)
+        else:
+            # Apply temperature scaling: softmax(logits / T)
+            scaled_logits = policy_logits / temperature
+            log_probs = torch.log_softmax(scaled_logits, dim=-1)  # (1, 4)
+            probs = torch.exp(log_probs)  # (1, 4)
 
         # Value head: scalar → tanh to [-1, 1]
         value = torch.tanh(self.fc_value(gru_out))  # (1, 1)
 
-        return probs, value, new_hidden
+        return probs, log_probs, value, new_hidden

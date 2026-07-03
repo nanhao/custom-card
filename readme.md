@@ -34,13 +34,16 @@ src/backend/ai/           AI opponents (no game logic)
 src/backend/app/          Bridge layer (orchestrates game + AI)
   app_manager.py         Game creation, AI action selection, model lifecycle
   converter.py           Card ↔ tensor conversion, input vector construction
+  selfplay_config.py     SelfPlayConfig and SelfPlayResult dataclasses
+  selfplay_runner.py     Self-play game loop (AI vs AI, PPO sample generation)
 
 src/backend/controller/  REST API adapter (thin, no business logic)
   api.py                 Flask routes + static serving
   serializers.py         CardType ⇄ string, RoundResult → dict, error formatting
 
-src/backend/scripts/     Server entry point
+src/backend/scripts/     Entry points
   run.py                 Start Flask server (python src/backend/scripts/run.py)
+  selfplay.py            AI self-play (python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1)
 
 src/frontend/            React SPA (Vite + React 19)
   src/api.js             REST API client
@@ -87,6 +90,18 @@ cd ../.. && python src/backend/scripts/run.py
 
 Open **http://127.0.0.1:5000** in your browser.
 
+### AI Self-Play
+
+```bash
+# Run 100 games between two AI instances
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1
+
+# With temperature sampling and PPO sample output
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
+    --game 200 --temperature 0.5 --temp_step 3 --temp_side both \
+    --sample_output data/samples.jsonl --temp_seed 42
+```
+
 ## API Endpoints
 
 | Method | Path | Description |
@@ -102,7 +117,7 @@ Open **http://127.0.0.1:5000** in your browser.
 ### Backend (Python)
 
 ```bash
-# All backend tests (323 tests)
+# All backend tests (377 tests)
 python -m pytest tests/
 
 # Unit tests only

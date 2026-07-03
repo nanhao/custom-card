@@ -69,3 +69,14 @@ Ui上增加一个主菜单，可选择 hot-seat pvp，也可以选择人机对�
 
 # intention_id=4
 refactor: reanme GameManager to GameCore. don't forget to also rename the file
+
+# intention_id=5
+新增一个 ai 自对弈脚本，支持以下参数
+- ai1 player1 使用的 ai，对应 register.py 里面的 name
+- ai2 player2 使用的 ai，对应 register.py 里面的 name
+- game 对局次数，默认100
+- sample_output ppo 样本的路径。如果指定，则在指定路径生成 ppo 样本文件；如果不指定，则不生成样本文件
+- temperature 采样温度，默认1.0，传入 0 则关闭采样
+- temp_step 每一局的前几步进行采样，当 step_count > temp_step 时，切换到不采样恶贪婪模式
+- temp-seed 采用种子，便于复现
+- temp-side 采样方，可选值 player1, player2, both 三种。默认值 both

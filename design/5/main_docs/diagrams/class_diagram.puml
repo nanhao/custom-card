@@ -1,0 +1,79 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam classBackgroundColor #FEFECE
+skinparam classBorderColor #A80036
+
+title Class Diagram — AI Self-Play Script\n(modified classes highlighted)
+
+package "scripts/" {
+    note "Thin CLI wrapper only\n(no business logic)" as N1
+}
+
+package "app/" {
+    class SelfPlayConfig <<dataclass>> {
+        + ai1: str
+        + ai2: str
+        + game_count: int
+        + sample_output: str | None
+        + temperature: float
+        + temp_step: int | None
+        + temp_seed: int | None
+        + temp_side: str
+    }
+
+    class SelfPlayResult <<dataclass>> {
+        + total_games: int
+        + ai1_wins: int
+        + ai2_wins: int
+        + draws: int
+        + avg_rounds: float
+    }
+
+    class AppManager {
+        + __init__(session_store: SessionStore)
+        + create_game(mode, ai_name): (str, dict)
+        + ai_select_action(state, hidden_state, ai_name): (str, list)
+        + ai_sample_action(state, hidden_state, ai_name, temperature, player_key): (str, list, float|None)
+        + run_selfplay(config: SelfPlayConfig): SelfPlayResult
+    }
+
+    class Converter {
+        + {static} card_to_index(card_str): int
+        + {static} index_to_card(index): str
+        + {static} build_input_vector(state, player_key): list[float]
+    }
+}
+
+package "ai/rnn_v1/" {
+    class GRUCardModel {
+        + INITIAL_HIDDEN_STATE: list[float]
+        + forward(x, hidden, mask_fn, temperature): (Tensor, Tensor, Tensor, Tensor)
+    }
+}
+
+package "game/" {
+    class GameCore {
+        + mode: str
+        + start_game()
+        + play_round(cards_1, cards_2): RoundResult
+        + get_state(): dict
+    }
+}
+
+package "ai/" {
+    class registry {
+        + {static} list_ais(): list[dict]
+        + {static} get_ai_info(name): dict
+    }
+}
+
+AppManager ..> SelfPlayConfig : uses
+AppManager ..> SelfPlayResult : returns
+AppManager --> Converter : builds input vectors
+AppManager --> GRUCardModel : loads and infers
+AppManager --> GameCore : creates and drives
+AppManager --> registry : get_ai_info()
+
+Converter --> GameCore : reads state dict
+
+@enduml

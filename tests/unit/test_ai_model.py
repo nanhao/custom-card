@@ -1,9 +1,10 @@
 """Unit tests for ai/rnn_v1/model.py — GRUCardModel.
 
-Covers TC-M1 through TC-M11 from test_cases.md §1.
+Covers TC-M1 through TC-M11 from design/3 test_cases.md §1, plus
+new TC-M1 through TC-M7 from design/5 test_cases.md §1 (temperature).
 Tests model instantiation, INITIAL_HIDDEN_STATE constant, forward pass
-with and without mask_fn, determinism, inference mode, and weight file
-loading.
+with and without mask_fn, temperature scaling, determinism, inference
+mode, and weight file loading.
 
 Per design/3 architecture D1, model.py contains only GRUCardModel —
 all helper functions and game logic have moved to app/Converter and
@@ -123,7 +124,7 @@ class TestForwardShapes:
         model = GRUCardModel()
         x = torch.zeros(1, 1, INPUT_SIZE)
         h = torch.zeros(1, 1, HIDDEN_SIZE)
-        probs, value, new_h = model(x, h)
+        probs, _log_probs, value, new_h = model(x, h)
         assert probs.shape == (1, NUM_CARD_TYPES)
 
     def test_value_output_shape(self):
@@ -131,7 +132,7 @@ class TestForwardShapes:
         model = GRUCardModel()
         x = torch.zeros(1, 1, INPUT_SIZE)
         h = torch.zeros(1, 1, HIDDEN_SIZE)
-        probs, value, new_h = model(x, h)
+        probs, _log_probs, value, new_h = model(x, h)
         assert value.shape == (1, 1)
 
     def test_value_in_range(self):
@@ -139,7 +140,7 @@ class TestForwardShapes:
         model = GRUCardModel()
         x = torch.zeros(1, 1, INPUT_SIZE)
         h = torch.zeros(1, 1, HIDDEN_SIZE)
-        probs, value, new_h = model(x, h)
+        probs, _log_probs, value, new_h = model(x, h)
         assert -1.0 <= value.item() <= 1.0
 
     def test_new_hidden_shape(self):
@@ -147,7 +148,7 @@ class TestForwardShapes:
         model = GRUCardModel()
         x = torch.zeros(1, 1, INPUT_SIZE)
         h = torch.zeros(1, 1, HIDDEN_SIZE)
-        probs, value, new_h = model(x, h)
+        probs, _log_probs, value, new_h = model(x, h)
         assert new_h.shape == (1, 1, HIDDEN_SIZE)
 
     def test_probs_sum_to_one(self):
@@ -155,17 +156,22 @@ class TestForwardShapes:
         model = GRUCardModel()
         x = torch.ones(1, 1, INPUT_SIZE) * 0.5
         h = torch.zeros(1, 1, HIDDEN_SIZE)
-        probs, _, _ = model(x, h)
+        probs, _log_probs, _, _ = model(x, h)
         assert abs(probs.sum().item() - 1.0) < 1e-5
 
-    def test_returns_tuple_of_three(self):
-        """forward() must return a 3-tuple of tensors."""
+    def test_returns_tuple_of_four(self):
+        """forward() must return a 4-tuple of tensors: (probs, log_probs, value, new_hidden)."""
         model = GRUCardModel()
         x = torch.zeros(1, 1, INPUT_SIZE)
         h = torch.zeros(1, 1, HIDDEN_SIZE)
         result = model(x, h)
         assert isinstance(result, tuple)
-        assert len(result) == 3
+        assert len(result) == 4
+        probs, log_probs, value, new_hidden = result
+        assert probs.shape == (1, NUM_CARD_TYPES)
+        assert log_probs.shape == (1, NUM_CARD_TYPES)
+        assert value.shape == (1, 1)
+        assert new_hidden.shape == (1, 1, HIDDEN_SIZE)
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +202,7 @@ class TestForwardWithMaskFn:
         model.eval()
         x = torch.ones(1, 1, INPUT_SIZE) * 0.5
         h = torch.zeros(1, 1, HIDDEN_SIZE)
-        probs, value, new_h = model(x, h, mask_fn=self._mask_index_0)
+        probs, _log_probs, value, new_h = model(x, h, mask_fn=self._mask_index_0)
         # Index 0 should be ~0 after masking
         assert probs[0, 0].item() < 1e-6, f"Expected ~0, got {probs[0, 0].item()}"
         # Non-masked indices should sum to ~1
@@ -208,7 +214,7 @@ class TestForwardWithMaskFn:
         model.eval()
         x = torch.ones(1, 1, INPUT_SIZE) * 0.5
         h = torch.zeros(1, 1, HIDDEN_SIZE)
-        probs, value, new_h = model(x, h, mask_fn=self._mask_all_but_index_2)
+        probs, _log_probs, value, new_h = model(x, h, mask_fn=self._mask_all_but_index_2)
         assert abs(probs[0, 2].item() - 1.0) < 1e-5
         assert probs[0, 0].item() < 1e-6
         assert probs[0, 1].item() < 1e-6
@@ -220,7 +226,7 @@ class TestForwardWithMaskFn:
         model.eval()
         x = torch.ones(1, 1, INPUT_SIZE) * 0.5
         h = torch.zeros(1, 1, HIDDEN_SIZE)
-        probs, _, _ = model(x, h)  # No mask_fn
+        probs, _log_probs, _, _ = model(x, h)  # No mask_fn
         for i in range(4):
             assert probs[0, i].item() > 0, f"Prob at index {i} should be > 0"
 
@@ -258,7 +264,7 @@ class TestInferenceMode:
         h = torch.zeros(1, 1, HIDDEN_SIZE)
 
         with torch.inference_mode():
-            probs, value, new_h = model(x, h)
+            probs, _log_probs, value, new_h = model(x, h)
 
         # Verify outputs exist and are valid
         assert probs is not None
@@ -285,8 +291,8 @@ class TestDeterminism:
         h = torch.zeros(1, 1, HIDDEN_SIZE)
 
         with torch.inference_mode():
-            probs1, val1, h1 = model(x, h)
-            probs2, val2, h2 = model(x, h)
+            probs1, _, val1, h1 = model(x, h)
+            probs2, _, val2, h2 = model(x, h)
 
         assert torch.allclose(probs1, probs2)
         assert torch.allclose(val1, val2)
@@ -321,7 +327,7 @@ class TestWeightFileLoading:
         x = torch.zeros(1, 1, INPUT_SIZE)
         h = torch.zeros(1, 1, HIDDEN_SIZE)
         with torch.inference_mode():
-            probs, value, _ = model(x, h)
+            probs, _log_probs, value, _ = model(x, h)
         assert probs.shape == (1, NUM_CARD_TYPES)
         assert abs(probs.sum().item() - 1.0) < 1e-5
 
@@ -455,3 +461,175 @@ class TestModelPurity:
         assert not hasattr(model_module, "_card_to_index"), (
             "_card_to_index() moved to Converter"
         )
+
+
+# ---------------------------------------------------------------------------
+# New tests from design/5: Temperature in forward() (TC-M1 through TC-M7)
+# ---------------------------------------------------------------------------
+
+
+class TestTemperatureDefault:
+    """TC-M1: temperature=1.0 produces same probs as default (no temperature)."""
+
+    def test_temperature_1_equals_default(self):
+        """forward(x, h, temperature=1.0) == forward(x, h)."""
+        model = GRUCardModel()
+        model.eval()
+        x = torch.ones(1, 1, INPUT_SIZE) * 0.5
+        h = torch.zeros(1, 1, HIDDEN_SIZE)
+
+        with torch.inference_mode():
+            probs1, log_probs1, val1, h1 = model(x, h)
+            probs2, log_probs2, val2, h2 = model(x, h, temperature=1.0)
+
+        assert torch.allclose(probs1, probs2)
+        assert torch.allclose(log_probs1, log_probs2)
+        assert torch.allclose(val1, val2)
+        assert torch.allclose(h1, h2)
+
+    def test_log_probs_equal_ln_of_probs_at_temp_1(self):
+        """At temperature=1.0, log_probs should equal ln(probs)."""
+        model = GRUCardModel()
+        model.eval()
+        x = torch.ones(1, 1, INPUT_SIZE) * 0.5
+        h = torch.zeros(1, 1, HIDDEN_SIZE)
+
+        with torch.inference_mode():
+            probs, log_probs, _, _ = model(x, h, temperature=1.0)
+
+        assert torch.allclose(log_probs, torch.log(probs))
+
+
+class TestTemperatureGreedy:
+    """TC-M2: temperature=0 produces one-hot probs (greedy)."""
+
+    def test_temperature_0_produces_one_hot(self):
+        """Probs should be one-hot at the argmax position."""
+        model = GRUCardModel()
+        model.eval()
+        x = torch.ones(1, 1, INPUT_SIZE) * 0.5
+        h = torch.zeros(1, 1, HIDDEN_SIZE)
+
+        with torch.inference_mode():
+            probs, log_probs, _, _ = model(x, h, temperature=0)
+
+        # One value should be ~1.0, others ~0.0
+        max_idx = int(torch.argmax(probs).item())
+        for i in range(NUM_CARD_TYPES):
+            if i == max_idx:
+                assert abs(probs[0, i].item() - 1.0) < 1e-5
+            else:
+                assert abs(probs[0, i].item() - 0.0) < 1e-5
+
+    def test_temperature_0_log_probs(self):
+        """Log probs: 0.0 at argmax, -inf elsewhere."""
+        model = GRUCardModel()
+        model.eval()
+        x = torch.ones(1, 1, INPUT_SIZE) * 0.5
+        h = torch.zeros(1, 1, HIDDEN_SIZE)
+
+        with torch.inference_mode():
+            _, log_probs, _, _ = model(x, h, temperature=0)
+
+        max_idx = int(torch.argmax(log_probs).item())
+        assert abs(log_probs[0, max_idx].item() - 0.0) < 1e-5
+        for i in range(NUM_CARD_TYPES):
+            if i != max_idx:
+                assert log_probs[0, i].item() == float("-inf")
+
+
+class TestTemperatureFlatten:
+    """TC-M3: temperature > 1.0 flattens distribution toward uniform."""
+
+    def test_high_temperature_approaches_uniform(self):
+        """At temperature=100.0, all probs should be close to 0.25."""
+        model = GRUCardModel()
+        model.eval()
+        x = torch.ones(1, 1, INPUT_SIZE) * 0.5
+        h = torch.zeros(1, 1, HIDDEN_SIZE)
+
+        with torch.inference_mode():
+            probs, _, _, _ = model(x, h, temperature=100.0)
+
+        for i in range(NUM_CARD_TYPES):
+            assert abs(probs[0, i].item() - 0.25) < 0.05
+
+
+class TestTemperatureSharpen:
+    """TC-M4: temperature < 1.0 sharpens distribution."""
+
+    def test_low_temperature_peaks_higher(self):
+        """max(probs) at temp=0.1 should be larger than at temp=1.0."""
+        model = GRUCardModel()
+        model.eval()
+        x = torch.ones(1, 1, INPUT_SIZE) * 0.5
+        h = torch.zeros(1, 1, HIDDEN_SIZE)
+
+        with torch.inference_mode():
+            probs1, _, _, _ = model(x, h, temperature=1.0)
+            probs2, _, _, _ = model(x, h, temperature=0.1)
+
+        assert probs2.max().item() > probs1.max().item()
+
+
+class TestTemperatureWithMask:
+    """TC-M5: mask_fn still works with temperature."""
+
+    @staticmethod
+    def _mask_index_0_and_1(logits: torch.Tensor) -> torch.Tensor:
+        """Mask function that zeros indices 0 and 1."""
+        logits = logits.clone()
+        logits[0, 0] = float("-inf")
+        logits[0, 1] = float("-inf")
+        return logits
+
+    def test_masked_indices_zero_with_temperature(self):
+        """Indices 0 and 1 should have prob 0 even with temperature."""
+        model = GRUCardModel()
+        model.eval()
+        x = torch.ones(1, 1, INPUT_SIZE) * 0.5
+        h = torch.zeros(1, 1, HIDDEN_SIZE)
+
+        with torch.inference_mode():
+            probs, _, _, _ = model(
+                x, h, mask_fn=self._mask_index_0_and_1, temperature=2.0
+            )
+
+        assert probs[0, 0].item() < 1e-6
+        assert probs[0, 1].item() < 1e-6
+        # Remaining indices should sum to ~1
+        assert abs(probs[0, 2:].sum().item() - 1.0) < 1e-5
+
+
+class TestTemperatureValueUnchanged:
+    """TC-M6: value head is unchanged by temperature."""
+
+    def test_value_same_for_different_temperatures(self):
+        """Same input, different temperature → same value."""
+        model = GRUCardModel()
+        model.eval()
+        x = torch.ones(1, 1, INPUT_SIZE) * 0.5
+        h = torch.zeros(1, 1, HIDDEN_SIZE)
+
+        with torch.inference_mode():
+            _, _, val0, _ = model(x, h, temperature=0.0)
+            _, _, val3, _ = model(x, h, temperature=3.0)
+
+        assert torch.allclose(val0, val3)
+
+
+class TestTemperatureHiddenUnchanged:
+    """TC-M7: new_hidden is unchanged by temperature."""
+
+    def test_hidden_same_for_different_temperatures(self):
+        """Same input, different temperature → same new_hidden."""
+        model = GRUCardModel()
+        model.eval()
+        x = torch.ones(1, 1, INPUT_SIZE) * 0.5
+        h = torch.zeros(1, 1, HIDDEN_SIZE)
+
+        with torch.inference_mode():
+            _, _, _, h0 = model(x, h, temperature=0.0)
+            _, _, _, h3 = model(x, h, temperature=3.0)
+
+        assert torch.allclose(h0, h3)
