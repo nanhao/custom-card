@@ -4,9 +4,9 @@ Public interfaces only. Private methods omitted per design rule.
 
 ---
 
-## 1. `app/app_manager.py` — SelfPlayConfig
+## 1. `app/selfplay_config.py` — SelfPlayConfig
 
-Immutable configuration value object. Defined in `app_manager.py` alongside `AppManager`.
+Immutable configuration value object. Defined in `selfplay_config.py` (extracted from `app_manager.py` to respect 500-line file limit).
 
 ```
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class SelfPlayConfig:
 
 ---
 
-## 2. `app/app_manager.py` — SelfPlayResult
+## 2. `app/selfplay_config.py` — SelfPlayResult
 
 Aggregate statistics returned after all games complete.
 
@@ -64,7 +64,7 @@ class SelfPlayResult:
 
 ## 3. `app/app_manager.py` — AppManager (Modified)
 
-Existing `ai_select_action()` updated for 4-tuple return. New methods `ai_sample_action()` and `run_selfplay()` added.
+Existing `ai_select_action()` updated for 4-tuple return. New method `ai_sample_action()` added. `run_selfplay()` is a thin wrapper delegating to `SelfPlayRunner` (see §4).
 
 ```
 class AppManager:
@@ -117,23 +117,13 @@ class AppManager:
             log_prob is float if temperature > 0, else None.
         """
 
-    # --- New: self-play game loop ---
+    # --- New: self-play game loop (thin delegation wrapper) ---
 
     def run_selfplay(self, config: SelfPlayConfig) -> SelfPlayResult:
-        """Execute all self-play games and return aggregate results.
+        """Execute all self-play games via SelfPlayRunner.
 
-        Encapsulates the entire self-play loop as business logic:
-        1. Validate ai1/ai2 exist in registry
-        2. For each game:
-           a. Create GameCore and start_game()
-           b. Loop rounds: get AI1 action -> get AI2 action -> play_round()
-           c. Apply temp_step/temp_side rules for sampling vs greedy
-           d. Record PPO sample per step if config.sample_output is set
-           e. At game end, assign reward to all recorded steps
-           f. Write samples to file (if enabled)
-           g. Print game summary line
-        3. Print aggregate statistics
-        4. Return SelfPlayResult
+        Thin wrapper that delegates to SelfPlayRunner.run().
+        The actual game loop logic lives in selfplay_runner.py.
 
         Args:
             config: SelfPlayConfig with all run parameters.
@@ -143,7 +133,7 @@ class AppManager:
         """
 ```
 
-### Progress Output Format (handled by `run_selfplay()`)
+### Progress Output Format (handled by `SelfPlayRunner`)
 
 Per game:
 ```
@@ -163,7 +153,44 @@ Samples saved to: data/samples.jsonl
 
 ---
 
-## 4. `scripts/selfplay.py` — CLI Entry Point
+## 4. `app/selfplay_runner.py` — SelfPlayRunner
+
+Encapsulates the self-play game loop (per design D1). Created and invoked
+by `AppManager.run_selfplay()`.
+
+```
+class SelfPlayRunner:
+    """Execute self-play games and collect results."""
+
+    def __init__(self, app_manager: AppManager):
+        """Create a runner backed by the given AppManager."""
+
+    def run(self, config: SelfPlayConfig) -> SelfPlayResult:
+        """Execute all self-play games and return aggregate results.
+
+        1. Validate ai1/ai2 exist in registry
+        2. For each game:
+           a. Create GameCore and start_game()
+           b. Loop rounds: query both AIs via AppManager.ai_sample_action()
+           c. Apply temp_step/temp_side rules for sampling vs greedy
+           d. Record PPO sample per step if config.sample_output is set
+           e. At game end, assign reward to all recorded steps
+           f. Write samples to file (if enabled)
+           g. Print game summary line
+        3. Print aggregate statistics
+        4. Return SelfPlayResult
+
+        Args:
+            config: SelfPlayConfig with all run parameters.
+
+        Returns:
+            SelfPlayResult with win/loss/draw counts and avg rounds.
+        """
+```
+
+---
+
+## 5. `scripts/selfplay.py` — CLI Entry Point
 
 Thin wrapper. No business logic — only argument parsing and delegation.
 
@@ -176,7 +203,8 @@ Usage:
 """
 
 import argparse
-from src.backend.app.app_manager import AppManager, SelfPlayConfig
+from src.backend.app.app_manager import AppManager
+from src.backend.app.selfplay_config import SelfPlayConfig
 from src.backend.game.session_store import SessionStore
 
 # CLI argument parsing, then:
@@ -187,7 +215,7 @@ from src.backend.game.session_store import SessionStore
 
 ---
 
-## 5. `app/converter.py` — Converter (Modified)
+## 6. `app/converter.py` — Converter (Modified)
 
 Adds `player_key` parameter to `build_input_vector()`.
 
@@ -215,7 +243,7 @@ class Converter:
 
 ---
 
-## 6. `ai/rnn_v1/model.py` — GRUCardModel (Modified)
+## 7. `ai/rnn_v1/model.py` — GRUCardModel (Modified)
 
 `forward()` adds `temperature` parameter and returns `log_probs` as 4th element.
 
@@ -253,6 +281,6 @@ class GRUCardModel(nn.Module):
 
 ---
 
-## 7. `game/` — Unchanged
+## 8. `game/` — Unchanged
 
 No changes to `game/` package.

@@ -10,6 +10,7 @@ package "scripts/" {
 }
 
 package "app/" {
+    note "selfplay_config.py" as N2
     class SelfPlayConfig <<dataclass>> {
         + ai1: str
         + ai2: str
@@ -29,11 +30,17 @@ package "app/" {
         + avg_rounds: float
     }
 
+    note "selfplay_runner.py" as N3
+    class SelfPlayRunner {
+        + __init__(app_manager)
+        + run(config: SelfPlayConfig): SelfPlayResult
+    }
+
     class AppManager {
         + __init__(session_store: SessionStore)
         + create_game(mode, ai_name): (str, dict)
         + ai_select_action(state, hidden_state, ai_name): (str, list)
-        + ai_sample_action(state, hidden_state, ai_name, temperature, player_key): (str, list, float|None)
+        + ai_sample_action(state, hidden_state, ai_name, temperature, player_key): (str, list, float|None, float)
         + run_selfplay(config: SelfPlayConfig): SelfPlayResult
     }
 
@@ -69,10 +76,16 @@ package "ai/" {
 
 AppManager ..> SelfPlayConfig : uses
 AppManager ..> SelfPlayResult : returns
+AppManager --> SelfPlayRunner : run_selfplay() delegates to
+SelfPlayRunner ..> SelfPlayConfig : uses
+SelfPlayRunner ..> SelfPlayResult : returns
+SelfPlayRunner --> Converter : builds input vectors
+SelfPlayRunner --> GRUCardModel : via AppManager
+SelfPlayRunner --> GameCore : creates and drives
 AppManager --> Converter : builds input vectors
 AppManager --> GRUCardModel : loads and infers
-AppManager --> GameCore : creates and drives
 AppManager --> registry : get_ai_info()
+SelfPlayRunner --> registry : get_ai_info()
 
 Converter --> GameCore : reads state dict
 

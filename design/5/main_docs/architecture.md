@@ -11,8 +11,10 @@ src/backend/
 ├── scripts/
 │   └── selfplay.py            # NEW — thin CLI wrapper (argparse only, no business logic)
 ├── app/
-│   ├── app_manager.py         # MODIFIED — run_selfplay(), ai_sample_action() added
-│   └── converter.py           # MODIFIED — build_input_vector(player_key)
+│   ├── app_manager.py         # MODIFIED — ai_sample_action() added; run_selfplay() thin wrapper
+│   ├── converter.py           # MODIFIED — build_input_vector(player_key)
+│   ├── selfplay_config.py     # NEW — SelfPlayConfig, SelfPlayResult dataclasses
+│   └── selfplay_runner.py     # NEW — SelfPlayRunner game loop, PPO sample I/O, logging
 ├── ai/
 │   └── rnn_v1/
 │       └── model.py           # MODIFIED — forward() adds temperature, returns log_probs
@@ -24,8 +26,10 @@ src/backend/
 | Module | Responsibility | Change |
 |--------|---------------|--------|
 | `scripts/selfplay.py` | CLI argument parsing; creates AppManager; calls `app.run_selfplay(config)` | NEW |
-| `app/app_manager.py` | Self-play game loop, AI action selection, PPO sample I/O, progress logging | MODIFIED |
+| `app/app_manager.py` | AI action selection (greedy + sampling), model lifecycle; `run_selfplay()` delegates to SelfPlayRunner | MODIFIED |
 | `app/converter.py` | `build_input_vector()` supports player perspective | MODIFIED |
+| `app/selfplay_config.py` | `SelfPlayConfig` (frozen) and `SelfPlayResult` dataclasses | NEW |
+| `app/selfplay_runner.py` | Self-play game loop (creates GameCore, queries AIs, records PPO samples, prints progress/summary) | NEW |
 | `ai/rnn_v1/model.py` | `forward()` accepts temperature, returns `(probs, log_probs, value, new_hidden)` | MODIFIED |
 | `game/*` | Unchanged | — |
 
@@ -46,7 +50,7 @@ Refer to [class_diagram.puml](diagrams/class_diagram.puml).
 
 ## 5. Key Design Decisions
 
-**D1 — `AppManager` owns the self-play game loop.** `run_selfplay(config)` encapsulates the entire game loop: creates `GameCore` per game, iterates rounds, queries both AIs via `ai_sample_action()` / `ai_select_action()`, records PPO samples, prints progress, and returns aggregate results. The script is a thin CLI wrapper with zero business logic.
+**D1 — `SelfPlayRunner` encapsulates the game loop.** `AppManager.run_selfplay(config)` delegates to `SelfPlayRunner.run(config)`, which encapsulates the entire game loop: creates `GameCore` per game, iterates rounds, queries both AIs via `AppManager.ai_sample_action()` / `ai_select_action()`, records PPO samples, prints progress, and returns aggregate results. Split from `app_manager.py` to keep files under 500 lines. The script is a thin CLI wrapper with zero business logic.
 
 **D2 — Temperature sampling in `AppManager.ai_sample_action()`.** A new method that accepts `temperature` and `player_key`. When temperature > 0: samples from `softmax(logits/T)`. When temperature = 0: greedy argmax. Returns log_prob of the selected action (None for greedy).
 
@@ -68,7 +72,9 @@ Refer to [class_diagram.puml](diagrams/class_diagram.puml).
 | File | Change |
 |------|--------|
 | `scripts/selfplay.py` | NEW — thin CLI wrapper: parse args → `AppManager().run_selfplay(config)` |
-| `app/app_manager.py` | ADD `run_selfplay()`, `ai_sample_action()`. ADD `SelfPlayConfig`, `SelfPlayResult`. UPDATE `ai_select_action()` for 4-tuple return |
+| `app/app_manager.py` | ADD `ai_sample_action()`. UPDATE `ai_select_action()` for 4-tuple return. `run_selfplay()` → thin delegation wrapper |
+| `app/selfplay_config.py` | NEW — `SelfPlayConfig` (frozen dataclass with validation), `SelfPlayResult` dataclass |
+| `app/selfplay_runner.py` | NEW — `SelfPlayRunner` class: game loop, PPO sample recording, progress logging, summary output |
 | `app/converter.py` | ADD `player_key` parameter to `build_input_vector()` |
 | `ai/rnn_v1/model.py` | ADD `temperature` parameter to `forward()`. ADD `log_probs` to return tuple |
 | `game/*` | Unchanged |

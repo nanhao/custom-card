@@ -1,58 +1,59 @@
 @startuml
 skinparam backgroundColor #FFFFFF
 
-title Self-Play Game Loop\n(AppManager.run_selfplay internal)
+title Self-Play Game Loop\n(SelfPlayRunner.run internal)
 
+participant "SelfPlayRunner" as SR
 participant "AppManager" as AM
 participant "GameCore" as GC
 participant "Sample File" as SF
 
 loop for game in 1..game_count
 
-    AM -> GC: start_game()
-    AM -> AM: init hidden_1, hidden_2 to INITIAL_HIDDEN_STATE
-    AM -> AM: init step_samples = []
+    SR -> GC: start_game()
+    SR -> SR: init hidden_1, hidden_2 to zeros
+    SR -> SR: init step_samples = []
 
     loop while game not over
 
-        AM -> AM: calc temperature: if temp_step set and round > temp_step, use 0
+        SR -> SR: calc temperature: if temp_step set and round > temp_step, use 0
 
         alt temp_side = "player1" or "both"
-            AM -> AM: ai_sample_action(state, hidden_1, ai1, temp, player_key="1")
-            note right: returns card_1, new_hidden_1, log_prob_1
+            SR -> AM: ai_sample_action(state, hidden_1, ai1, temp, player_key="1")
+            note right: returns card_1, new_hidden_1, log_prob_1, value_1
         else greedy
-            AM -> AM: ai_select_action(state, hidden_1, ai1)
+            SR -> AM: ai_sample_action(state, hidden_1, ai1, 0, player_key="1")
             note right: log_prob = None
         end
 
         alt temp_side = "player2" or "both"
-            AM -> AM: ai_sample_action(state, hidden_2, ai2, temp, player_key="2")
-            note right: returns card_2, new_hidden_2, log_prob_2
+            SR -> AM: ai_sample_action(state, hidden_2, ai2, temp, player_key="2")
+            note right: returns card_2, new_hidden_2, log_prob_2, value_2
         else greedy
-            AM -> AM: ai_select_action(state, hidden_2, ai2)
+            SR -> AM: ai_sample_action(state, hidden_2, ai2, 0, player_key="2")
         end
 
-        AM -> GC: play_round([card_1], [card_2])
-        GC --> AM: RoundResult
+        SR -> GC: play_round([card_1], [card_2])
+        GC --> SR: RoundResult
 
-        AM -> AM: record step: state_1, action_1, value_1, log_prob_1\n           state_2, action_2, value_2, log_prob_2
+        SR -> SR: record step: state_1, action_1, value_1, log_prob_1\n           state_2, action_2, value_2, log_prob_2
 
-        AM -> AM: update hidden_1 = new_hidden_1, hidden_2 = new_hidden_2
+        SR -> SR: update hidden_1 = new_hidden_1, hidden_2 = new_hidden_2
 
     end
 
-    AM -> AM: determine winner, assign reward to all recorded steps
+    SR -> SR: determine winner, assign reward to all recorded steps
 
     opt sample_output set
         loop for each recorded step
-            AM -> SF: write JSON line\n{state, action, reward, value, log_prob}
+            SR -> SF: write JSON line\n{state, action, reward, value, log_prob}
         end
     end
 
-    AM -> AM: print "Game N/M | ai1 vs ai2 | Winner: X | Rounds: R"
+    SR -> SR: print "Game N/M | ai1 vs ai2 | Winner: X | Rounds: R"
 
 end
 
-AM -> AM: print summary (total, win counts, avg rounds)
+SR -> SR: print summary (total, win counts, avg rounds)
 
 @enduml
