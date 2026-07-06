@@ -32,6 +32,9 @@ src/backend/config/       Backend-wide configuration
 
 src/backend/ai/           AI opponents (no game logic)
   registry.py            AI registry: list, get metadata
+  training_config.py     TrainingConfig dataclass (PPO hyperparameters)
+  training_runner.py     PPO training loop (GAE, loss, gradient accumulation)
+  training_utils.py      Training artifact generation (CSV + PNG charts)
   rnn_v1/                GRU neural network model (PyTorch)
 
 src/backend/app/          Bridge layer (orchestrates game + AI)
@@ -50,6 +53,7 @@ src/backend/controller/  REST API adapter (thin, no business logic)
 src/backend/scripts/     Entry points
   run.py                 Start Flask server (python src/backend/scripts/run.py)
   selfplay.py            AI self-play (python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1)
+  train.py               PPO training (python src/backend/scripts/train.py --sample-path ... --output-path ... --model rnn_v1.1 --epoch 10)
 
 src/frontend/            React SPA (Vite + React 19)
   src/api.js             REST API client
@@ -127,6 +131,53 @@ design/6/main_docs/ for the full specification.
 | `--temp_seed` | `int` | *(none)* | Random seed for reproducible sampling |
 | `--sample_output` | `str` | *(none)* | File path for PPO sample JSON array output (game → perspective → steps hierarchy). Omit to skip sample recording |
 
+### AI Training
+
+Train the rnn_v1 model using PPO on self-play samples. Training hyperparameters
+are configured in `src/backend/config/backend.json` under the `training` section.
+
+```bash
+# Train on a single sample file
+python src/backend/scripts/train.py \
+    --sample-path samples/rnn_v1_self_play.json \
+    --output-path src/backend/ai/rnn_v1/gen2/rnn_v1.pth \
+    --model rnn_v1.1 \
+    --epoch 10
+
+# Train on all JSON files in a directory
+python src/backend/scripts/train.py \
+    --sample-path data/samples/ \
+    --output-path output.pth \
+    --model rnn_v1.1 \
+    --epoch 50
+```
+
+**Training Outputs:** After training completes, the trained weights are saved
+to `--output-path` as a `.pth` file. Loss and gradient norm charts plus CSV data
+are written to the `loss/` directory.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--sample-path` | `str` | *(required)* | File path or directory of JSON sample files. If directory, all `.json` files inside are loaded; non-JSON files are silently skipped |
+| `--output-path` | `str` | *(required)* | Output `.pth` file path for trained weights |
+| `--model` | `str` | *(required)* | AI registry name to train (e.g. `rnn_v1.1`) |
+| `--epoch` | `int` | *(required)* | Number of training epochs |
+
+**Hyperparameters** (in `config/backend.json` → `training`):
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `lr` | `float` | `0.001` | Learning rate for Adam optimizer |
+| `gamma` | `float` | `0.99` | Discount factor for GAE |
+| `gae_lambda` | `float` | `0.95` | GAE lambda parameter |
+| `clip_eps` | `float` | `0.2` | PPO clipping epsilon |
+| `max_grad_norm` | `float` | `0.5` | Maximum gradient norm for clipping |
+| `value_coef` | `float` | `0.5` | Value loss coefficient |
+| `entropy_coef` | `float` | `0.01` | Entropy bonus coefficient |
+| `batch_size` | `int` | `64` | Number of perspectives per gradient accumulation group |
+
 ## API Endpoints
 
 | Method | Path | Description |
@@ -142,7 +193,7 @@ design/6/main_docs/ for the full specification.
 ### Backend (Python)
 
 ```bash
-# All backend tests (461 tests)
+# All backend tests (501 tests)
 python -m pytest tests/
 
 # Unit tests only
