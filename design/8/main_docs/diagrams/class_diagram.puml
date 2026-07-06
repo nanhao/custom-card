@@ -1,0 +1,55 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+title Class Diagram — PPO Training Script
+
+class TrainScript {
+    parse_args()
+    load_config()
+}
+
+class TrainingConfig {
+    sample_path
+    output_path
+    model
+    epoch
+    lr
+    gamma
+    gae_lambda
+    clip_eps
+    value_coef
+    entropy_coef
+    batch_size
+}
+
+class TrainingRunner {
+    run(config)
+}
+
+class Registry {
+    get_ai_info(name)
+}
+
+class GRUCardModel {
+    INITIAL_HIDDEN_STATE
+    forward(x, hidden, mask_fn, temperature)
+}
+
+class BackendConfig {
+    lr
+    gamma
+    gae_lambda
+    clip_eps
+    value_coef
+    entropy_coef
+    batch_size
+}
+
+TrainScript --> TrainingRunner : creates and calls run()
+TrainScript --> TrainingConfig : constructs
+TrainScript --> BackendConfig : reads
+TrainingRunner --> Registry : looks up model by name
+TrainingRunner --> GRUCardModel : instantiates and trains
+
+@enduml

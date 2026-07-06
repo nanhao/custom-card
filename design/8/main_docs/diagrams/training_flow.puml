@@ -1,0 +1,120 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+title Training Flow — PPO Training Runner
+
+participant "Script\ntrain.py" as Script
+participant "TrainingRunner" as Runner
+participant "Registry" as Registry
+participant "GRUCardModel" as Model
+participant "Filesystem" as FS
+
+== 1. Initialization ==
+
+Script -> Script: Parse CLI args\n(sample-path, output-path, model, epoch)
+Script -> FS: Read config/backend.json
+Script -> Script: Build TrainingConfig
+Script -> Runner: run(config)
+
+activate Runner
+
+Runner -> Registry: get_ai_info(config.model)
+Registry --> Runner: {module, class, weight_path}
+Runner -> Model: Instantiate GRUCardModel\nLoad weights from weight_path
+Runner -> Runner: Detect device\n(cuda if available, else cpu)
+Runner -> Model: model.to(device)
+Runner -> Runner: Convert INITIAL_HIDDEN_STATE\nto tensor (1,1,8) on device
+
+== 2. Load Samples ==
+
+Runner -> FS: Load sample file(s)\nfrom config.sample_path
+FS --> Runner: List of games → extract perspectives
+Runner -> Runner: Validate: at least 1 perspective found
+Runner -> Runner: Build action-to-index map\n{attack:0, defense:1, heavy:2, counter:3}
+
+== 3. Training Loop ==
+
+loop epoch = 1..config.epoch
+
+    Runner -> Runner: Shuffle all perspectives
+    Runner -> Runner: Group into accumulation groups\n(batch_size = config.batch_size)
+
+    loop each group
+        Runner -> Runner: Initialize group metrics\n(total_loss=0, policy_loss=0,\nvalue_loss=0, entropy=0, grad_norm=0)
+        Runner -> Model: optimizer.zero_grad()
+
+        loop each perspective in group (one at a time)
+
+            == 3a. Load data from sample ==
+
+            Runner -> Runner: Read steps from sample JSON:\nstate_t, action, old_log_prob, old_value, reward
+
+            Runner -> Runner: Replace null old_log_prob\nwith 0.0 (greedy sample steps)
+
+            == 3b. Compute GAE advantages ==
+
+            note right of Runner
+                Compute GAE advantages:
+                A_t = sum((gamma*lambda)^k * delta_{t+k})
+                where delta_t = r_t + gamma*V_{t+1} - old_V_t
+                V_{t+1}=0 for terminal step
+                V_target_t = A_t + old_V_t
+            end note
+
+            == 3c. GRU forward pass ==
+
+            Runner -> Runner: h = INITIAL_HIDDEN_STATE tensor
+            loop each step in perspective
+                Runner -> Model: forward(state_t, h,\nmask_fn=None, temperature=1.0)
+                Model --> Runner: (probs, log_probs, value, new_h)
+                Runner -> Runner: Record new_log_prob_t via\naction-to-index mapping
+                Runner -> Runner: Record new_value_t
+                Runner -> Runner: h = new_h
+            end
+
+            == 3d. Compute loss & accumulate gradients ==
+
+            note right of Runner
+                PPO clipped loss per perspective:
+                ratio = exp(new_log - old_log)
+                L_clip = -min(ratio*A, clip(ratio)*A)
+                L_value = (V_target - V_new)^2
+                L_entropy = -sum(p*log(p))
+                L_total = (L_clip + cv*L_value - ce*L_entropy) / T
+                (averaged over all T steps)
+            end note
+
+            Runner -> Model: (L_total / batch_size).backward()
+            note right: accumulate gradients\navoids GRU padding
+
+            Runner -> Runner: Accumulate perspective metrics\n(unscaled loss components)
+        end
+
+        == 3e. Update weights ==
+
+        Runner -> Model: clip_grad_norm_(max_grad_norm)
+        Runner -> Runner: Compute gradient norm
+        Runner -> Model: optimizer.step()
+        note right: single update after\nall perspectives accumulated
+
+        Runner -> Runner: Accumulate group metrics\n(average of unscaled losses)
+    end
+
+    Runner -> Runner: Compute epoch averages
+    Runner -> Script: Print: epoch N/M | avg_loss | policy_loss | value_loss | entropy | grad_norm
+end
+
+== 4. Save Outputs ==
+
+Runner -> FS: torch.save(model.state_dict(), config.output_path)
+Runner -> Runner: Generate loss/loss.png\nfrom epoch_losses
+Runner -> FS: Write loss/loss.csv\n(epoch,avg_loss,policy_loss,value_loss,entropy)
+Runner -> Runner: Generate loss/grad.png\nfrom epoch_grad_norms
+Runner -> FS: Write loss/grad.csv\n(epoch,grad_norm)
+
+deactivate Runner
+
+Runner --> Script: Training complete
+
+@enduml
