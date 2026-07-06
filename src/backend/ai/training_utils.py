@@ -15,14 +15,16 @@ def save_training_artifacts(
     epoch_value_losses: list[float],
     epoch_entropies: list[float],
     epoch_grad_norms: list[float],
+    output_dir: str | None = None,
 ) -> None:
     """Generate loss/grad PNG charts and CSV files (design D7).
 
-    Writes to fixed loss/ directory relative to CWD (project root).
+    By default writes to fixed loss/ directory relative to CWD.
+    If output_dir is provided, writes there instead.
     Auto-creates the directory if it doesn't exist.
     Previous run's artifacts are overwritten.
     """
-    loss_dir = os.path.join(os.getcwd(), "loss")
+    loss_dir = output_dir if output_dir is not None else os.path.join(os.getcwd(), "loss")
     os.makedirs(loss_dir, exist_ok=True)
 
     epochs = list(range(1, len(epoch_losses) + 1))

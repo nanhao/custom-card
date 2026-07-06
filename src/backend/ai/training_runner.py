@@ -64,6 +64,7 @@ class TrainingRunner:
 
     def run(self, config: TrainingConfig) -> None:
         """Execute PPO training end-to-end."""
+        random.seed(0)  # Reproducible shuffle ordering
         model, device = self._build_model(config.model)
         all_perspectives = self._load_samples(config.sample_path)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
@@ -103,7 +104,7 @@ class TrainingRunner:
         self._save_weights(model, config.output_path)
         save_training_artifacts(
             epoch_losses, epoch_policy_losses, epoch_value_losses,
-            epoch_entropies, epoch_grad_norms,
+            epoch_entropies, epoch_grad_norms, output_dir=None,
         )
 
     # --- Model building ---
@@ -169,9 +170,38 @@ class TrainingRunner:
                 ) from exc
 
             for game in games:
-                for perspective in game.get("perspectives", []):
-                    # Deep-copy perspective to avoid mutation across epochs
-                    all_perspectives.append({
+                for p_idx, perspective in enumerate(game.get("perspectives", [])):
+                    for s_idx, step in enumerate(perspective.get("steps", [])):
+                        # Validate required keys
+                        for key in ("state", "action", "reward", "value"):
+                            if key not in step:
+                                raise RuntimeError(
+                                    f"Step {s_idx} in perspective {p_idx} "
+                                    f"of game {game.get('game_id', '?')} "
+                                    f"in {file_path!r} is missing required key {key!r}"
+                                )
+                        # Validate numeric fields
+                        try:
+                            reward_val = float(step["reward"])
+                            value_val = float(step["value"])
+                            log_prob_raw = step.get("log_prob")
+                            log_prob_val = float(log_prob_raw) if log_prob_raw is not None else 0.0
+                        except (ValueError, TypeError) as exc:
+                            raise RuntimeError(
+                                f"Step {s_idx} in perspective {p_idx} "
+                                f"of game {game.get('game_id', '?')} "
+                                f"in {file_path!r}: invalid numeric value — {exc}"
+                            ) from exc
+                        # Validate state vector length
+                        if len(step["state"]) != INPUT_SIZE:
+                            raise RuntimeError(
+                                f"Step {s_idx} in perspective {p_idx} "
+                                f"of game {game.get('game_id', '?')} "
+                                f"in {file_path!r}: state has {len(step['state'])} elements, "
+                                f"expected {INPUT_SIZE}"
+                            )
+                        # Deep-copy perspective to avoid mutation across epochs
+                        all_perspectives.append({
                         "steps": [
                             {
                                 "state": list(step["state"]),
@@ -257,14 +287,12 @@ class TrainingRunner:
                 )
                 continue
 
-            # Gradient clipping (D11)
+            # Gradient clipping (D11) — compute norm before clipping for monitoring
+            pre_clip_grad_norm = compute_grad_norm(model)
             nn_utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
 
-            # Compute gradient norm before stepping
-            grad_norm = compute_grad_norm(model)
-
             # Check for NaN gradient (D12)
-            if math.isnan(grad_norm) or math.isinf(grad_norm):
+            if math.isnan(pre_clip_grad_norm) or math.isinf(pre_clip_grad_norm):
                 warnings.warn(
                     f"NaN/Inf gradient norm detected, skipping optimizer step"
                 )
@@ -277,7 +305,7 @@ class TrainingRunner:
             all_policy_losses.append(group_policy_total / n)
             all_value_losses.append(group_value_total / n)
             all_entropies.append(group_entropy_total / n)
-            all_grad_norms.append(grad_norm)
+            all_grad_norms.append(pre_clip_grad_norm)
 
         if not all_losses:
             # Fallback: all groups had NaN
@@ -327,7 +355,7 @@ class TrainingRunner:
 
         # --- Step 2: Compute GAE advantages (D10) ---
         advantages, value_targets = self._compute_gae(
-            old_values, rewards, config.gamma, config.gae_lambda, device
+            old_values, rewards, config.gamma, config.gae_lambda
         )
 
         # --- Step 3: Forward pass to get new policy ---
@@ -335,7 +363,10 @@ class TrainingRunner:
         new_values: list[float] = []
         all_probs: list[torch.Tensor] = []  # For entropy computation
 
-        h = torch.zeros(1, 1, HIDDEN_SIZE, device=device)
+        h = torch.tensor(
+            GRUCardModel.INITIAL_HIDDEN_STATE,
+            dtype=torch.float32, device=device
+        ).view(1, 1, HIDDEN_SIZE)
 
         for t in range(T):
             state_t = states_14d[t]
@@ -353,7 +384,7 @@ class TrainingRunner:
         # --- Step 4: Compute PPO clipped loss ---
         loss_result = self._compute_ppo_loss(
             old_log_probs, new_log_probs,
-            old_values, new_values,
+            new_values,
             advantages, value_targets,
             all_probs,
             config,
@@ -376,7 +407,6 @@ class TrainingRunner:
         rewards: list[float],
         gamma: float,
         gae_lambda: float,
-        device: torch.device,
     ) -> tuple[list[float], list[float]]:
         """Compute GAE. V_{t+1}=0 for terminal step. Returns (advantages, value_targets)."""
         T = len(old_values)
@@ -402,7 +432,6 @@ class TrainingRunner:
         self,
         old_log_probs: list[float],
         new_log_probs: list[float],
-        old_values: list[float],
         new_values: list[float],
         advantages: list[float],
         value_targets: list[float],
@@ -427,7 +456,6 @@ class TrainingRunner:
         old_log = torch.tensor(old_log_probs, dtype=torch.float32, device=device)
         new_log = torch.tensor(new_log_probs, dtype=torch.float32, device=device)
         new_val = torch.tensor(new_values, dtype=torch.float32, device=device)
-        old_val = torch.tensor(old_values, dtype=torch.float32, device=device)
         adv = torch.tensor(advantages, dtype=torch.float32, device=device)
         v_target = torch.tensor(value_targets, dtype=torch.float32, device=device)
 
