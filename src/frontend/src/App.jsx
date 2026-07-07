@@ -156,7 +156,15 @@ export default function App() {
       setPhase('loading');
       try {
         const data = await playRound(gameId, card, null, buildTarget);
-        setState(data.state);
+        // Merge round_result statuses into state so status bar shows current round's effects
+        setState({
+          ...data.state,
+          players: {
+            ...data.state.players,
+            '1': { ...data.state.players['1'], statuses: data.round_result.statuses_1 },
+            '2': { ...data.state.players['2'], statuses: data.round_result.statuses_2 },
+          },
+        });
         setRoundLog(prev => [...prev, data.round_result]);
         setP1Card(null);
         setBuildPhase(null);
@@ -183,7 +191,14 @@ export default function App() {
     setPhase('loading');
     try {
       const data = await playRound(gameId, p1Card, card);
-      setState(data.state);
+      setState({
+        ...data.state,
+        players: {
+          ...data.state.players,
+          '1': { ...data.state.players['1'], statuses: data.round_result.statuses_1 },
+          '2': { ...data.state.players['2'], statuses: data.round_result.statuses_2 },
+        },
+      });
       setRoundLog(prev => [...prev, data.round_result]);
       setP1Card(null);
       setPhase(data.round_result.is_game_over ? 'gameover' : 'reveal');
