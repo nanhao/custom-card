@@ -138,13 +138,10 @@ class GameCore:
             ValueError: If game is over, cards not in hand, energy insufficient
                         for BUILD, or players are not initialized.
         """
-        # Step 1: Expire statuses from previous round (decrement lifetimes, remove expired)
-        self._tick_status_lifetimes()
-
-        # Step 2: Validate
+        # Step 1: Validate
         self._validate(cards_1, cards_2, build_target_1, build_target_2)
 
-        # Step 3: Compute attack streaks from history
+        # Step 2: Compute attack streaks from history
         p1_streak = CardResolver.get_consecutive_attack(self.player_1.history)
         p2_streak = CardResolver.get_consecutive_attack(self.player_2.history)
 
@@ -236,6 +233,9 @@ class GameCore:
         # Step 12: Advance round
         self.round_number += 1
         self.round_in_cycle += 1
+
+        # Expire statuses now that the round is fully complete
+        self._tick_status_lifetimes()
 
         self.round_log.append(result)
         return result
