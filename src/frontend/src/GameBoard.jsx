@@ -335,7 +335,7 @@ export default function GameBoard({
     }
     return (
       <div className="log-area">
-        <h3>\uD83D\uDCDC Round Log</h3>
+        <h3>📜 Round Log</h3>
         {entries.map(e => {
           const lines = e.details.map((l, i) => {
             const cls = l.includes('takes 0') ? 'log-safe' : 'log-dmg';
