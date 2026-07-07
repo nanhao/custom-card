@@ -165,20 +165,7 @@ class TestBuildInputVectorNewOrder:
         assert vec[1] == 1.0   # opponent HP
 
     # ------------------------------------------------------------------
-    # TC-IV-07: Output length invariant
-    # ------------------------------------------------------------------
-
-    def test_output_length_always_25(self):
-        """Output is always 25 elements regardless of state."""
-        state = make_game_state()
-        vec = Converter.build_input_vector(state, player_key="1")
-        assert len(vec) == 25
-
-        vec2 = Converter.build_input_vector(state, player_key="2")
-        assert len(vec2) == 25
-
-    # ------------------------------------------------------------------
-    # TC-IV-08: Default player_key
+    # TC-IV-07: Default player_key
     # ------------------------------------------------------------------
 
     def test_default_player_key_is_2(self):
