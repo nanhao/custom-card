@@ -1,0 +1,57 @@
+@startuml
+title Train CLI — Unified Parameter Flow
+
+actor CLI
+
+participant "train.py" as Script
+participant "TrainingConfig" as Config
+participant "TrainingRunner" as Runner
+participant "GRUPolicyModel" as PolicyModel
+participant "GRUValueModel" as ValueModel
+database "Samples" as Samples
+database "Output Dir" as OutDir
+
+CLI -> Script: --sample-path <path> --output-dir <dir> --model <name> --epoch <N>
+note right
+  REMOVED: --policy-output-path
+  REMOVED: --value-output-path
+  REMOVED: --value-epochs
+end note
+
+Script -> Script: _load_training_config() from backend.json
+note right
+  "training" section no longer has value_epochs
+end note
+
+Script -> Config: create(sample_path, output_dir, model, epoch, ...)
+Config -> Config: validate epoch >= 1
+
+Script -> Runner: run(config)
+Runner -> Runner: instantiate policy & value models from registry
+Runner -> Samples: load samples
+note right
+  Reads step["input"] (not "state")
+end note
+
+== Phase 1: Value Training (epoch iterations) ==
+loop for epoch in 1..config.epoch
+    Runner -> ValueModel: train one epoch
+end
+
+== Phase 2: Advantage Re-computation ==
+Runner -> ValueModel: re-compute GAE advantages
+
+== Phase 3: Policy Training (epoch iterations) ==
+loop for epoch in 1..config.epoch
+    Runner -> PolicyModel: train one epoch
+end
+
+Runner -> OutDir: save policy.pth
+Runner -> OutDir: save value.pth
+note right
+  {output_dir}/policy.pth
+  {output_dir}/value.pth
+  Directory auto-created if needed
+end note
+
+@enduml

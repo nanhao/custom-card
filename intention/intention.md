@@ -108,5 +108,4 @@ The logs should meet the following critiria:
 这次做几个小优化：
 1，sample 文件里面的 state 进行重命名，叫 input，不要叫 state。不然老以为是记录某种状态，跟隐藏状态混淆
 2，selfplay 要增加一个参数，可以指定样本文件中要包含哪方的 perspective。默认是 both，也可以指定 ai1 或者 ai2
-3，如果权重文件不存在，程序在选中这个权重文件时抛异常就可以了，不要强制要求权重文件存在
-4, train.py 不要 --policy-output-path 、--value-output-path 两个参数，太麻烦了。合并成一个 --output-dir 就好。policy权重就固定叫做policy.pth，value权重就固定叫做 value.pth
+3, train.py 不要 --policy-output-path 、--value-output-path 两个参数，太麻烦了。合并成一个 --output-dir 就好。policy权重就固定叫做policy.pth，value权重就固定叫做 value.pth。 epoc 也是，不要两个参数，统一用同一个 --epoch 就好

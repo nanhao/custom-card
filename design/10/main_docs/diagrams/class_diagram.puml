@@ -1,0 +1,106 @@
+@startuml
+title Class Diagram — Intention #10 Changes
+
+package "app" {
+    class SelfPlayConfig <<dataclass, frozen>> {
+        + ai1: str
+        + ai2: str
+        + game_count: int = 100
+        + sample_output: str | None = None
+        + temperature: float = 1.0
+        + temp_step: int | None = None
+        + temp_seed: int | None = None
+        + temp_side: str = "both"
+        + perspective: str = "both"  <<NEW>>
+        --
+        + __post_init__()
+    }
+
+    class SelfPlayRunner {
+        - _sample_action: Callable
+        --
+        + __init__(sample_action_fn)
+        + run(config: SelfPlayConfig): SelfPlayResult
+    }
+
+    class SelfPlayResult <<dataclass>> {
+        + total_games: int
+        + ai1_wins: int
+        + ai2_wins: int
+        + draws: int
+        + avg_rounds: float
+    }
+}
+
+package "ai" {
+    class TrainingConfig <<dataclass, frozen>> {
+        + sample_path: str
+        + output_dir: str  <<CHANGED>>
+        + model: str
+        + epoch: int  <<CHANGED>>
+        + policy_lr: float
+        + value_lr: float
+        + weight_decay: float
+        + gamma: float
+        + gae_lambda: float
+        + clip_eps: float
+        + max_grad_norm: float
+        + value_coef: float
+        + entropy_coef: float
+        + batch_size: int
+        --
+        + __post_init__()
+    }
+
+    class TrainingRunner {
+        --
+        + run(config: TrainingConfig): None
+    }
+}
+
+package "scripts" {
+    class selfplay_CLI <<script>> {
+        {static} _build_parser(): ArgumentParser
+        {static} main(): None
+    }
+
+    class train_CLI <<script>> {
+        {static} _build_parser(): ArgumentParser
+        {static} main(): None
+    }
+}
+
+SelfPlayRunner ..> SelfPlayConfig : uses
+SelfPlayRunner ..> SelfPlayResult : returns
+selfplay_CLI ..> SelfPlayConfig : creates
+train_CLI ..> TrainingConfig : creates
+TrainingRunner ..> TrainingConfig : uses
+
+note right of SelfPlayConfig
+  NEW field perspective
+  validates: "ai1" | "ai2" | "both"
+end note
+
+note right of TrainingConfig
+  REMOVED: policy_output_path
+  REMOVED: value_output_path
+  REMOVED: value_epochs
+  ADDED: output_dir
+  CHANGED: epoch controls both phases
+end note
+
+note bottom of selfplay_CLI
+  NEW arg: --perspective
+  choices: ai1, ai2, both
+  default: both
+end note
+
+note bottom of train_CLI
+  REMOVED: --policy-output-path
+  REMOVED: --value-output-path
+  REMOVED: --value-epochs
+  NEW: --output-dir (required)
+  CHANGED: --epoch controls both phases
+end note
+
+@enduml

@@ -1,0 +1,52 @@
+@startuml
+title Self-Play Perspective Filtering Flow
+
+actor CLI
+
+participant "selfplay.py" as Script
+participant "SelfPlayConfig" as Config
+participant "SelfPlayRunner" as Runner
+participant "GameCore" as Game
+database "Sample File" as File
+
+CLI -> Script: --perspective ai1|ai2|both
+Script -> Config: create(ai1, ai2, ..., perspective=args.perspective)
+Config -> Config: validate perspective in {"ai1","ai2","both"}
+
+Script -> Runner: run(config)
+Runner -> Runner: validate AIs in registry
+
+loop for each game (1..game_count)
+    Runner -> Game: create & start game
+    
+    loop while not game_over
+        Runner -> Runner: get AI actions (both players)
+        Runner -> Game: play_round()
+        
+        alt config.sample_output AND perspective matches
+            Runner -> Runner: record step with "input" key
+            note right
+              perspective="ai1" → only record player "1"
+              perspective="ai2" → only record player "2"
+              perspective="both" → record both
+            end note
+        end
+    end
+    
+    Runner -> Runner: _build_game_sample()
+    note right
+      Filter perspectives array:
+      "ai1" → keep only player="1"
+      "ai2" → keep only player="2"
+      "both" → keep both
+    end note
+end
+
+Runner -> File: write JSON array
+note right
+  Step dicts use "input" not "state"
+end note
+
+Runner --> Script: SelfPlayResult
+
+@enduml
