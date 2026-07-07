@@ -46,3 +46,5 @@ saves/
 temp/
 samples/
 loss/
+
+*.pth

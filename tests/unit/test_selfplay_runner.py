@@ -215,7 +215,7 @@ class TestBuildGameSampleRewards:
     """Validates reward assignment by outcome."""
 
     def test_p1_wins_p1_steps_get_reward_1(self):
-        """TC-R1: When winner="1", all P1 steps have reward=1.0."""
+        """TC-R1: When winner="1", only last P1 step has reward=1.0, others 0.0."""
         game_samples = _make_game_samples(3)
         result = SelfPlayRunner._build_game_sample(
             game_samples=game_samples,
@@ -227,12 +227,14 @@ class TestBuildGameSampleRewards:
             ai1="a", ai2="b",
         )
         p1_steps = result["perspectives"][0]["steps"]
-        assert len(p1_steps) > 0
-        for step in p1_steps:
-            assert step["reward"] == 1.0
+        assert len(p1_steps) == 3
+        # Only the last step gets the terminal reward
+        assert p1_steps[0]["reward"] == 0.0
+        assert p1_steps[1]["reward"] == 0.0
+        assert p1_steps[2]["reward"] == 1.0
 
     def test_p1_wins_p2_steps_get_reward_minus_1(self):
-        """TC-R2: When winner="1", all P2 steps have reward=-1.0."""
+        """TC-R2: When winner="1", only last P2 step has reward=-1.0, others 0.0."""
         game_samples = _make_game_samples(3)
         result = SelfPlayRunner._build_game_sample(
             game_samples=game_samples,
@@ -244,12 +246,14 @@ class TestBuildGameSampleRewards:
             ai1="a", ai2="b",
         )
         p2_steps = result["perspectives"][1]["steps"]
-        assert len(p2_steps) > 0
-        for step in p2_steps:
-            assert step["reward"] == -1.0
+        assert len(p2_steps) == 3
+        # Only the last step gets the terminal reward
+        assert p2_steps[0]["reward"] == 0.0
+        assert p2_steps[1]["reward"] == 0.0
+        assert p2_steps[2]["reward"] == -1.0
 
     def test_p2_wins_p2_steps_get_reward_1(self):
-        """When winner="2", all P2 steps have reward=1.0."""
+        """When winner="2", only last P2 step has reward=1.0, others 0.0."""
         game_samples = _make_game_samples(2)
         result = SelfPlayRunner._build_game_sample(
             game_samples=game_samples,
@@ -261,9 +265,10 @@ class TestBuildGameSampleRewards:
             ai1="a", ai2="b",
         )
         p2_steps = result["perspectives"][1]["steps"]
-        assert len(p2_steps) > 0
-        for step in p2_steps:
-            assert step["reward"] == 1.0
+        assert len(p2_steps) == 2
+        # Only the last step gets the terminal reward
+        assert p2_steps[0]["reward"] == 0.0
+        assert p2_steps[1]["reward"] == 1.0
 
     def test_draw_both_sides_get_reward_0(self):
         """TC-R3: Draw assigns reward=0.0 to both sides."""
@@ -281,8 +286,8 @@ class TestBuildGameSampleRewards:
             for step in p["steps"]:
                 assert step["reward"] == 0.0
 
-    def test_reward_consistent_within_perspective(self):
-        """TC-R4: All steps within a perspective share the same reward."""
+    def test_reward_sparse_only_last_step(self):
+        """TC-R4: Only the last step in each perspective gets the terminal reward."""
         game_samples = _make_game_samples(5)
         result = SelfPlayRunner._build_game_sample(
             game_samples=game_samples,
@@ -294,9 +299,17 @@ class TestBuildGameSampleRewards:
             ai1="a", ai2="b",
         )
         for p in result["perspectives"]:
-            rewards = {step["reward"] for step in p["steps"]}
-            assert len(rewards) == 1, (
-                f"Expected single reward value in perspective, got {rewards}"
+            steps = p["steps"]
+            assert len(steps) > 0
+            # All but the last step should have reward=0.0
+            for step in steps[:-1]:
+                assert step["reward"] == 0.0, (
+                    f"Intermediate step should have reward=0.0"
+                )
+            # Only last step has the terminal reward
+            expected_terminal = 1.0 if p["player"] == "1" else -1.0
+            assert steps[-1]["reward"] == expected_terminal, (
+                f"Last step should have reward={expected_terminal}"
             )
 
 

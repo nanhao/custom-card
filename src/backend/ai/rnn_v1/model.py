@@ -128,7 +128,7 @@ class GRUCardModel(nn.Module):
             log_probs = torch.log_softmax(scaled_logits, dim=-1)  # (1, 4)
             probs = torch.exp(log_probs)  # (1, 4)
 
-        # Value head: scalar → tanh to [-1, 1]
-        value = torch.tanh(self.fc_value(gru_out))  # (1, 1)
+        # Value head: scalar (no tanh — V_target may exceed [-1,1])
+        value = self.fc_value(gru_out)  # (1, 1)
 
         return probs, log_probs, value, new_hidden

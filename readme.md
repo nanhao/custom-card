@@ -105,11 +105,14 @@ Open **http://127.0.0.1:5000** in your browser.
 ```bash
 # Run 100 games between two AI instances
 python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 100 --temperature 2 --temp_step 1 
 
 # With temperature sampling and PPO sample output
 python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
     --game 200 --temperature 0.5 --temp_step 3 --temp_side both \
     --sample_output data/samples.json --temp_seed 42
+
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 200 --temperature 1 --temp_step 20 --temp_side both --sample_output samples/rnn_v1_self_play.json 
 ```
 
 **Structured Logging:** Set `enabled` to `true` in `src/backend/config/backend.json`
@@ -138,11 +141,7 @@ are configured in `src/backend/config/backend.json` under the `training` section
 
 ```bash
 # Train on a single sample file
-python src/backend/scripts/train.py \
-    --sample-path samples/rnn_v1_self_play.json \
-    --output-path src/backend/ai/rnn_v1/gen2/rnn_v1.pth \
-    --model rnn_v1.1 \
-    --epoch 10
+python src/backend/scripts/train.py --sample-path samples/rnn_v1_self_play.json --output-path src/backend/ai/rnn_v1/gen2/rnn_v1.pth --model rnn_v1.1 --epoch 10
 
 # Train on all JSON files in a directory
 python src/backend/scripts/train.py \

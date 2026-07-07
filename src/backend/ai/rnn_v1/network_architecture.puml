@@ -1,0 +1,36 @@
+@startuml rnn_v1_architecture
+skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam nodesep 60
+skinparam ranksep 80
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title GRUCardModel (rnn_v1) Network Architecture\nTotal Parameters: 621
+
+package "Input Layer" as InputLayer {
+    [14-dim feature vector\n(1,1,14)] as Input
+    note right of Input
+        4 card counts (attack,defense,heavy,counter)
+        2 HP (AI, human)
+        4 one-hot AI last move
+        4 one-hot human last move
+    end note
+}
+
+package "Recurrent Layer" as RecurrentLayer {
+    [GRU(14→8)\nnum_layers=1\n576 params] as GRU
+}
+
+package "Policy Head" as PolicyHead {
+    [FC(8→4) + softmax\n36 params] as Policy
+}
+
+package "Value Head" as ValueHead {
+    [FC(8→1)\n9 params] as Value
+}
+
+Input -down-> GRU
+GRU -down-> Policy
+GRU -down-> Value
+
+@enduml

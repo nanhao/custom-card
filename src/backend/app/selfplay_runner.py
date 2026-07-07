@@ -417,13 +417,25 @@ class SelfPlayRunner:
         Splits flat game_samples by 'player' field, assigns rewards,
         and returns the hierarchy defined in design/7 interfaces.md §2.
         """
-        # Split steps by player and assign rewards
+        # Find the last step index for each player.
+        # Only the terminal step receives the game-outcome reward;
+        # all intermediate steps get 0.0 (sparse reward for GAE).
+        last_p1_idx = max(
+            (i for i, e in enumerate(game_samples) if e["player"] == "1"),
+            default=-1,
+        )
+        last_p2_idx = max(
+            (i for i, e in enumerate(game_samples) if e["player"] == "2"),
+            default=-1,
+        )
+
         p1_steps: list[dict] = []
         p2_steps: list[dict] = []
-        for entry in game_samples:
-            reward = (
-                p1_reward if entry["player"] == "1" else p2_reward
-            )
+        for i, entry in enumerate(game_samples):
+            if entry["player"] == "1":
+                reward = p1_reward if i == last_p1_idx else 0.0
+            else:
+                reward = p2_reward if i == last_p2_idx else 0.0
             step = {
                 "state": entry["state"],
                 "action": entry["action"],

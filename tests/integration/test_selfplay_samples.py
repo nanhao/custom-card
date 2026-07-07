@@ -184,12 +184,13 @@ class TestSampleFileStructure:
 class TestSampleRewards:
     """TC-R1–R4: Reward assignment matches game outcome.
 
-    Rewards are assigned by game outcome, not by step-level action.
-    All steps within a perspective share the same reward.
+    Rewards are assigned by game outcome, but only the terminal (last)
+    step receives the non-zero reward. All intermediate steps get 0.0
+    (sparse reward for GAE credit assignment).
     """
 
     def test_rewards_match_game_outcome(self, app_manager, tmp_path):
-        """Winning perspective gets reward=1.0, losing gets -1.0."""
+        """Only last step of winning perspective gets reward=1.0, losing -1.0."""
         sample_path = tmp_path / "rewards.json"
         config = SelfPlayConfig(
             ai1="rnn_v1.1", ai2="rnn_v1.1",
@@ -205,26 +206,34 @@ class TestSampleRewards:
             p2_steps = game["perspectives"][1]["steps"]
 
             if winner == "1":
-                for s in p1_steps:
-                    assert s["reward"] == 1.0
-                for s in p2_steps:
-                    assert s["reward"] == -1.0
+                # P1: all but last = 0.0, last = 1.0
+                for s in p1_steps[:-1]:
+                    assert s["reward"] == 0.0
+                assert p1_steps[-1]["reward"] == 1.0
+                # P2: all but last = 0.0, last = -1.0
+                for s in p2_steps[:-1]:
+                    assert s["reward"] == 0.0
+                assert p2_steps[-1]["reward"] == -1.0
             elif winner == "2":
-                for s in p1_steps:
-                    assert s["reward"] == -1.0
-                for s in p2_steps:
-                    assert s["reward"] == 1.0
+                # P1: all but last = 0.0, last = -1.0
+                for s in p1_steps[:-1]:
+                    assert s["reward"] == 0.0
+                assert p1_steps[-1]["reward"] == -1.0
+                # P2: all but last = 0.0, last = 1.0
+                for s in p2_steps[:-1]:
+                    assert s["reward"] == 0.0
+                assert p2_steps[-1]["reward"] == 1.0
             else:  # draw
                 for s in p1_steps:
                     assert s["reward"] == 0.0
                 for s in p2_steps:
                     assert s["reward"] == 0.0
 
-    def test_reward_consistent_within_perspective(
+    def test_reward_sparse_only_last_step(
         self, app_manager, tmp_path,
     ):
-        """TC-R4: All steps within a perspective share the same reward."""
-        sample_path = tmp_path / "consistent.json"
+        """TC-R4: Only last step in each perspective has non-zero reward."""
+        sample_path = tmp_path / "sparse.json"
         config = SelfPlayConfig(
             ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=3, temperature=0.0,
@@ -235,11 +244,20 @@ class TestSampleRewards:
         games = read_sample_file(sample_path)
         for game in games:
             for p in game["perspectives"]:
-                rewards = {s["reward"] for s in p["steps"]}
-                assert len(rewards) == 1, (
-                    f"Game {game['game_id']}, player {p['player']}: "
-                    f"expected single reward, got {rewards}"
-                )
+                steps = p["steps"]
+                assert len(steps) > 0
+                # All intermediate steps have reward=0.0
+                for step in steps[:-1]:
+                    assert step["reward"] == 0.0, (
+                        f"Game {game['game_id']}, player {p['player']}: "
+                        f"intermediate step should have reward=0.0"
+                    )
+                # Last step has the terminal reward (0.0 for draw)
+                if game["winner"] not in (None, "draw"):
+                    assert steps[-1]["reward"] != 0.0, (
+                        f"Game {game['game_id']}, player {p['player']}: "
+                        f"last step should have non-zero reward for non-draw"
+                    )
 
     def test_reward_values_are_valid(self, app_manager, tmp_path):
         """All reward values are 1.0, -1.0, or 0.0."""

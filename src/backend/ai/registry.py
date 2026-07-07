@@ -21,6 +21,27 @@ _REGISTRY: list[dict] = [
         "module": "src.backend.ai.rnn_v1.model",
         "class": "GRUCardModel",
     },
+    {
+        "name": "rnn_v1.2",
+        "description": "GRU-based model, random weights (gen2)",
+        "weight_path": "src/backend/ai/rnn_v1/gen2/rnn_v1.pth",
+        "module": "src.backend.ai.rnn_v1.model",
+        "class": "GRUCardModel",
+    },
+    {
+        "name": "rnn_v1.3",
+        "description": "GRU-based model, random weights (gen3)",
+        "weight_path": "src/backend/ai/rnn_v1/gen3/rnn_v1.pth",
+        "module": "src.backend.ai.rnn_v1.model",
+        "class": "GRUCardModel",
+    },
+    {
+        "name": "rnn_v1.4",
+        "description": "GRU-based model, random weights (gen4)",
+        "weight_path": "src/backend/ai/rnn_v1/gen4/rnn_v1.pth",
+        "module": "src.backend.ai.rnn_v1.model",
+        "class": "GRUCardModel",
+    },
 ]
 
 
