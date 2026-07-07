@@ -23,12 +23,12 @@ class RoundResult:
         round, cycle, round_in_cycle, cards, damage, hp, energy, statuses, details.
         Statuses are still active; HP does NOT include cycle bleed.
 
-    Phase 2 — Cycle-end actions (informational):
-        cycle_ended, bleed_damage_1, bleed_damage_2.
+    Phase 2 — Round-end actions (status lifetime tick + cycle-end if applicable):
+        Statuses are ticked (expired ones removed) every round.
+        On cycle end (round 5): cycle_ended, bleed_damage_1, bleed_damage_2.
 
-    Phase 3 — Final state after all processing (tick + bleed + cycle switch):
+    Phase 3 — Final state after all round-end processing and round advancement:
         after_cycle, after_round_in_cycle, after_hp, after_statuses.
-        When no cycle end, these equal Phase 1 values.
     """
 
     # Phase 1: After card resolution
@@ -150,9 +150,6 @@ class GameCore:
             ValueError: If game is over, cards not in hand, energy insufficient
                         for BUILD, or players are not initialized.
         """
-        # Step 1: Expire statuses from previous round
-        self._tick_status_lifetimes()
-
         # Step 1: Validate
         self._validate(cards_1, cards_2, build_target_1, build_target_2)
 
@@ -196,7 +193,7 @@ class GameCore:
         self.player_1.history.extend(cards_1)
         self.player_2.history.extend(cards_2)
 
-        # Step 9: Build Phase 1 — snapshot after card resolution, before cycle processing.
+        # Step 9: Phase 1 — snapshot after card resolution, before round-end processing.
         # HP does NOT include bleed; statuses are still active.
         result = RoundResult(
             round=self.round_number,
@@ -213,59 +210,52 @@ class GameCore:
             statuses_1=list(self.player_1.statuses),
             statuses_2=list(self.player_2.statuses),
             details=resolution.details,
-            is_game_over=False,
-            winner=None,
-            cycle_ended=False,
         )
-        # Default Phase 3 = Phase 1 (no cycle transition)
-        result.after_cycle = result.cycle
-        result.after_round_in_cycle = result.round_in_cycle
-        result.after_hp_1 = result.hp_1_after
-        result.after_hp_2 = result.hp_2_after
-        result.after_statuses_1 = list(result.statuses_1)
-        result.after_statuses_2 = list(result.statuses_2)
 
         # Step 10: Check game end from damage
         is_over, winner = self._check_game_end()
         if is_over:
             result.is_game_over = True
             result.winner = winner
+            result.after_cycle = result.cycle
+            result.after_round_in_cycle = result.round_in_cycle
+            result.after_hp_1 = result.hp_1_after
+            result.after_hp_2 = result.hp_2_after
+            result.after_statuses_1 = list(result.statuses_1)
+            result.after_statuses_2 = list(result.statuses_2)
             self.round_log.append(result)
             return result
 
-        # Step 11: Cycle-end processing — tick statuses, apply bleed, start new cycle
+        # Step 11: Phase 2 — Round-end actions
+        # a) Status lifetime tick (every round)
+        self._tick_status_lifetimes()
+
+        # b) Cycle-end processing (round 5)
         if self.round_in_cycle >= self.ROUNDS_PER_CYCLE:
-            # Phase 2: record cycle-end actions
             result.cycle_ended = True
             result.bleed_damage_1 = 1
             result.bleed_damage_2 = 1
-            # Expire statuses and apply bleed
-            self._tick_status_lifetimes()
             self.player_1.take_damage(1)
             self.player_2.take_damage(1)
-            # Check game end after bleed
             is_over, winner = self._check_game_end()
             if is_over:
                 result.is_game_over = True
                 result.winner = winner
-            # Start new cycle
             self.cycle_number += 1
-            self.round_in_cycle = 0  # incremented to 1 below
+            self.round_in_cycle = 0
             self._start_cycle()
-            # Phase 3: final snapshot after all processing
-            result.after_cycle = self.cycle_number
-            result.after_round_in_cycle = 1  # will be 1 after increment below
-            result.after_hp_1 = self.player_1.hp
-            result.after_hp_2 = self.player_2.hp
-            result.after_statuses_1 = list(self.player_1.statuses)
-            result.after_statuses_2 = list(self.player_2.statuses)
-            if is_over:
-                self.round_log.append(result)
-                return result
 
         # Step 12: Advance round
         self.round_number += 1
         self.round_in_cycle += 1
+
+        # Step 13: Phase 3 — Final state after all round-end processing and round advancement
+        result.after_cycle = self.cycle_number
+        result.after_round_in_cycle = self.round_in_cycle
+        result.after_hp_1 = self.player_1.hp
+        result.after_hp_2 = self.player_2.hp
+        result.after_statuses_1 = list(self.player_1.statuses)
+        result.after_statuses_2 = list(self.player_2.statuses)
 
         self.round_log.append(result)
         return result
