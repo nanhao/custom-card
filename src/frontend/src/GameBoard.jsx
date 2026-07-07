@@ -60,7 +60,7 @@ export default function GameBoard({
     if (w === 'draw') {
       return (
         <div className="game-over-banner banner-draw">
-          \uD83E\uDD1D Draw!
+          🤝 Draw!
           <div className="banner-sub">Both players reach 0 HP</div>
         </div>
       );
@@ -68,7 +68,7 @@ export default function GameBoard({
     const label = w === '2' && mode === 'pve' ? `AI (${aiName})` : `Player ${w}`;
     return (
       <div className="game-over-banner banner-win">
-        \uD83C\uDFC6 {label} Wins!
+        🏆 {label} Wins!
         <div className="banner-sub">Opponent HP reached 0</div>
       </div>
     );
@@ -98,7 +98,7 @@ export default function GameBoard({
 
           // Status tags
           const statusTags = (p.statuses || []).map((s, i) => {
-            const tagCls = s === '\u8054\u9632' ? 'tag-guard' : 'tag-defense';
+            const tagCls = s === '联防' ? 'tag-guard' : 'tag-defense';
             return <span key={i} className={`status-tag ${tagCls}`}>{s}</span>;
           });
 
@@ -108,13 +108,13 @@ export default function GameBoard({
             : `Player ${pid}`;
 
           // Energy display
-          const energyBar = '\u26A1'.repeat(p.energy) + '\u2606'.repeat(Math.max(0, 5 - p.energy));
+          const energyBar = '⚡'.repeat(p.energy) + '\u2606'.repeat(Math.max(0, 5 - p.energy));
 
           return (
             <div key={pid} className={cls}>
               <div className="status-name">{displayName}</div>
               <div className="status-hp">
-                \u2764\uFE0F <strong>{p.hp}</strong>
+                ❤️ <strong>{p.hp}</strong>
               </div>
               <div className="status-energy">{energyBar} {p.energy}/5</div>
               {statusTags.length > 0 && <div className="status-tags">{statusTags}</div>}
@@ -146,7 +146,7 @@ export default function GameBoard({
         return (
           <div style={{ marginTop: 8 }}>
             <div style={{ textAlign: 'center', color: 'var(--gold)', marginBottom: 8, fontSize: '0.85rem' }}>
-              \uD83D\uDD28 Select a card to build (Energy: {energy})
+              🔨 Select a card to build (Energy: {energy})
             </div>
             <div className="card-grid">
               {allTargets.map(card => {
@@ -161,7 +161,7 @@ export default function GameBoard({
                   >
                     <span className="icon">{CARD_ICONS[card]}</span>
                     <span>{CARD_NAMES[card]}</span>
-                    <span className="count">{canAfford ? `${cost}\u26A1` : '\u274C'}</span>
+                    <span className="count">{canAfford ? `${cost}⚡` : '✘'}</span>
                   </button>
                 );
               })}
@@ -186,7 +186,7 @@ export default function GameBoard({
                   disabled={cnt === 0} onClick={() => onSelectCard(card)}>
                   <span className="icon">{CARD_ICONS[card]}</span>
                   <span>{CARD_NAMES[card]}</span>
-                  <span className="count">\u00D7{cnt}</span>
+                  <span className="count">×{cnt}</span>
                 </button>
               );
             })}
@@ -199,7 +199,7 @@ export default function GameBoard({
         <div className={`card-btn card-${p1Card}`} style={{ opacity: 0.8, cursor: 'default', margin: '0 auto' }}>
           <span className="icon">{CARD_ICONS[p1Card]}</span>
           <span>{CARD_NAMES[p1Card]}</span>
-          <span className="count">\u2713</span>
+          <span className="count">✓</span>
         </div>
       ) : null;
     };
@@ -214,14 +214,14 @@ export default function GameBoard({
       <>
         <div className="hand-area">
           <div className="hand-title">
-            \uD83C\uDFAF Your Hand \u2014 Player 1 ({pH.hand.length} cards)
+            🎯 Your Hand — Player 1 ({pH.hand.length} cards)
           </div>
           {renderP1Cards()}
         </div>
         {showP2Select && (
           <div className="hand-area" style={{ marginTop: 12 }}>
             <div className="hand-title" style={{ color: 'var(--defense)' }}>
-              \uD83C\uDFAE Player 2's Hand ({pO.hand.length} cards)
+              🎮 Player 2's Hand ({pO.hand.length} cards)
             </div>
             <div className="card-grid">
               {CARD_ORDER.map(card => {
@@ -231,7 +231,7 @@ export default function GameBoard({
                     disabled={cnt === 0} onClick={() => onPlayer2Card(card)}>
                     <span className="icon">{CARD_ICONS[card]}</span>
                     <span>{CARD_NAMES[card]}</span>
-                    <span className="count">\u00D7{cnt}</span>
+                    <span className="count">×{cnt}</span>
                   </button>
                 );
               })}
@@ -244,7 +244,7 @@ export default function GameBoard({
             <div className="opp-card-grid">
               {pO.hand.length > 0
                 ? Array.from({ length: pO.hand.length }, (_, i) => (
-                    <div key={i} className="opp-card-back">\uD83C\uDCA0</div>
+                    <div key={i} className="opp-card-back">🂠</div>
                   ))
                 : <span style={{ color: 'var(--muted)' }}>No cards left</span>}
             </div>
@@ -266,8 +266,8 @@ export default function GameBoard({
       return (
         <div className="round-info">
           Cycle {state.cycle}, Round {state.round_in_cycle}/5{' '}
-          \u2014 <span className="highlight">{turnLabel}</span>{' '}
-          \u2014 Select a card
+          — <span className="highlight">{turnLabel}</span>{' '}
+          — Select a card
         </div>
       );
     }
@@ -276,7 +276,7 @@ export default function GameBoard({
     if (buildPhase === 'select_target') {
       return (
         <div className="round-info">
-          \uD83D\uDD28 Select which card to build with your BUILD card
+          🔨 Select which card to build with your BUILD card
         </div>
       );
     }
@@ -287,7 +287,7 @@ export default function GameBoard({
         <div className="pass-screen">
           <div className="pass-text">Player 1 has selected a card.</div>
           <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 12 }}>
-            Player 2 \u2014 pick your card above
+            Player 2 — pick your card above
           </div>
           <div className="pass-hint">
             Both selections are hidden until both players have chosen.
@@ -311,14 +311,14 @@ export default function GameBoard({
       // Cycle ended indicator
       const cycleBleedNote = rr.cycle_ended ? (
         <div className="cycle-bleed" style={{ marginTop: 8 }}>
-          \u26A0\uFE0F Cycle {rr.cycle} ended \u2014 both players lose 1 HP. New cycle started.
+          ⚠️ Cycle {rr.cycle} ended — both players lose 1 HP. New cycle started.
         </div>
       ) : null;
 
       return (
         <div className="result-panel">
           <div className="result-title">
-            \u26A1 Round {rr.round} \u2014 Cycle {rr.cycle}, Round {rr.round_in_cycle}/5
+            ⚡ Round {rr.round} — Cycle {rr.cycle}, Round {rr.round_in_cycle}/5
           </div>
           <div className="result-cards">
             <div className={`result-card card-${rr.cards_1[0]}`}>
@@ -334,21 +334,21 @@ export default function GameBoard({
           <div className="result-details">{details}</div>
           {cycleBleedNote}
           <div className="res-hp">
-            After: P1 <strong>{rr.hp_1_after} HP</strong>\u26A1{rr.energy_1_after}{' '}
+            After: P1 <strong>{rr.hp_1_after} HP</strong>⚡{rr.energy_1_after}{' '}
             | {p2Label} <strong>{rr.hp_2_after} HP</strong>\u26A1{rr.energy_2_after}
           </div>
           <div className="btn-row" style={{ marginTop: 12 }}>
             {phase === 'reveal' ? (
               <button className="btn btn-primary btn-big" onClick={onNextRound}>
-                \u25B6 Next Round
+                ▶ Next Round
               </button>
             ) : (
               <>
                 <button className="btn btn-primary btn-big" onClick={onNewGame}>
-                  \uD83D\uDD04 New Game
+                  🔄 New Game
                 </button>
                 <button className="btn btn-secondary btn-big" onClick={onBackToMenu}>
-                  \uD83C\uDFE0 Menu
+                  🏠 Menu
                 </button>
               </>
             )}
@@ -368,7 +368,7 @@ export default function GameBoard({
     if (entries.length === 0) {
       return (
         <div className="log-area">
-          <h3>\uD83D\uDCDC Round Log</h3>
+          <h3>📜 Round Log</h3>
           <span style={{ color: 'var(--muted)' }}>
             Game started. Each player has 20 HP. 7 cards drawn from shuffled deck.
           </span>
@@ -395,7 +395,7 @@ export default function GameBoard({
               {bleedTag}
               {interleaved && <><br />&nbsp;&nbsp;{interleaved}</>}
               <br /><span style={{ color: 'var(--muted)' }}>
-                \u2192 P1 {e.hp_1_after}HP |{' '}
+                → P1 {e.hp_1_after}HP |{' '}
                 {mode === 'pve' ? 'AI' : 'P2'} {e.hp_2_after}HP
               </span>
             </div>
