@@ -48,7 +48,7 @@ class TestSampleFileStructure:
         """TC-F1: File exists; top-level is JSON array with N elements."""
         sample_path = tmp_path / "samples.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
@@ -63,7 +63,7 @@ class TestSampleFileStructure:
         """TC-F2: Each game has keys game_id, winner, rounds, perspectives."""
         sample_path = tmp_path / "keys.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
@@ -79,7 +79,7 @@ class TestSampleFileStructure:
         """TC-F3: game_id values are [1, 2, 3, ...]."""
         sample_path = tmp_path / "ids.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
@@ -94,7 +94,7 @@ class TestSampleFileStructure:
         """TC-F4: Every game's perspectives array has length 2."""
         sample_path = tmp_path / "perspectives.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
@@ -112,7 +112,7 @@ class TestSampleFileStructure:
         """TC-F5: perspectives[0].player == "1", perspectives[1].player == "2"."""
         sample_path = tmp_path / "player_assign.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
@@ -126,21 +126,21 @@ class TestSampleFileStructure:
         """TC-F6: Player "1" has ai=ai1, player "2" has ai=ai2."""
         sample_path = tmp_path / "ai_names.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=2, sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
 
         games = read_sample_file(sample_path)
         for game in games:
-            assert game["perspectives"][0]["ai"] == "rnn_v1.1"
-            assert game["perspectives"][1]["ai"] == "rnn_v1.1"
+            assert game["perspectives"][0]["ai"] == "rnn_v2.1"
+            assert game["perspectives"][1]["ai"] == "rnn_v2.1"
 
     def test_each_step_has_required_keys(self, app_manager, tmp_path):
         """TC-F7: Every step has keys state, action, reward, value, log_prob."""
         sample_path = tmp_path / "step_keys.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=2, sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
@@ -161,7 +161,7 @@ class TestSampleFileStructure:
         """TC-F8: Every step's state array has exactly 14 elements."""
         sample_path = tmp_path / "state_len.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=2, temperature=1.0,
             sample_output=str(sample_path),
         )
@@ -193,7 +193,7 @@ class TestSampleRewards:
         """Only last step of winning perspective gets reward=1.0, losing -1.0."""
         sample_path = tmp_path / "rewards.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=5, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -235,7 +235,7 @@ class TestSampleRewards:
         """TC-R4: Only last step in each perspective has non-zero reward."""
         sample_path = tmp_path / "sparse.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -263,7 +263,7 @@ class TestSampleRewards:
         """All reward values are 1.0, -1.0, or 0.0."""
         sample_path = tmp_path / "valid_rewards.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -296,7 +296,7 @@ class TestSampleContent:
         """TC-S1: Total steps = rounds_played × 2."""
         sample_path = tmp_path / "step_count.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -317,7 +317,7 @@ class TestSampleContent:
         """TC-S2: P1 actions are from valid card set."""
         sample_path = tmp_path / "p1_actions.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=2, temperature=1.0,
             sample_output=str(sample_path),
         )
@@ -335,7 +335,7 @@ class TestSampleContent:
         """TC-S3: P2 actions are from valid card set."""
         sample_path = tmp_path / "p2_actions.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=2, temperature=1.0,
             sample_output=str(sample_path),
         )
@@ -353,7 +353,7 @@ class TestSampleContent:
         """TC-S4: log_prob is null (None) when temperature=0."""
         sample_path = tmp_path / "greedy.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=2, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -371,7 +371,7 @@ class TestSampleContent:
         """TC-S5: log_prob is a finite float when temperature>0 and both sides."""
         sample_path = tmp_path / "sampled.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=2, temperature=1.0,
             temp_step=None, temp_side="both",
             sample_output=str(sample_path),
@@ -394,7 +394,7 @@ class TestSampleContent:
         """TC-S6: Every step's value satisfies -1.0 ≤ value ≤ 1.0."""
         sample_path = tmp_path / "value_range.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=2, temperature=1.0,
             sample_output=str(sample_path),
         )
@@ -412,7 +412,7 @@ class TestSampleContent:
         """TC-S7: Game's rounds field equals actual rounds played."""
         sample_path = tmp_path / "rounds.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, temperature=0.0,
             sample_output=str(sample_path),
         )

@@ -75,7 +75,7 @@ class TestDisabledLogging:
         """Run with LoggerBuilder disabled → no log file created."""
         LoggerBuilder.init(enabled=False, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
         )
         result = app_manager.run_selfplay(config)
         assert result.total_games == 1
@@ -94,7 +94,7 @@ class TestLifecycleEvents:
         """Verify run_start, game_start×3, game_end×3, run_end are logged."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=3
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=3
         )
         app_manager.run_selfplay(config)
         events = _read_log_events(log_dir)
@@ -116,7 +116,7 @@ class TestSharedTraceId:
         """Every line in the log file has the same traceId."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=2
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=2
         )
         app_manager.run_selfplay(config)
         lines = _read_log_lines(log_dir)
@@ -137,7 +137,7 @@ class TestRoundEvents:
         """TC-R4: each round has one round_action + one round_result."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
         )
         app_manager.run_selfplay(config)
         action_lines = _lines_with_event(log_dir, "selfplay.round_action")
@@ -149,7 +149,7 @@ class TestRoundEvents:
         """TC-R5: round_action has round, card1, card2, temp1, temp2."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
         )
         app_manager.run_selfplay(config)
         action_line = _lines_with_event(log_dir, "selfplay.round_action")[0]
@@ -164,7 +164,7 @@ class TestRoundEvents:
         """TC-R6: round_result has round, dmg1, dmg2, hp1, hp2."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
         )
         app_manager.run_selfplay(config)
         result_line = _lines_with_event(log_dir, "selfplay.round_result")[0]
@@ -195,7 +195,7 @@ class TestErrorEvents:
 
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
         )
 
         # Force play_round to raise ValueError on the first actual call.
@@ -238,7 +238,7 @@ class TestErrorEvents:
 
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
         )
 
         call_count = [0]
@@ -275,8 +275,8 @@ class TestRunStartFields:
         """run_start message contains ai1, ai2, game_count, and optional fields."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1",
-            ai2="rnn_v1.1",
+            ai1="rnn_v2.1",
+            ai2="rnn_v2.1",
             game_count=1,
             temperature=0.5,
             temp_step=3,
@@ -287,8 +287,8 @@ class TestRunStartFields:
         app_manager.run_selfplay(config)
         run_start_line = _lines_with_event(log_dir, "selfplay.run_start")[0]
         msg = run_start_line.split(" | ")[6]
-        assert "ai1=rnn_v1.1" in msg
-        assert "ai2=rnn_v1.1" in msg
+        assert "ai1=rnn_v2.1" in msg
+        assert "ai2=rnn_v2.1" in msg
         assert "game_count=1" in msg
         # Optional fields — may or may not be present depending on implementation
         # At minimum, required fields must be present
@@ -306,7 +306,7 @@ class TestRunEndAggregates:
         """run_end contains total_games, ai1_wins, ai2_wins, draws, avg_rounds."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=3
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=3
         )
         result = app_manager.run_selfplay(config)
         run_end_line = _lines_with_event(log_dir, "selfplay.run_end")[0]
@@ -345,8 +345,8 @@ class TestSampleWriteEvents:
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         sample_path = tmp_path / "samples.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1",
-            ai2="rnn_v1.1",
+            ai1="rnn_v2.1",
+            ai2="rnn_v2.1",
             game_count=1,
             sample_output=str(sample_path),
         )
@@ -370,7 +370,7 @@ class TestSampleWriteEvents:
         """TC-R12: no sample events when sample_output is None."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1, sample_output=None
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1, sample_output=None
         )
         app_manager.run_selfplay(config)
         # Neither the per-game nor final event should appear
@@ -390,7 +390,7 @@ class TestModelAndValidationEvents:
         """TC-R13: model_loaded event with ai_name when model is first loaded."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
         )
         app_manager.run_selfplay(config)
         model_lines = _lines_with_event(log_dir, "selfplay.model_loaded")
@@ -402,7 +402,7 @@ class TestModelAndValidationEvents:
         """TC-R14: ai_validated event with ai1, ai2 after registry validation."""
         LoggerBuilder.init(enabled=True, log_dir=str(log_dir))
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
+            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
         )
         app_manager.run_selfplay(config)
         validated_lines = _lines_with_event(log_dir, "selfplay.ai_validated")

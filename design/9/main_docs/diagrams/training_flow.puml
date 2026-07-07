@@ -1,0 +1,148 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+title Training Flow — Three-Phase Split PPO
+
+participant "Script\ntrain.py" as Script
+participant "TrainingRunner" as Runner
+participant "Registry" as Registry
+participant "GRUPolicyModel" as PolicyModel
+participant "GRUValueModel" as ValueModel
+participant "Filesystem" as FS
+
+== 1. Initialization ==
+
+Script -> Script: Parse CLI args\n(--sample-path, --policy-output-path,\n--value-output-path, --model,\n--value-epoch, --epoch)
+Script -> FS: Read config/backend.json
+Script -> Script: Build TrainingConfig
+Script -> Runner: run(config)
+
+activate Runner
+
+Runner -> Registry: get_ai_info(config.model)
+Registry --> Runner: {policy: {...}, value: {...}}
+Runner -> PolicyModel: Instantiate, load weights
+Runner -> ValueModel: Instantiate, load weights
+Runner -> Runner: Detect device (cuda/cpu)
+Runner -> PolicyModel: policy_model.to(device)
+Runner -> ValueModel: value_model.to(device)
+
+== 2. Load Samples ==
+
+Runner -> FS: Load sample file(s)
+FS --> Runner: All perspectives extracted
+Runner -> Runner: Validate: >= 1 perspective
+
+== 3. Phase 1: Value Training ==
+
+loop value_epoch = 1..config.value_epochs
+
+    Runner -> Runner: Shuffle all perspectives
+    Runner -> Runner: Group into accumulation groups
+
+    loop each group
+        Runner -> ValueModel: value_optimizer.zero_grad()
+
+        loop each perspective in group
+
+            Runner -> Runner: Compute GAE using\nold_value from sample → V_targets
+
+            Runner -> Runner: h_val = INITIAL_HIDDEN_STATE
+            loop each step in perspective
+                Runner -> ValueModel: forward(state_t, h_val)
+                ValueModel --> Runner: (value, new_h_val)
+                Runner -> Runner: Record new_value_t\nh_val = new_h_val
+            end
+
+            note right of Runner
+                Value MSE loss:
+                L = (V_target - V_new)^2.mean()
+                scaled = cv * L / batch_size
+            end note
+
+            Runner -> ValueModel: scaled_loss.backward()
+        end
+
+        Runner -> ValueModel: clip_grad_norm_(value_params, max_grad_norm)
+        Runner -> ValueModel: value_optimizer.step()
+        Runner -> Runner: Record: value_loss, value_grad_norm
+    end
+
+    Runner -> Script: Print: value_epoch N/M | value_loss | value_grad_norm
+end
+
+== 4. Phase 2: Advantage Re-computation ==
+
+note right of Runner
+    Use trained value network to
+    re-compute GAE for all perspectives.
+    No gradient computation.
+end note
+
+loop each perspective
+
+    Runner -> Runner: h_val = INITIAL_HIDDEN_STATE
+    loop each step in perspective
+        Runner -> ValueModel: forward(state_t, h_val)
+        ValueModel --> Runner: (value, new_h_val)
+        Runner -> Runner: Record V_new_t\nh_val = new_h_val
+    end
+
+    Runner -> Runner: Re-compute GAE:\ndelta_t = r_t + gamma*V_new(t+1) - V_new(t)\nA_t = delta_t + gamma*lambda*A_{t+1}
+    Runner -> Runner: Store new advantages + V_targets\nfor Phase 3
+end
+
+== 5. Phase 3: Policy Training ==
+
+loop policy_epoch = 1..config.epoch
+
+    Runner -> Runner: Shuffle all perspectives
+    Runner -> Runner: Group into accumulation groups
+
+    loop each group
+        Runner -> PolicyModel: policy_optimizer.zero_grad()
+
+        loop each perspective in group
+
+            Runner -> Runner: Load pre-computed advantages\nfrom Phase 2
+
+            Runner -> Runner: h_pol = INITIAL_HIDDEN_STATE
+            loop each step in perspective
+                Runner -> PolicyModel: forward(state_t, h_pol,\nmask_fn=None, temperature=1.0)
+                PolicyModel --> Runner: (probs, log_probs, new_h_pol)
+                Runner -> Runner: Record new_log_prob_t\nh_pol = new_h_pol
+            end
+
+            Runner -> Runner: Compute entropy from probs
+
+            note right of Runner
+                PPO clipped loss:
+                ratio = exp(new_log - old_log)
+                L = -min(ratio*A, clip(ratio)*A).mean()
+                total = (L - ce*entropy) / batch_size
+            end note
+
+            Runner -> PolicyModel: total.backward()
+        end
+
+        Runner -> PolicyModel: clip_grad_norm_(policy_params, max_grad_norm)
+        Runner -> PolicyModel: policy_optimizer.step()
+        Runner -> Runner: Record: policy_loss, entropy, policy_grad_norm
+    end
+
+    Runner -> Script: Print: policy_epoch N/M | policy_loss | entropy | policy_grad_norm
+end
+
+== 6. Save Outputs ==
+
+Runner -> FS: torch.save(policy_model.state_dict(),\nconfig.policy_output_path)
+Runner -> FS: torch.save(value_model.state_dict(),\nconfig.value_output_path)
+Runner -> Runner: Generate loss/loss.png, loss/loss.csv
+Runner -> Runner: Generate loss/grad.png, loss/grad.csv
+
+deactivate Runner
+
+Runner --> Script: Training complete
+
+@enduml

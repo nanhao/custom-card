@@ -1,8 +1,27 @@
-"""Training configuration dataclass for PPO training runs.
+"""Training configuration dataclass for split PPO training runs.
 
-Per design/8 interfaces.md §1: immutable frozen dataclass with
-validation in __post_init__. All fields are required with clear
-semantics. Validation matches TC-C1 through TC-C12.
+Per design/9 interfaces.md §3: immutable frozen dataclass with
+validation in __post_init__. Supports split policy/value networks
+with separate learning rates and phase-specific epoch counts.
+
+Attributes:
+    sample_path: File path or directory. If directory, all .json files
+                 inside are loaded as training samples.
+    policy_output_path: Output .pth for policy network weights.
+    value_output_path: Output .pth for value network weights.
+    model: AI registry name to train (e.g. "rnn_v2.1").
+    epoch: Number of policy training epochs — Phase 3 (>=1).
+    value_epochs: Number of value training epochs — Phase 1 (>=1).
+    policy_lr: Learning rate for policy optimizer (>0).
+    value_lr: Learning rate for value optimizer (>0).
+    weight_decay: Weight decay coefficient for AdamW (>=0).
+    gamma: Discount factor for GAE (0 < gamma <= 1).
+    gae_lambda: GAE lambda parameter (0 <= lambda <= 1).
+    clip_eps: PPO clipping epsilon (>0).
+    max_grad_norm: Maximum gradient norm for clipping (>0).
+    value_coef: Value loss coefficient (>=0) — Phase 1 only.
+    entropy_coef: Entropy bonus coefficient (>=0) — Phase 3 only.
+    batch_size: Number of perspectives per accumulation group (>=1).
 """
 
 import os
@@ -11,29 +30,17 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class TrainingConfig:
-    """Configuration for a PPO training run.
-
-    Attributes:
-        sample_path: File path or directory. If directory, all .json files
-                     inside are loaded as training samples.
-        output_path: Output .pth file path for trained weights.
-        model: AI registry name to train (e.g. "rnn_v1.1").
-        epoch: Number of training epochs (>=1).
-        lr: Learning rate for Adam optimizer.
-        gamma: Discount factor for GAE (0 < gamma <= 1).
-        gae_lambda: GAE lambda parameter (0 <= lambda <= 1).
-        clip_eps: PPO clipping epsilon (>0).
-        max_grad_norm: Maximum gradient norm for clipping (>0).
-        value_coef: Value loss coefficient (>=0).
-        entropy_coef: Entropy bonus coefficient (>=0).
-        batch_size: Number of perspectives per accumulation group (>=1).
-    """
+    """Configuration for a three-phase split PPO training run."""
 
     sample_path: str
-    output_path: str
+    policy_output_path: str
+    value_output_path: str
     model: str
     epoch: int
-    lr: float
+    value_epochs: int
+    policy_lr: float
+    value_lr: float
+    weight_decay: float
     gamma: float
     gae_lambda: float
     clip_eps: float
@@ -51,6 +58,8 @@ class TrainingConfig:
         # Validate integer fields
         if self.epoch < 1:
             raise ValueError("epoch must be >= 1")
+        if self.value_epochs < 1:
+            raise ValueError("value_epochs must be >= 1")
         if self.batch_size < 1:
             raise ValueError("batch_size must be >= 1")
 
@@ -67,10 +76,14 @@ class TrainingConfig:
             raise ValueError("clip_eps must be > 0")
         if self.max_grad_norm <= 0:
             raise ValueError("max_grad_norm must be > 0")
-        if self.lr <= 0:
-            raise ValueError("lr must be > 0")
+        if self.policy_lr <= 0:
+            raise ValueError("policy_lr must be > 0")
+        if self.value_lr <= 0:
+            raise ValueError("value_lr must be > 0")
 
         # Validate non-negative floats
+        if self.weight_decay < 0:
+            raise ValueError("weight_decay must be >= 0")
         if self.value_coef < 0:
             raise ValueError("value_coef must be >= 0")
         if self.entropy_coef < 0:

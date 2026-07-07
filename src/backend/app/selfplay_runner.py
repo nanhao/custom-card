@@ -44,8 +44,9 @@ class SelfPlayRunner:
         """Create a SelfPlayRunner with a sample-action callable.
 
         Args:
-            sample_action_fn: Callable with the same signature as
-                AppManager.ai_sample_action().
+            sample_action_fn: Callable with signature:
+                (state, h_pol, h_val, ai_name, temp, player_key)
+                → (card_str, new_h_pol, log_prob, value, new_h_val)
         """
         self._sample_action = sample_action_fn
 
@@ -216,9 +217,11 @@ class SelfPlayRunner:
             game_idx=game_idx, game_count=config.game_count,
         )
 
-        # b. Initialize hidden states
-        h1 = [0.0] * 8
-        h2 = [0.0] * 8
+        # b. Initialize dual hidden states per player (design/9 D3)
+        h1_pol = [0.0] * 8
+        h1_val = [0.0] * 8
+        h2_pol = [0.0] * 8
+        h2_val = [0.0] * 8
 
         # Per-step sample buffer for this game
         game_samples: list[dict] = []
@@ -241,8 +244,8 @@ class SelfPlayRunner:
                     and config.temp_side in ("player1", "both"))
                 else 0.0
             )
-            card1, h1, lp1, val1 = self._sample_action(
-                pre_state, h1, config.ai1,
+            card1, h1_pol, lp1, val1, h1_val = self._sample_action(
+                pre_state, h1_pol, h1_val, config.ai1,
                 temperature=temp_p1, player_key="1",
             )
 
@@ -253,8 +256,8 @@ class SelfPlayRunner:
                     and config.temp_side in ("player2", "both"))
                 else 0.0
             )
-            card2, h2, lp2, val2 = self._sample_action(
-                pre_state, h2, config.ai2,
+            card2, h2_pol, lp2, val2, h2_val = self._sample_action(
+                pre_state, h2_pol, h2_val, config.ai2,
                 temperature=temp_p2, player_key="2",
             )
 

@@ -4,7 +4,10 @@
     "log_dir": "logs"
   },
   "training": {
-    "lr": 0.001,
+    "value_epochs": 20,
+    "value_lr": 0.001,
+    "policy_lr": 0.001,
+    "weight_decay": 0.01,
     "gamma": 0.99,
     "gae_lambda": 0.95,
     "clip_eps": 0.2,

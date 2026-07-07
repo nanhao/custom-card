@@ -46,7 +46,7 @@ class TestSampleFileOutput:
         out_dir = tmp_path / "output"
         out_dir.mkdir()
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=1, sample_output=None,
         )
         app_manager.run_selfplay(config)
@@ -63,7 +63,7 @@ class TestSampleFileOutput:
         """TC-O2: Non-existent parent directories are created."""
         sample_path = tmp_path / "nested" / "subdir" / "samples.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=1, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -78,7 +78,7 @@ class TestSampleFileOutput:
         """TC-O3: File content parses as single JSON array, not JSONL."""
         sample_path = tmp_path / "valid.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -114,7 +114,7 @@ class TestSampleFileOutput:
         """TC-O4: game_count=0 → file contains []."""
         sample_path = tmp_path / "empty.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=0, sample_output=str(sample_path),
         )
         app_manager.run_selfplay(config)
@@ -142,7 +142,7 @@ class TestSampleBoundaries:
         """TC-T1: Within a perspective, steps are in round order."""
         sample_path = tmp_path / "ordered.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=2, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -161,7 +161,7 @@ class TestSampleBoundaries:
         """TC-T2: Perspectives are separate arrays for independent iteration."""
         sample_path = tmp_path / "separate.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -183,7 +183,7 @@ class TestSampleBoundaries:
         """TC-T3: Game N's perspectives are separate from game M's."""
         sample_path = tmp_path / "independent.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=3, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -209,7 +209,7 @@ class TestTempStep:
         """Some steps have non-null and some null log_prob with temp_step=2."""
         sample_path = tmp_path / "temp_step.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=10, temperature=1.0,
             temp_step=2, temp_side="both",
             sample_output=str(sample_path),
@@ -232,7 +232,7 @@ class TestTempStep:
         """temp_step=None → all rounds have non-null log_prob."""
         sample_path = tmp_path / "no_step.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=5, temperature=1.0,
             temp_step=None, temp_side="both",
             sample_output=str(sample_path),
@@ -260,7 +260,7 @@ class TestTempSide:
         """temp_side="player1" → only P1 has non-null log_prob."""
         sample_path = tmp_path / "side_p1.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=5, temperature=1.0,
             temp_side="player1",
             sample_output=str(sample_path),
@@ -282,7 +282,7 @@ class TestTempSide:
         """temp_side="player2" → only P2 has non-null log_prob."""
         sample_path = tmp_path / "side_p2.json"
         config = SelfPlayConfig(
-            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            ai1="rnn_v2.1", ai2="rnn_v2.1",
             game_count=5, temperature=1.0,
             temp_side="player2",
             sample_output=str(sample_path),

@@ -99,3 +99,7 @@ The logs should meet the following critiria:
 
 # intention_id=8
 修复了 sample 里面 reward 全部为终局奖励的问题
+
+# intention_id=9
+在训练的时候发现 PPO 的经典现象：两个头互相干扰。于是决定拆成两个网络，分开训练。
+另外，把优化器改成 adamW

@@ -1,10 +1,13 @@
-"""PPO training orchestrator for GRU-based card game AI models.
+"""Split PPO training orchestrator — three-phase training.
 
-Per design/8 architecture D1: pure AI concern, no game or app imports.
-Handles sample loading, PPO training loop with gradient accumulation,
-GAE advantage estimation, weight saving, and loss/gradient chart generation.
+Per design/9 architecture: trains policy and value networks independently
+through sequential phases to eliminate gradient interference.
 
-Public interface (per design/8 interfaces.md §2):
+Phase 1: Value Training — train GRUValueModel (value_epochs).
+Phase 2: Advantage Re-computation — GAE with trained value network (no_grad).
+Phase 3: Policy Training — train GRUPolicyModel using Phase 2 advantages.
+
+Public interface (per design/9 interfaces.md §4):
     TrainingRunner.run(config: TrainingConfig) -> None
 """
 
@@ -21,17 +24,21 @@ import torch.nn.utils as nn_utils
 
 from src.backend.ai.registry import get_ai_info
 from src.backend.ai.rnn_v1.model import (
-    GRUCardModel,
+    GRUPolicyModel,
+    GRUValueModel,
     HIDDEN_SIZE,
     INPUT_SIZE,
     NUM_CARD_TYPES,
 )
 from src.backend.ai.training_config import TrainingConfig
-from src.backend.ai.training_utils import compute_grad_norm, save_training_artifacts
+from src.backend.ai.training_utils import (
+    compute_grad_norm,
+    save_split_training_artifacts,
+)
 
 
 # ---------------------------------------------------------------------------
-# Action-to-index mapping (per design D13)
+# Action-to-index mapping
 # Must match Converter.card_to_index() in app/.
 # ---------------------------------------------------------------------------
 
@@ -49,10 +56,7 @@ ACTION_TO_INDEX: dict[str, int] = {
 
 
 class TrainingRunner:
-    """PPO training orchestrator for GRU-based models.
-
-    Handles sample loading, training loop with gradient accumulation,
-    GAE advantage estimation, weight saving, and loss/gradient charts.
+    """Three-phase split PPO training orchestrator.
 
     Public method:
         run(config: TrainingConfig) -> None
@@ -63,88 +67,145 @@ class TrainingRunner:
     # ------------------------------------------------------------------
 
     def run(self, config: TrainingConfig) -> None:
-        """Execute PPO training end-to-end."""
+        """Execute three-phase split PPO training."""
         random.seed(0)  # Reproducible shuffle ordering
-        model, device = self._build_model(config.model)
+
+        # --- Build models ---
+        policy_model, value_model, device = self._build_models(config.model)
+
+        # --- Load samples ---
         all_perspectives = self._load_samples(config.sample_path)
-        optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
 
-        # --- Training loop ---
-        epoch_losses: list[float] = []
-        epoch_policy_losses: list[float] = []
-        epoch_value_losses: list[float] = []
-        epoch_entropies: list[float] = []
-        epoch_grad_norms: list[float] = []
-
-        for epoch in range(1, config.epoch + 1):
-            # Shuffle perspectives
-            random.shuffle(all_perspectives)
-
-            # Process in gradient accumulation groups
-            group_metrics = self._train_one_epoch(
-                all_perspectives, model, optimizer, config, device
-            )
-
-            epoch_losses.append(group_metrics["avg_loss"])
-            epoch_policy_losses.append(group_metrics["avg_policy_loss"])
-            epoch_value_losses.append(group_metrics["avg_value_loss"])
-            epoch_entropies.append(group_metrics["avg_entropy"])
-            epoch_grad_norms.append(group_metrics["avg_grad_norm"])
-
-            print(
-                f"Epoch {epoch}/{config.epoch} | "
-                f"avg_loss: {group_metrics['avg_loss']:.4f} | "
-                f"policy_loss: {group_metrics['avg_policy_loss']:.4f} | "
-                f"value_loss: {group_metrics['avg_value_loss']:.4f} | "
-                f"entropy: {group_metrics['avg_entropy']:.4f} | "
-                f"grad_norm: {group_metrics['avg_grad_norm']:.4f}"
-            )
-
-        # --- Save and generate artifacts ---
-        self._save_weights(model, config.output_path)
-        save_training_artifacts(
-            epoch_losses, epoch_policy_losses, epoch_value_losses,
-            epoch_entropies, epoch_grad_norms, output_dir=None,
+        # --- Create separate AdamW optimizers (D5) ---
+        policy_optimizer = torch.optim.AdamW(
+            policy_model.parameters(),
+            lr=config.policy_lr,
+            weight_decay=config.weight_decay,
+        )
+        value_optimizer = torch.optim.AdamW(
+            value_model.parameters(),
+            lr=config.value_lr,
+            weight_decay=config.weight_decay,
         )
 
-    # --- Model building ---
+        # Accumulate artifact records across all phases
+        phase_records: list[dict] = []
 
-    def _build_model(self, model_name: str) -> tuple[nn.Module, torch.device]:
-        """Resolve model from registry, instantiate, load weights.
+        # ==============================================================
+        # Phase 1: Value Training (value_epochs)
+        # ==============================================================
+        for epoch in range(1, config.value_epochs + 1):
+            random.shuffle(all_perspectives)
+            metrics = self._train_value_epoch(
+                all_perspectives, value_model, policy_model,
+                value_optimizer, config, device,
+            )
+            phase_records.append({
+                "phase": "value",
+                "epoch": epoch,
+                "policy_loss": float("nan"),
+                "value_loss": metrics["avg_value_loss"],
+                "entropy": float("nan"),
+                "policy_grad_norm": float("nan"),
+                "value_grad_norm": metrics["avg_grad_norm"],
+            })
+            print(
+                f"[Value] Epoch {epoch}/{config.value_epochs} | "
+                f"value_loss: {metrics['avg_value_loss']:.4f} | "
+                f"grad_norm: {metrics['avg_grad_norm']:.4f}"
+            )
 
-        Returns (model, device) tuple. Model is in training mode,
-        moved to the detected device.
+        # ==============================================================
+        # Phase 2: Advantage Re-computation (no gradient updates)
+        # ==============================================================
+        self._recompute_advantages(
+            all_perspectives, value_model, config, device,
+        )
+
+        # ==============================================================
+        # Phase 3: Policy Training (epoch)
+        # ==============================================================
+        for epoch in range(1, config.epoch + 1):
+            random.shuffle(all_perspectives)
+            metrics = self._train_policy_epoch(
+                all_perspectives, policy_model, value_model,
+                policy_optimizer, config, device,
+            )
+            phase_records.append({
+                "phase": "policy",
+                "epoch": epoch,
+                "policy_loss": metrics["avg_policy_loss"],
+                "value_loss": float("nan"),
+                "entropy": metrics["avg_entropy"],
+                "policy_grad_norm": metrics["avg_grad_norm"],
+                "value_grad_norm": float("nan"),
+            })
+            print(
+                f"[Policy] Epoch {epoch}/{config.epoch} | "
+                f"policy_loss: {metrics['avg_policy_loss']:.4f} | "
+                f"entropy: {metrics['avg_entropy']:.4f} | "
+                f"grad_norm: {metrics['avg_grad_norm']:.4f}"
+            )
+
+        # --- Save weights and artifacts ---
+        self._save_weights(policy_model, config.policy_output_path)
+        self._save_weights(value_model, config.value_output_path)
+        save_split_training_artifacts(phase_records, output_dir=None)
+
+    # ------------------------------------------------------------------
+    # Model building
+    # ------------------------------------------------------------------
+
+    def _build_models(
+        self, model_name: str
+    ) -> tuple[nn.Module, nn.Module, torch.device]:
+        """Resolve split-format registry entry, instantiate both networks.
+
+        Returns (policy_model, value_model, device) tuple.
+        Both models in training mode, moved to detected device.
 
         Raises:
             ValueError: If model_name not in registry.
         """
-        # Resolve from registry
         info = get_ai_info(model_name)
-        module_name = info["module"]
-        class_name = info["class"]
-        weight_path = info["weight_path"]
 
-        # Import module, instantiate class
-        ai_module = importlib.import_module(module_name)
-        model_class = getattr(ai_module, class_name)
-        model = model_class()
+        # --- Policy model ---
+        policy_info = info["policy"]
+        policy_module = importlib.import_module(policy_info["module"])
+        policy_class = getattr(policy_module, policy_info["class"])
+        policy_model = policy_class()
+        policy_state = torch.load(
+            policy_info["weight_path"], map_location="cpu", weights_only=True
+        )
+        policy_model.load_state_dict(policy_state)
 
-        # Load weights
-        state_dict = torch.load(weight_path, map_location="cpu", weights_only=True)
-        model.load_state_dict(state_dict)
+        # --- Value model ---
+        value_info = info["value"]
+        value_module = importlib.import_module(value_info["module"])
+        value_class = getattr(value_module, value_info["class"])
+        value_model = value_class()
+        value_state = torch.load(
+            value_info["weight_path"], map_location="cpu", weights_only=True
+        )
+        value_model.load_state_dict(value_state)
 
-        # Detect device (per design D6)
+        # --- Device ---
         if torch.cuda.is_available():
             device = torch.device("cuda")
         else:
             device = torch.device("cpu")
             warnings.warn("CUDA not available, falling back to CPU", RuntimeWarning)
 
-        model.to(device)
-        model.train()  # Training mode (per TC-M3)
-        return model, device
+        policy_model.to(device)
+        policy_model.train()
+        value_model.to(device)
+        value_model.train()
 
-    # --- Sample loading ---
+        return policy_model, value_model, device
+
+    # ------------------------------------------------------------------
+    # Sample loading
+    # ------------------------------------------------------------------
 
     def _load_samples(self, sample_path: str) -> list[dict]:
         """Load perspectives from sample file(s). Directory loads all .json.
@@ -172,7 +233,6 @@ class TrainingRunner:
             for game in games:
                 for p_idx, perspective in enumerate(game.get("perspectives", [])):
                     for s_idx, step in enumerate(perspective.get("steps", [])):
-                        # Validate required keys
                         for key in ("state", "action", "reward", "value"):
                             if key not in step:
                                 raise RuntimeError(
@@ -180,19 +240,17 @@ class TrainingRunner:
                                     f"of game {game.get('game_id', '?')} "
                                     f"in {file_path!r} is missing required key {key!r}"
                                 )
-                        # Validate numeric fields
                         try:
-                            reward_val = float(step["reward"])
-                            value_val = float(step["value"])
+                            float(step["reward"])
+                            float(step["value"])
                             log_prob_raw = step.get("log_prob")
-                            log_prob_val = float(log_prob_raw) if log_prob_raw is not None else 0.0
+                            float(log_prob_raw) if log_prob_raw is not None else 0.0
                         except (ValueError, TypeError) as exc:
                             raise RuntimeError(
                                 f"Step {s_idx} in perspective {p_idx} "
                                 f"of game {game.get('game_id', '?')} "
                                 f"in {file_path!r}: invalid numeric value — {exc}"
                             ) from exc
-                        # Validate state vector length
                         if len(step["state"]) != INPUT_SIZE:
                             raise RuntimeError(
                                 f"Step {s_idx} in perspective {p_idx} "
@@ -200,23 +258,23 @@ class TrainingRunner:
                                 f"in {file_path!r}: state has {len(step['state'])} elements, "
                                 f"expected {INPUT_SIZE}"
                             )
-                        # Deep-copy perspective to avoid mutation across epochs
+                        # Deep-copy perspective
                         all_perspectives.append({
-                        "steps": [
-                            {
-                                "state": list(step["state"]),
-                                "action": step["action"],
-                                "reward": float(step["reward"]),
-                                "value": float(step["value"]),
-                                "log_prob": (
-                                    float(step["log_prob"])
-                                    if step.get("log_prob") is not None
-                                    else 0.0
-                                ),
-                            }
-                            for step in perspective["steps"]
-                        ],
-                    })
+                            "steps": [
+                                {
+                                    "state": list(step["state"]),
+                                    "action": step["action"],
+                                    "reward": float(step["reward"]),
+                                    "value": float(step["value"]),
+                                    "log_prob": (
+                                        float(step["log_prob"])
+                                        if step.get("log_prob") is not None
+                                        else 0.0
+                                    ),
+                                }
+                                for step in perspective["steps"]
+                            ],
+                        })
 
         if not all_perspectives:
             raise RuntimeError(
@@ -224,25 +282,191 @@ class TrainingRunner:
             )
         return all_perspectives
 
-    # --- Training helpers ---
+    # ------------------------------------------------------------------
+    # Phase 1: Value Training
+    # ------------------------------------------------------------------
 
-    def _train_one_epoch(
+    def _train_value_epoch(
         self,
         perspectives: list[dict],
-        model: nn.Module,
+        value_model: nn.Module,
+        policy_model: nn.Module,
         optimizer: torch.optim.Optimizer,
         config: TrainingConfig,
         device: torch.device,
     ) -> dict:
-        """Run one training epoch with gradient accumulation.
+        """Run one value-training epoch with gradient accumulation.
 
-        Returns dict with keys: avg_loss, avg_policy_loss, avg_value_loss,
-        avg_entropy, avg_grad_norm (averages across all groups).
+        Only value_model is updated. policy_model is unused (frozen).
+        Returns dict with avg_value_loss and avg_grad_norm.
         """
-        # Accumulators for group-level averages
-        all_losses: list[float] = []
-        all_policy_losses: list[float] = []
         all_value_losses: list[float] = []
+        all_grad_norms: list[float] = []
+
+        total = len(perspectives)
+        idx = 0
+
+        while idx < total:
+            group_end = min(idx + config.batch_size, total)
+            group = perspectives[idx:group_end]
+            idx = group_end
+
+            optimizer.zero_grad()
+
+            group_value_total = 0.0
+            group_has_nan = False
+
+            for perspective in group:
+                value_loss = self._process_value_perspective(
+                    perspective, value_model, config, device,
+                )
+                if value_loss is None:
+                    group_has_nan = True
+                    continue
+
+                scaled = value_loss / len(group)
+                scaled.backward()
+
+                group_value_total += value_loss.item()
+
+            if group_has_nan:
+                warnings.warn("NaN detected in value group, skipping")
+                continue
+
+            # Gradient clipping
+            pre_clip_norm = compute_grad_norm(value_model)
+            if math.isnan(pre_clip_norm) or math.isinf(pre_clip_norm):
+                warnings.warn("NaN/Inf gradient in value model, skipping")
+                continue
+
+            nn_utils.clip_grad_norm_(
+                value_model.parameters(), config.max_grad_norm,
+            )
+            optimizer.step()
+
+            n = len(group)
+            all_value_losses.append(group_value_total / n)
+            all_grad_norms.append(pre_clip_norm)
+
+        if not all_value_losses:
+            return {"avg_value_loss": float("nan"), "avg_grad_norm": float("nan")}
+
+        return {
+            "avg_value_loss": sum(all_value_losses) / len(all_value_losses),
+            "avg_grad_norm": sum(all_grad_norms) / len(all_grad_norms),
+        }
+
+    def _process_value_perspective(
+        self,
+        perspective: dict,
+        value_model: nn.Module,
+        config: TrainingConfig,
+        device: torch.device,
+    ) -> torch.Tensor | None:
+        """Compute value MSE loss for one perspective. Returns None if NaN."""
+        steps = perspective["steps"]
+        T = len(steps)
+
+        old_values: list[float] = []
+        rewards: list[float] = []
+        states_14d: list[list[float]] = []
+
+        for step in steps:
+            states_14d.append(step["state"])
+            old_values.append(step["value"])
+            rewards.append(step["reward"])
+
+        # GAE from sample old_values → V_targets
+        _advantages, value_targets = self._compute_gae(
+            old_values, rewards, config.gamma, config.gae_lambda,
+        )
+
+        # Value forward pass — keep tensors on computation graph
+        new_vals: list[torch.Tensor] = []
+        h = torch.tensor(
+            GRUValueModel.INITIAL_HIDDEN_STATE,
+            dtype=torch.float32, device=device,
+        ).view(1, 1, HIDDEN_SIZE)
+
+        for t in range(T):
+            x = torch.tensor(
+                states_14d[t], dtype=torch.float32, device=device,
+            ).view(1, 1, INPUT_SIZE)
+            val, h = value_model(x, h)
+            new_vals.append(val.squeeze())  # (1,) tensor with grad
+
+        # MSE loss — concatenate tensors to preserve computation graph
+        v_new = torch.stack(new_vals)  # (T,) with grad
+        v_target = torch.tensor(value_targets, dtype=torch.float32, device=device)
+        value_loss = config.value_coef * nn.functional.mse_loss(v_new, v_target)
+
+        if torch.isnan(value_loss):
+            return None
+        return value_loss
+
+    # ------------------------------------------------------------------
+    # Phase 2: Advantage Re-computation
+    # ------------------------------------------------------------------
+
+    def _recompute_advantages(
+        self,
+        perspectives: list[dict],
+        value_model: nn.Module,
+        config: TrainingConfig,
+        device: torch.device,
+    ) -> None:
+        """Re-compute GAE advantages using trained value network (no_grad).
+
+        Stores new_advantages and new_value_targets in each perspective dict.
+        """
+        with torch.no_grad():
+            for perspective in perspectives:
+                steps = perspective["steps"]
+                T = len(steps)
+
+                rewards = [s["reward"] for s in steps]
+                new_values: list[float] = []
+
+                h = torch.tensor(
+                    GRUValueModel.INITIAL_HIDDEN_STATE,
+                    dtype=torch.float32, device=device,
+                ).view(1, 1, HIDDEN_SIZE)
+
+                for t in range(T):
+                    x = torch.tensor(
+                        steps[t]["state"], dtype=torch.float32, device=device,
+                    ).view(1, 1, INPUT_SIZE)
+                    val, h = value_model(x, h)
+                    new_values.append(float(val.item()))
+
+                # GAE with trained value network
+                advantages, value_targets = self._compute_gae(
+                    new_values, rewards, config.gamma, config.gae_lambda,
+                )
+
+                # Store in perspective for Phase 3
+                perspective["new_advantages"] = advantages
+                perspective["new_value_targets"] = value_targets
+
+    # ------------------------------------------------------------------
+    # Phase 3: Policy Training
+    # ------------------------------------------------------------------
+
+    def _train_policy_epoch(
+        self,
+        perspectives: list[dict],
+        policy_model: nn.Module,
+        value_model: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        config: TrainingConfig,
+        device: torch.device,
+    ) -> dict:
+        """Run one policy-training epoch with gradient accumulation.
+
+        Only policy_model is updated. value_model is frozen.
+        Returns dict with avg_policy_loss, avg_entropy, avg_grad_norm.
+        """
+        all_policy_losses: list[float] = []
         all_entropies: list[float] = []
         all_grad_norms: list[float] = []
 
@@ -250,262 +474,162 @@ class TrainingRunner:
         idx = 0
 
         while idx < total:
-            # Group of batch_size perspectives
             group_end = min(idx + config.batch_size, total)
             group = perspectives[idx:group_end]
             idx = group_end
 
             optimizer.zero_grad()
 
-            group_loss_total = 0.0
             group_policy_total = 0.0
-            group_value_total = 0.0
             group_entropy_total = 0.0
             group_has_nan = False
 
             for perspective in group:
-                metrics = self._process_perspective(
-                    perspective, model, config, device
+                result = self._process_policy_perspective(
+                    perspective, policy_model, config, device,
                 )
-                if metrics is None:
-                    # NaN detected — skip this perspective
+                if result is None:
                     group_has_nan = True
                     continue
 
-                # Scale loss by batch_size for gradient accumulation (D8)
-                scaled_loss = metrics["total_loss"] / len(group)
-                scaled_loss.backward()
+                policy_loss, entropy = result
+                total_loss = policy_loss - config.entropy_coef * entropy
+                scaled = total_loss / len(group)
+                scaled.backward()
 
-                group_loss_total += metrics["total_loss"].item()
-                group_policy_total += metrics["policy_loss"].item()
-                group_value_total += metrics["value_loss"].item()
-                group_entropy_total += metrics["entropy"].item()
+                group_policy_total += policy_loss.item()
+                group_entropy_total += entropy.item()
 
             if group_has_nan:
-                warnings.warn(
-                    f"NaN detected in group, skipping optimizer step"
-                )
+                warnings.warn("NaN detected in policy group, skipping")
                 continue
 
-            # Gradient clipping (D11) — compute norm before clipping for monitoring
-            pre_clip_grad_norm = compute_grad_norm(model)
-            nn_utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
-
-            # Check for NaN gradient (D12)
-            if math.isnan(pre_clip_grad_norm) or math.isinf(pre_clip_grad_norm):
-                warnings.warn(
-                    f"NaN/Inf gradient norm detected, skipping optimizer step"
-                )
+            pre_clip_norm = compute_grad_norm(policy_model)
+            if math.isnan(pre_clip_norm) or math.isinf(pre_clip_norm):
+                warnings.warn("NaN/Inf gradient in policy model, skipping")
                 continue
 
+            nn_utils.clip_grad_norm_(
+                policy_model.parameters(), config.max_grad_norm,
+            )
             optimizer.step()
 
             n = len(group)
-            all_losses.append(group_loss_total / n)
             all_policy_losses.append(group_policy_total / n)
-            all_value_losses.append(group_value_total / n)
             all_entropies.append(group_entropy_total / n)
-            all_grad_norms.append(pre_clip_grad_norm)
+            all_grad_norms.append(pre_clip_norm)
 
-        if not all_losses:
-            # Fallback: all groups had NaN
+        if not all_policy_losses:
             return {
-                "avg_loss": float("nan"),
                 "avg_policy_loss": float("nan"),
-                "avg_value_loss": float("nan"),
                 "avg_entropy": float("nan"),
                 "avg_grad_norm": float("nan"),
             }
 
         return {
-            "avg_loss": sum(all_losses) / len(all_losses),
             "avg_policy_loss": sum(all_policy_losses) / len(all_policy_losses),
-            "avg_value_loss": sum(all_value_losses) / len(all_value_losses),
             "avg_entropy": sum(all_entropies) / len(all_entropies),
             "avg_grad_norm": sum(all_grad_norms) / len(all_grad_norms),
         }
 
-    # --- Perspective processing ---
-
-    def _process_perspective(
+    def _process_policy_perspective(
         self,
         perspective: dict,
-        model: nn.Module,
+        policy_model: nn.Module,
         config: TrainingConfig,
         device: torch.device,
-    ) -> dict | None:
-        """Process one perspective: GAE + forward + PPO loss. Returns None if NaN."""
+    ) -> tuple | None:
+        """Compute PPO policy loss for one perspective. Returns None if NaN."""
         steps = perspective["steps"]
         T = len(steps)
+        advantages = perspective["new_advantages"]
 
-        # --- Step 1: Load old data from sample ---
+        # Load old data from sample
         old_log_probs: list[float] = []
-        old_values: list[float] = []
-        rewards: list[float] = []
         states_14d: list[list[float]] = []
         actions: list[str] = []
 
         for step in steps:
             states_14d.append(step["state"])
             actions.append(step["action"])
-            old_values.append(step["value"])
-            rewards.append(step["reward"])
-            # Replace null with 0.0 (from greedy sampling during self-play)
             old_log_probs.append(step["log_prob"])
 
-        # --- Step 2: Compute GAE advantages (D10) ---
-        advantages, value_targets = self._compute_gae(
-            old_values, rewards, config.gamma, config.gae_lambda
-        )
-
-        # --- Step 3: Forward pass to get new policy ---
-        new_log_probs: list[float] = []
-        new_values: list[float] = []
-        all_probs: list[torch.Tensor] = []  # For entropy computation
+        # Policy forward pass — keep tensors on computation graph
+        new_log_probs_tensors: list[torch.Tensor] = []
+        all_probs: list[torch.Tensor] = []
 
         h = torch.tensor(
-            GRUCardModel.INITIAL_HIDDEN_STATE,
-            dtype=torch.float32, device=device
+            GRUPolicyModel.INITIAL_HIDDEN_STATE,
+            dtype=torch.float32, device=device,
         ).view(1, 1, HIDDEN_SIZE)
 
         for t in range(T):
-            state_t = states_14d[t]
-            x = torch.tensor(state_t, dtype=torch.float32, device=device).view(1, 1, INPUT_SIZE)
-
-            # Forward with temperature=1.0, mask_fn=None (D9)
-            probs, log_probs, value, h = model(x, h, mask_fn=None, temperature=1.0)
-
-            # Extract new_log_prob for the action that was taken (D13)
+            x = torch.tensor(
+                states_14d[t], dtype=torch.float32, device=device,
+            ).view(1, 1, INPUT_SIZE)
+            probs, log_probs, h = policy_model(x, h, mask_fn=None, temperature=1.0)
             action_idx = ACTION_TO_INDEX[actions[t]]
-            new_log_probs.append(float(log_probs[0, action_idx].item()))
-            new_values.append(float(value.item()))
+            # Extract single scalar with grad preserved
+            new_log_probs_tensors.append(log_probs[0, action_idx])
             all_probs.append(probs)
 
-        # --- Step 4: Compute PPO clipped loss ---
-        loss_result = self._compute_ppo_loss(
-            old_log_probs, new_log_probs,
-            new_values,
-            advantages, value_targets,
-            all_probs,
-            config,
+        # PPO clipped loss — use stacked tensors with grad
+        device_t = all_probs[0].device
+        old_log = torch.tensor(old_log_probs, dtype=torch.float32, device=device_t)
+        new_log = torch.stack(new_log_probs_tensors)  # (T,) with grad
+        adv = torch.tensor(advantages, dtype=torch.float32, device=device_t)
+
+        ratio = torch.exp(new_log - old_log)
+        clipped_ratio = torch.clamp(
+            ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps,
         )
+        policy_loss = -torch.min(ratio * adv, clipped_ratio * adv).mean()
 
-        # NaN detection (D12)
-        if loss_result is None:
-            warnings.warn("NaN loss detected in perspective, skipping")
+        # Entropy
+        entropy_sum = torch.tensor(0.0, device=device_t)
+        for probs in all_probs:
+            p = probs.clamp(min=1e-8)
+            entropy_sum = entropy_sum - (p * torch.log(p)).sum()
+        entropy = entropy_sum / T
+
+        if torch.isnan(policy_loss) or torch.isnan(entropy):
             return None
-
-        return loss_result
+        return policy_loss, entropy
 
     # ------------------------------------------------------------------
-    # Internal: GAE computation
+    # GAE computation (shared by Phase 1 and Phase 2)
     # ------------------------------------------------------------------
 
     def _compute_gae(
         self,
-        old_values: list[float],
+        values: list[float],
         rewards: list[float],
         gamma: float,
         gae_lambda: float,
     ) -> tuple[list[float], list[float]]:
-        """Compute GAE. V_{t+1}=0 for terminal step. Returns (advantages, value_targets)."""
-        T = len(old_values)
+        """Compute GAE. V_{t+1}=0 for terminal step.
+
+        Returns (advantages, value_targets).
+        """
+        T = len(values)
         advantages = [0.0] * T
         value_targets = [0.0] * T
 
         gae = 0.0
         for t in reversed(range(T)):
-            # Terminal bootstrap: V_{t+1} = 0 for last step
-            next_value = old_values[t + 1] if t + 1 < T else 0.0
-            delta = rewards[t] + gamma * next_value - old_values[t]
+            next_value = values[t + 1] if t + 1 < T else 0.0
+            delta = rewards[t] + gamma * next_value - values[t]
             gae = delta + gamma * gae_lambda * gae
             advantages[t] = gae
-            value_targets[t] = gae + old_values[t]
+            value_targets[t] = gae + values[t]
 
         return advantages, value_targets
 
     # ------------------------------------------------------------------
-    # Internal: PPO loss computation
-    # ------------------------------------------------------------------
-
-    def _compute_ppo_loss(
-        self,
-        old_log_probs: list[float],
-        new_log_probs: list[float],
-        new_values: list[float],
-        advantages: list[float],
-        value_targets: list[float],
-        all_probs: list[torch.Tensor],
-        config: TrainingConfig,
-    ) -> dict | None:
-        """Compute PPO clipped loss, averaged over all T steps.
-
-        Loss components:
-            L_clip = -mean(min(ratio * A, clip(ratio, 1-eps, 1+eps) * A))
-            L_value = mean((V_target - V_new)^2)
-            L_entropy = -mean(sum(p * log(p)))
-            L_total = L_clip + cv * L_value - ce * L_entropy
-
-        Returns dict with total_loss, policy_loss, value_loss, entropy.
-        Returns None if any component is NaN.
-        """
-        T = len(old_log_probs)
-        device = all_probs[0].device
-
-        # Convert to tensors
-        old_log = torch.tensor(old_log_probs, dtype=torch.float32, device=device)
-        new_log = torch.tensor(new_log_probs, dtype=torch.float32, device=device)
-        new_val = torch.tensor(new_values, dtype=torch.float32, device=device)
-        adv = torch.tensor(advantages, dtype=torch.float32, device=device)
-        v_target = torch.tensor(value_targets, dtype=torch.float32, device=device)
-
-        # Policy loss: PPO clipped objective
-        ratio = torch.exp(new_log - old_log)
-        clipped_ratio = torch.clamp(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps)
-        policy_loss = -torch.min(ratio * adv, clipped_ratio * adv).mean()
-
-        # Value loss: MSE
-        value_loss = torch.nn.functional.mse_loss(new_val, v_target)
-
-        # Entropy bonus (regularization)
-        entropy_sum = torch.tensor(0.0, device=device)
-        for probs in all_probs:
-            # probs shape: (1, 4), avoid log(0)
-            p = probs.clamp(min=1e-8)
-            entropy_sum = entropy_sum - (p * torch.log(p)).sum()
-        entropy = entropy_sum / T
-
-        # Total loss (averaged over T steps per §6)
-        total_loss = (
-            policy_loss
-            + config.value_coef * value_loss
-            - config.entropy_coef * entropy
-        )
-
-        # NaN detection (D12)
-        if (
-            torch.isnan(total_loss)
-            or torch.isnan(policy_loss)
-            or torch.isnan(value_loss)
-            or torch.isnan(entropy)
-        ):
-            return None
-
-        return {
-            "total_loss": total_loss,
-            "policy_loss": policy_loss,
-            "value_loss": value_loss,
-            "entropy": entropy,
-        }
-
-    # ------------------------------------------------------------------
-    # Internal: weight saving
+    # Weight saving
     # ------------------------------------------------------------------
 
     def _save_weights(self, model: nn.Module, output_path: str) -> None:
-        """Save trained model weights to output_path (D4).
-
-        Creates parent directories if needed (TC-S3).
-        """
+        """Save model weights, creating parent directories if needed."""
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         torch.save(model.state_dict(), output_path)

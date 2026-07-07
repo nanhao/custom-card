@@ -1,0 +1,106 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+title Self-Play Flow — Split Policy/Value Networks
+
+participant "SelfPlayRunner" as Runner
+participant "AppManager\nai_sample_action" as AM
+participant "GRUPolicyModel" as PolicyModel
+participant "GRUValueModel" as ValueModel
+participant "GameCore" as Game
+participant "Filesystem" as FS
+
+== 1. Initialize Game ==
+
+Runner -> Game: GameCore(mode="pvp")
+Game --> Runner: game instance
+Runner -> Game: start_game()
+
+Runner -> Runner: Initialize hidden states:\nh1_pol = [0.0]*8, h2_pol = [0.0]*8\nh1_val = [0.0]*8, h2_val = [0.0]*8
+
+== 2. Round Loop ==
+
+loop while !game.is_over
+
+    Runner -> Game: get_state()
+    Game --> Runner: pre_state dict
+
+    note right of Runner
+        Determine sampling mode:
+        should_sample = round <= temp_step
+        temp_p1 = temp if should_sample
+                  and side in (player1,both)
+                  else 0.0
+    end note
+
+    == 2a. Player 1 Action ==
+
+    Runner -> AM: ai_sample_action(pre_state,\nh1_pol, h1_val, ai1, temp_p1, "1")
+
+    activate AM
+
+    AM -> PolicyModel: forward(x1, h1_pol, mask_fn, temp_p1)
+    PolicyModel --> AM: (probs, log_probs, new_h1_pol)
+    AM -> AM: Sample action (multinomial\nor argmax if temp=0)
+
+    AM -> ValueModel: forward(x1, h1_val)
+    ValueModel --> AM: (value, new_h1_val)
+
+    deactivate AM
+
+    AM --> Runner: (card1, new_h1_pol, log_prob1, value1, new_h1_val)
+    Runner -> Runner: h1_pol = new_h1_pol; h1_val = new_h1_val
+
+    == 2b. Player 2 Action ==
+
+    Runner -> AM: ai_sample_action(pre_state,\nh2_pol, h2_val, ai2, temp_p2, "2")
+
+    activate AM
+
+    AM -> PolicyModel: forward(x2, h2_pol, mask_fn, temp_p2)
+    PolicyModel --> AM: (probs, log_probs, new_h2_pol)
+    AM -> AM: Sample action
+
+    AM -> ValueModel: forward(x2, h2_val)
+    ValueModel --> AM: (value, new_h2_val)
+
+    deactivate AM
+
+    AM --> Runner: (card2, new_h2_pol, log_prob2, value2, new_h2_val)
+    Runner -> Runner: h2_pol = new_h2_pol; h2_val = new_h2_val
+
+    == 2c. Play Round ==
+
+    Runner -> Game: play_round([card1], [card2])
+    Game --> Runner: round result (damage, hp)
+
+    == 2d. Record Sample ==
+
+    opt sample_output configured
+        Runner -> Runner: Build step records:
+        Runner -> Runner: p1 step: {state: vec1, action: card1,\nreward: 0.0, value: value1,\nlog_prob: log_prob1}
+        Runner -> Runner: p2 step: {state: vec2, action: card2,\nreward: 0.0, value: value2,\nlog_prob: log_prob2}
+    end
+
+end
+
+== 3. Game End ==
+
+Runner -> Game: winner
+Game --> Runner: "1" / "2" / null
+
+Runner -> Runner: p1_reward, p2_reward =\n(1,-1) / (-1,1) / (0,0)
+
+opt sample_output configured
+    Runner -> Runner: Assign terminal rewards:\nlast step of winner = +1.0\nlast step of loser = -1.0\nintermediate steps = 0.0
+    Runner -> Runner: Build game sample dict:\ngame → perspectives → steps
+end
+
+== 4. After All Games ==
+
+Runner -> FS: Write all game samples\nas single JSON array
+
+Runner -> Runner: Compute aggregate stats:\nwins/losses/draws/avg_rounds
+
+@enduml

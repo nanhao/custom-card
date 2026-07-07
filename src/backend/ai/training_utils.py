@@ -17,26 +17,22 @@ def save_training_artifacts(
     epoch_grad_norms: list[float],
     output_dir: str | None = None,
 ) -> None:
-    """Generate loss/grad PNG charts and CSV files (design D7).
+    """Generate loss/grad PNG charts and CSV files (design/8 D7).
 
-    By default writes to fixed loss/ directory relative to CWD.
-    If output_dir is provided, writes there instead.
-    Auto-creates the directory if it doesn't exist.
-    Previous run's artifacts are overwritten.
+    DEPRECATED: Use save_split_training_artifacts for split training.
+    Kept for backward compatibility during migration.
     """
     loss_dir = output_dir if output_dir is not None else os.path.join(os.getcwd(), "loss")
     os.makedirs(loss_dir, exist_ok=True)
 
     epochs = list(range(1, len(epoch_losses) + 1))
 
-    # Write loss CSV: epoch,avg_loss,policy_loss,value_loss,entropy
     _write_csv(
         os.path.join(loss_dir, "loss.csv"),
         ["epoch", "avg_loss", "policy_loss", "value_loss", "entropy"],
         zip(epochs, epoch_losses, epoch_policy_losses, epoch_value_losses, epoch_entropies),
     )
 
-    # Write grad CSV: epoch,grad_norm
     _write_csv(
         os.path.join(loss_dir, "grad.csv"),
         ["epoch", "grad_norm"],
@@ -49,7 +45,6 @@ def save_training_artifacts(
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        # Loss chart: total loss + components
         fig, ax = plt.subplots(figsize=(8, 5))
         ax.plot(epochs, epoch_losses, "b-", label="Total Loss")
         ax.plot(epochs, epoch_policy_losses, "g--", label="Policy Loss")
@@ -63,12 +58,92 @@ def save_training_artifacts(
         fig.savefig(os.path.join(loss_dir, "loss.png"), dpi=100)
         plt.close(fig)
 
-        # Gradient norm chart
         fig, ax = plt.subplots(figsize=(8, 5))
         ax.plot(epochs, epoch_grad_norms, "b-")
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Gradient Norm")
         ax.set_title("Gradient Norm")
+        ax.grid(True, alpha=0.3)
+        fig.savefig(os.path.join(loss_dir, "grad.png"), dpi=100)
+        plt.close(fig)
+
+    except ImportError:
+        pass
+
+
+def save_split_training_artifacts(
+    phase_records: list[dict],
+    output_dir: str | None = None,
+) -> None:
+    """Generate loss/grad CSV files for three-phase split PPO training (design/9 D7).
+
+    Each record dict has keys: phase, epoch, policy_loss, value_loss, entropy,
+    policy_grad_norm, value_grad_norm. Phase is "value" or "policy".
+
+    Writes to loss/loss.csv and loss/grad.csv with a 'phase' column.
+    """
+    loss_dir = output_dir if output_dir is not None else os.path.join(os.getcwd(), "loss")
+    os.makedirs(loss_dir, exist_ok=True)
+
+    # Write loss CSV: phase,epoch,policy_loss,value_loss,entropy
+    _write_csv(
+        os.path.join(loss_dir, "loss.csv"),
+        ["phase", "epoch", "policy_loss", "value_loss", "entropy"],
+        [
+            (r["phase"], r["epoch"], r["policy_loss"], r["value_loss"], r["entropy"])
+            for r in phase_records
+        ],
+    )
+
+    # Write grad CSV: phase,epoch,policy_grad_norm,value_grad_norm
+    _write_csv(
+        os.path.join(loss_dir, "grad.csv"),
+        ["phase", "epoch", "policy_grad_norm", "value_grad_norm"],
+        [
+            (r["phase"], r["epoch"], r["policy_grad_norm"], r["value_grad_norm"])
+            for r in phase_records
+        ],
+    )
+
+    # Generate PNG charts (if matplotlib available)
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        # Split data by phase for chart
+        value_epochs = [r["epoch"] for r in phase_records if r["phase"] == "value"]
+        policy_epochs = [r["epoch"] for r in phase_records if r["phase"] == "policy"]
+        value_losses = [r["value_loss"] for r in phase_records if r["phase"] == "value"]
+        policy_p_losses = [r["policy_loss"] for r in phase_records if r["phase"] == "policy"]
+        policy_entropies = [r["entropy"] for r in phase_records if r["phase"] == "policy"]
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        if value_losses:
+            ax.plot(value_epochs, value_losses, "r--", label="Value Loss (Phase 1)")
+        if policy_p_losses:
+            total_policy = [p + e * 0.01 for p, e in zip(policy_p_losses, policy_entropies)]
+            ax.plot(policy_epochs, policy_p_losses, "g-", label="Policy Loss (Phase 3)")
+            ax.plot(policy_epochs, policy_entropies, "m-", label="Entropy (Phase 3)")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Loss")
+        ax.set_title("Split Training Loss")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.savefig(os.path.join(loss_dir, "loss.png"), dpi=100)
+        plt.close(fig)
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        v_grad = [r["value_grad_norm"] for r in phase_records if r["phase"] == "value"]
+        p_grad = [r["policy_grad_norm"] for r in phase_records if r["phase"] == "policy"]
+        if v_grad:
+            ax.plot(value_epochs, v_grad, "r--", label="Value Grad Norm (Phase 1)")
+        if p_grad:
+            ax.plot(policy_epochs, p_grad, "g-", label="Policy Grad Norm (Phase 3)")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Gradient Norm")
+        ax.set_title("Gradient Norms")
+        ax.legend()
         ax.grid(True, alpha=0.3)
         fig.savefig(os.path.join(loss_dir, "grad.png"), dpi=100)
         plt.close(fig)

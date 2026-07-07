@@ -78,8 +78,8 @@ class TestBuildGameSampleStructure:
             rounds_played=2,
             p1_reward=1.0,
             p2_reward=-1.0,
-            ai1="rnn_v1.1",
-            ai2="rnn_v1.2",
+            ai1="rnn_v2.1",
+            ai2="rnn_v2.2",
         )
 
         assert isinstance(result, dict)

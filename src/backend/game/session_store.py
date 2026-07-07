@@ -111,17 +111,18 @@ def _deserialize_round_result(data: dict) -> RoundResult:
     )
 
 
-def _serialize_game_core(gm: GameCore, ai: str | None = None, ai_state: list[float] | None = None) -> dict:
+def _serialize_game_core(gm: GameCore, ai: str | None = None, ai_state: list[float] | None = None, ai_value_state: list[float] | None = None) -> dict:
     """Serialize the full GameCore state to a plain dict.
 
     Args:
         gm: The GameCore to serialize.
         ai: AI name for PVE games (optional).
-        ai_state: GRU hidden state for PVE games (optional).
+        ai_state: Policy GRU hidden state for PVE games (optional).
+        ai_value_state: Value GRU hidden state for PVE games (optional).
 
     Returns:
         dict matching the game save JSON structure in persistence.md §5.1,
-        extended with mode, ai (if PVE), and ai_state (if PVE).
+        extended with mode, ai (if PVE), and hidden states (if PVE).
     """
     data = {
         "round": gm.round_number,
@@ -132,11 +133,12 @@ def _serialize_game_core(gm: GameCore, ai: str | None = None, ai_state: list[flo
         "round_log": [_serialize_round_result(rr) for rr in gm.round_log],
         "mode": gm.mode,
     }
-    # Only include AI fields for PVE games to keep PVP saves clean.
     if gm.mode == "pve" and ai is not None:
         data["ai"] = ai
     if ai_state is not None:
         data["ai_state"] = ai_state
+    if ai_value_state is not None:
+        data["ai_value_state"] = ai_value_state
     return data
 
 
@@ -144,13 +146,14 @@ def _deserialize_game_core(data: dict) -> tuple[GameCore, dict]:
     """Reconstruct a GameCore and metadata from a save file dict.
 
     Handles legacy files (no mode key) by defaulting to "pvp".
-    Validates ai_state on load (fallback to zeros if invalid).
+    Validates ai_state and ai_value_state on load (fallback to zeros if invalid).
 
     Returns:
         (GameCore, metadata) tuple where metadata has:
             mode: "pvp" | "pve"
             ai: AI name or None
-            ai_state: GRU hidden state or None
+            ai_state: Policy GRU hidden state or None
+            ai_value_state: Value GRU hidden state or None
 
     Raises:
         ValueError: If required game state keys are missing, or if
@@ -163,27 +166,23 @@ def _deserialize_game_core(data: dict) -> tuple[GameCore, dict]:
                 f"Missing required game state key: {key!r}"
             )
 
-    # ---- Extract mode (default to "pvp" for legacy files) ----
     mode = data.get("mode", "pvp")
-
-    # ---- Extract AI metadata ----
     ai = data.get("ai", None)
     ai_state = data.get("ai_state", None)
+    ai_value_state = data.get("ai_value_state", None)
 
-    # ---- Validate PVE config ----
     if mode == "pve":
         if not ai:
             raise ValueError(
                 "AI_CONFIG_ERROR: save file has mode='pve' but no 'ai' field"
             )
-        # Validate ai_state: must be list[float] of length 8, or fallback
         ai_state = _validate_ai_state(ai_state)
+        ai_value_state = _validate_ai_state(ai_value_state)
     else:
-        # PVP: silently ignore any stray ai/ai_state fields
         ai = None
         ai_state = None
+        ai_value_state = None
 
-    # ---- Build GameCore ----
     gm = GameCore(mode=mode)
     gm.round_number = data["round"]
     gm.player_1 = _deserialize_player(data["player_1"])
@@ -192,7 +191,10 @@ def _deserialize_game_core(data: dict) -> tuple[GameCore, dict]:
     gm.winner = data["winner"]
     gm.round_log = [_deserialize_round_result(rr) for rr in data["round_log"]]
 
-    metadata = {"mode": mode, "ai": ai, "ai_state": ai_state}
+    metadata = {
+        "mode": mode, "ai": ai,
+        "ai_state": ai_state, "ai_value_state": ai_value_state,
+    }
     return gm, metadata
 
 
@@ -255,6 +257,7 @@ class SessionStore:
 
     def save(self, game_id: str, game_core: GameCore,
              ai_state: list[float] | None = None,
+             ai_value_state: list[float] | None = None,
              ai: str | None = None) -> None:
         """Serialize GameCore and write to {save_dir}/{game_id}.json.
 
@@ -264,12 +267,15 @@ class SessionStore:
         Args:
             game_id: Unique game identifier (UUID string).
             game_core: The GameCore to serialize.
-            ai_state: GRU hidden state for PVE games (optional).
+            ai_state: Policy GRU hidden state for PVE games (optional).
+            ai_value_state: Value GRU hidden state for PVE games (optional).
             ai: AI name for PVE games (optional).
         """
         self._ensure_save_dir()
         file_path = self._file_path(game_id)
-        data = _serialize_game_core(game_core, ai=ai, ai_state=ai_state)
+        data = _serialize_game_core(
+            game_core, ai=ai, ai_state=ai_state, ai_value_state=ai_value_state,
+        )
         file_path.write_text(json.dumps(data, indent=4, ensure_ascii=False))
 
     def load(self, game_id: str) -> tuple[GameCore | None, dict | None]:
