@@ -170,3 +170,102 @@ The logs should meet the following critiria:
 # intention_id=12
 修复 intention11 遗留的几个 bug
 
+# intention_id=13
+把模型的 input 重新调整一下，方便后面扩展新的卡牌。
+    1，我方当前血量
+    2，对方当前血量
+    3，当前回合数（1-5）
+    4，当前轮数
+    5，我方手牌剩余攻击牌数
+    6，我方手牌剩余防御牌数
+    7，我方手牌剩余重击牌数
+    8，我方手牌剩余反击牌数
+    9，我方手牌剩余聚能牌数
+    10，我方手牌剩余构建牌数
+    11，我方手牌剩余攻守兼备牌数
+    12-18，我方上一回合出的牌，one-hot
+    19-25, 对方上一回合出的牌，one-hot
+
+# intention_id=14
+发现一个 bug。网络结构里面，输出层应该有两个 softmax 才对，一个对下标 0-6 进行，另一个对下标 7-13 进行，因为0-6代表要出的卡，7-13代表要构建的卡
+
+# intention_id=15
+这是个代码优化任务。目前，玩家的状态缺少一个专门的类来管理。这个任务就是抽象出一个玩家状态类 PlayerState。
+首先需要一个 enum，用来定义所有可能的状态，然后，PlayerState 引用这个 enum。
+PlayerState 还要维护一个生存期字段。
+然后 Player 的 statuses 改为引用 PlayerState。
+序列化、RoundResult 等等及其他有引用到 status 的地方，都改为引用类，避免代码里到处分散着各种 status 字符串字面量。
+
+# intention_id=16
+这是个优化任务。目前，RoundResult 的字段非常散：
+    # Phase 1: After card resolution
+    round: int
+    cycle: int
+    round_in_cycle: int
+    cards_1: list[CardType]
+    cards_2: list[CardType]
+    damage_1: int
+    damage_2: int
+    hp_1_after: int
+    hp_2_after: int
+    energy_1_after: int
+    energy_2_after: int
+    statuses_1: list[PlayerState]
+    statuses_2: list[PlayerState]
+    details: list[str]
+
+    # Phase 2: Cycle-end actions
+    cycle_ended: bool = False
+    bleed_damage_1: int = 0
+    bleed_damage_2: int = 0
+
+    # Phase 3: Final state after all processing
+    after_cycle: int = 0
+    after_round_in_cycle: int = 0
+    after_hp_1: int = 0
+    after_hp_2: int = 0
+    after_statuses_1: list[PlayerState]
+    after_statuses_2: list[PlayerState]
+
+    is_game_over: bool = False
+    winner: str | None = None
+
+要重新组织一下。分一下层次，我用 json 来表达新结构如下：
+```json
+{
+    "round": 23,
+    "cycle": 2,
+    "round_in_cycle": 3,
+    "cards_1": [Card],
+    "cards_2": [Card],
+    "statuses_1": [...],
+    "statuses_2": [...],
+    "resolve": {
+        "is_game_over": false,
+        "winner": None,
+        "damage_1": 1,
+        "damage_2": 2,
+        "hp_1_after": 12,
+        "hp_2_after": 11,
+        "energy_1_after": 1,
+        "energy_2_after": 0,
+        "details": [...]
+    },
+    "end_actions": {
+        "cycle_ended": false,
+        "bleed_damage_1": 0,
+        "bleed_damage_2": 0
+    },
+    "after": {
+        "round": 23,
+        "cycle": 2,
+        "round_in_cycle": 3,
+        "cards": [Card],
+        "statuses_1": [...],
+        "statuses_2": [...],
+        "hp_1": 12,
+        "hp_2": 11
+    }
+}
+```
+所有消费了RoundResult的地方都要相应改动，包括前端。
