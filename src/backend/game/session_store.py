@@ -279,7 +279,7 @@ class SessionStore:
         if not file_path.exists():
             return None, None
         try:
-            data = json.loads(file_path.read_text())
+            data = json.loads(file_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ValueError(
                 f"Failed to parse game file: {file_path}"
