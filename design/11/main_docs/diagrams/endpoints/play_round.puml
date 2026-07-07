@@ -1,0 +1,122 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageAlign center
+
+actor Client
+participant "Controller\nPOST /api/games/{id}/play" as Controller
+participant "SessionStore" as Store
+participant "GameCore" as GM
+participant "AppManager" as AppMgr
+participant "ai.registry" as Registry
+participant "Converter" as Conv
+participant "GRUPolicyModel" as PolicyModel
+participant "GRUValueModel" as ValueModel
+
+Client -> Controller : POST /api/games/{id}/play\n{cards_1, build_target_1?}
+
+== Load Game ==
+
+Controller -> Store : load(game_id)
+alt game not found
+    Store --> Controller : (None, None)
+    Controller --> Client : 404 GAME_NOT_FOUND
+end
+Store --> Controller : (gm, metadata)
+
+== Parse cards_1 ==
+
+Controller -> Controller : cards_1 = [str_to_card(s) for s in cards_1_raw]
+alt invalid card
+    Controller --> Client : 400 INVALID_CARD
+end
+
+Controller -> Controller : Parse build_target_1 (optional)\nbuild_target_1 = str_to_card(raw) if raw else None
+
+== PVE: Auto-compute AI's card ==
+
+alt gm.mode == "pve"
+    Controller -> GM : get_state()
+    GM --> Controller : state dict
+
+    Controller -> AppMgr : ai_select_action(state,\nmetadata["ai_state"], metadata["ai"])
+
+    ' Load policy model (cached after first call)
+    AppMgr -> Registry : get_ai_info(ai_name)
+    Registry --> AppMgr : {policy: {module, class, weight_path},\nvalue: {module, class, weight_path}}
+
+    alt model not cached
+        AppMgr -> AppMgr : import module\ninstantiate GRUPolicyModel\nload weights from weight_path
+    end
+
+    ' Build 25-d input vector (v2)
+    AppMgr -> Conv : build_input_vector(state)
+    Conv --> AppMgr : input_vector (25 floats)\n[hand_counts(7)|HP(2)|last_moves(14)|round_in_cycle|cycle]
+
+    ' Create two-segment mask_fn (v2)
+    AppMgr -> AppMgr : _make_mask_fn(hand, energy)\nFront(0-6): block absent cards + BUILD if energy=0\nBack(7-13): block build targets exceeding energy
+
+    ' Convert to tensors (32-d hidden, v2)
+    AppMgr -> AppMgr : x = tensor(input_vector).view(1,1,25)\nh = tensor(hidden_state).view(1,1,32)
+
+    ' Forward pass (14-d output, v2)
+    AppMgr -> PolicyModel : forward(x, h, mask_fn=mask_fn)
+    PolicyModel -> PolicyModel : GRU(25->32) -> Linear(32->14)\nmask_fn -> softmax
+    PolicyModel --> AppMgr : (probs(1,14), log_probs(1,14), new_hidden(1,1,32))
+
+    ' Select action via argmax
+    AppMgr -> AppMgr : idx = argmax(probs)\nif idx < 7: card action\nif idx >= 7: build target (idx-7)
+
+    ' Convert index to card string
+    AppMgr -> Conv : index_to_card(idx if idx<7 else idx-7)
+    Conv --> AppMgr : card_str
+
+    AppMgr --> Controller : (card_str, build_target_str_or_None, new_hidden)
+
+    ' Validate AI output
+    Controller -> Controller : cards_2 = [str_to_card(card_str)]\nbuild_target_2 = str_to_card(bt_str) if bt_str else None
+    alt card_str not in valid set
+        Controller --> Client : 500 AI_INFERENCE_ERROR
+    end
+
+else gm.mode == "pvp"
+    ' PVP: deserialize cards_2 from request
+    Controller -> Controller : cards_2 = [str_to_card(s) for s in cards_2_raw]
+    Controller -> Controller : build_target_2 = None
+    alt missing cards_2
+        Controller --> Client : 400 MISSING_CARDS_2
+    end
+end
+
+== Play Round ==
+
+Controller -> GM : play_round(cards_1, cards_2,\nbuild_target_1, build_target_2)
+
+alt game over / card not in hand / energy insufficient
+    GM --> Controller : ValueError
+    Controller --> Client : 400 (GAME_OVER / CARD_NOT_IN_HAND)
+end
+
+GM -> GM : Resolver.resolve() — priority-layered\nStatuses(11) -> Damage(10) -> Apply\nBUILD processing -> Discard -> Check cycle end\nCycle bleed if round 5 -> New cycle if needed
+
+GM --> Controller : RoundResult\n(round, cycle, round_in_cycle,\ndamage, hp, energy, statuses, ...)
+
+== Persist ==
+
+alt gm.mode == "pve"
+    Controller -> Store : save(game_id, gm,\nai_state=new_hidden,\nai_value_state=metadata["ai_value_state"],\nai=metadata["ai"])
+else
+    Controller -> Store : save(game_id, gm)
+end
+
+== Build Response ==
+
+Controller -> GM : get_state()
+GM --> Controller : state dict\n(+energy, statuses, draw_pile_count, discard_pile_count)
+
+Controller -> Controller : Inject "ai": metadata["ai"] into state
+
+Controller --> Client : 200 OK\n{round_result, state}
+
+@enduml

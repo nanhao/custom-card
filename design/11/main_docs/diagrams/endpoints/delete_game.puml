@@ -1,0 +1,23 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageAlign center
+
+actor Client
+participant "Controller\nDELETE /api/games/{id}" as Controller
+participant "SessionStore" as Store
+
+Client -> Controller : DELETE /api/games/{game_id}
+
+Controller -> Store : delete(game_id)
+
+alt file existed and was deleted
+    Store --> Controller : True
+    Controller --> Client : 204 No Content
+else file did not exist
+    Store --> Controller : False
+    Controller --> Client : 404 GAME_NOT_FOUND
+end
+
+@enduml

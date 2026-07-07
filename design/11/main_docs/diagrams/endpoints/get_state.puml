@@ -1,0 +1,37 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageAlign center
+
+actor Client
+participant "Controller\nGET /api/games/{id}" as Controller
+participant "SessionStore" as Store
+participant "GameCore" as GM
+
+Client -> Controller : GET /api/games/{game_id}
+
+Controller -> Store : load(game_id)
+
+alt game not found
+    Store --> Controller : (None, None)
+    Controller --> Client : 404 GAME_NOT_FOUND
+else game found
+    Store --> Controller : (gm, metadata)
+
+    Controller -> GM : get_state()
+    note right #eeeeee
+      State fields (v2 new: energy, statuses, pile counts):
+      round, cycle, round_in_cycle,
+      players.1/2 {hp, energy, statuses,
+        hand, draw_pile_count, discard_pile_count, history},
+      is_over, winner, mode, round_log
+    end note
+    GM --> Controller : state dict
+
+    Controller -> Controller : Inject "ai" from metadata\nstate["ai"] = metadata["ai"]
+
+    Controller --> Client : 200 OK\n{game_id, state}
+end
+
+@enduml

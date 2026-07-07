@@ -1,0 +1,19 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageAlign center
+
+actor Client
+participant "Controller\nGET /api/ais" as Controller
+participant "ai.registry" as Registry
+
+Client -> Controller : GET /api/ais
+
+Controller -> Registry : list_ais()
+
+Registry --> Controller : [{"name": "rnn_v1.1", "description": "..."},\n{"name": "rnn_v2.1", "description": "v2 game"}, ...]
+
+Controller --> Client : 200 OK\n{ais: [{name, description}, ...]}
+
+@enduml
