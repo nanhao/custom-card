@@ -412,7 +412,7 @@ export default function GameBoard({
       <div className="cycle-info">
         Cycle {state.cycle}, Round {state.round_in_cycle}/5{' '}
         {state.round_log?.length > 0 && state.round_log[state.round_log.length - 1]?.cycle_ended
-          ? <span className="cycle-bleed">[Cycle ended \u2014 HP bleed applied]</span>
+          ? <span className="cycle-bleed">[Cycle ended — HP bleed applied]</span>
           : null}
       </div>
       {renderStatusBar()}
@@ -421,7 +421,7 @@ export default function GameBoard({
       {renderLog()}
       <div className="btn-row" style={{ marginTop: 8 }}>
         <button className="btn btn-secondary btn-small" onClick={onBackToMenu}>
-          \uD83C\uDFE0 Menu
+          🏠 Menu
         </button>
       </div>
     </>
