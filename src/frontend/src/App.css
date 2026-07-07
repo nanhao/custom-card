@@ -13,6 +13,9 @@
   --defense: #4e9af1;
   --heavy: #f39c12;
   --counter: #9b59b6;
+  --energy: #f1c40f;
+  --build: #1abc9c;
+  --flex: #e67e22;
   --green: #2ecc71;
 }
 
@@ -158,6 +161,18 @@ body {
   background: var(--counter);
   color: #fff;
 }
+.chip-energy {
+  background: var(--energy);
+  color: #1a1a2e;
+}
+.chip-build {
+  background: var(--build);
+  color: #fff;
+}
+.chip-flex {
+  background: var(--flex);
+  color: #fff;
+}
 
 /* ---- Hand Area ---- */
 .hand-area {
@@ -232,6 +247,18 @@ body {
 }
 .card-counter {
   background: var(--counter);
+  color: #fff;
+}
+.card-energy {
+  background: var(--energy);
+  color: #1a1a2e;
+}
+.card-build {
+  background: var(--build);
+  color: #fff;
+}
+.card-flex {
+  background: var(--flex);
   color: #fff;
 }
 
@@ -383,7 +410,73 @@ body {
   font-size: 1.05rem;
 }
 
-/* ---- Round Info Line ---- */
+/* ---- Energy & Status ---- */
+.status-energy {
+  font-size: 0.85rem;
+  color: var(--energy);
+  margin-top: 2px;
+}
+.status-tags {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.status-tag {
+  font-size: 0.7rem;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.tag-defense {
+  background: var(--defense);
+  color: #fff;
+}
+.tag-guard {
+  background: var(--gold);
+  color: #1a1a2e;
+}
+
+/* ---- Cycle Info ---- */
+.cycle-info {
+  text-align: center;
+  padding: 4px 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+.cycle-bleed {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ---- Energy & Status ---- */
+.status-energy {
+  font-size: 0.85rem;
+  color: var(--energy);
+  margin-top: 2px;
+}
+.status-tags {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.status-tag {
+  font-size: 0.7rem;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.tag-defense {
+  background: var(--defense);
+  color: #fff;
+}
+.tag-guard {
+  background: var(--gold);
+  color: #1a1a2e;
+}
+
 .round-info {
   text-align: center;
   padding: 8px 0;

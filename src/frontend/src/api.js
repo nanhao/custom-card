@@ -37,17 +37,16 @@ export async function getState(gameId) {
 /**
  * Play a round.
  *
- * In PVP mode both card1 and card2 are sent.
- * In PVE mode only card1 is sent (server auto-computes AI card).
- *
  * @param {string} gameId
  * @param {string} card1 - Player 1's card.
  * @param {string|null} [card2=null] - Player 2's card (PVP only).
+ * @param {string|null} [buildTarget=null] - Build target card (only when card1=build).
  * @returns {{ round_result: object, state: object }}
  */
-export async function playRound(gameId, card1, card2 = null) {
+export async function playRound(gameId, card1, card2 = null, buildTarget = null) {
   const body = { cards_1: [card1] };
   if (card2 !== null) body.cards_2 = [card2];
+  if (buildTarget !== null) body.build_target_1 = buildTarget;
   const resp = await fetch(`${API_BASE}/games/${gameId}/play`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

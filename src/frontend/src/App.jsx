@@ -29,6 +29,10 @@ export default function App() {
   const [roundLog, setRoundLog] = useState([]);    // accumulated round results
   const [error, setError] = useState(null);
 
+  // ---- BUILD card sub-state ----
+  const [buildPhase, setBuildPhase] = useState(null);  // null | 'select_target'
+  const [pendingBuild, setPendingBuild] = useState(null); // card string buffered for BUILD
+
   // ---- Cleanup game on unmount ----
   useEffect(() => {
     return () => { if (gameId) deleteGame(gameId).catch(() => {}); };
@@ -89,6 +93,8 @@ export default function App() {
     setRoundLog([]);
     setError(null);
     setPhase('loading');
+    setBuildPhase(null);
+    setPendingBuild(null);
   }
 
   // =========================================================================
@@ -116,12 +122,37 @@ export default function App() {
     const hand = state.players['1'].hand;
     if (countInHand(hand, card) === 0) return;
 
+    // BUILD card requires target selection
+    if (card === 'build') {
+      setPendingBuild(card);
+      setBuildPhase('select_target');
+      return;
+    }
+
+    // Normal card — play immediately
+    await doPlayCard(card, null);
+  }
+
+  /** User selected a build target (or cancelled). */
+  async function handleSelectBuildTarget(target) {
+    if (target === null) {
+      // Cancelled
+      setBuildPhase(null);
+      setPendingBuild(null);
+      return;
+    }
+    setBuildPhase(null);
+    setPendingBuild(null);
+    await doPlayCard('build', target);
+  }
+
+  /** Common play-round logic for both normal cards and BUILD. */
+  async function doPlayCard(card, buildTarget) {
     if (mode === 'pve') {
-      // PVE: auto-play — no pass screen needed.
       setP1Card(card);
       setPhase('loading');
       try {
-        const data = await playRound(gameId, card);
+        const data = await playRound(gameId, card, null, buildTarget);
         setState(data.state);
         setRoundLog(prev => [...prev, data.round_result]);
         setP1Card(null);
@@ -131,7 +162,7 @@ export default function App() {
         setPhase('select');
       }
     } else {
-      // PVP: buffer P1 card, show pass screen (synchronous, no await).
+      // PVP: buffer P1 card, show pass screen
       setP1Card(card);
       setPhase('pvp_pass');
     }
@@ -159,6 +190,8 @@ export default function App() {
   // ---- Next round ----
   async function handleNextRound() {
     setPhase('loading');
+    setBuildPhase(null);
+    setPendingBuild(null);
     try {
       const data = await getState(gameId);
       setState(data.state);
@@ -270,8 +303,11 @@ export default function App() {
         aiName={aiName}
         p1Card={p1Card}
         roundLog={roundLog}
+        buildPhase={buildPhase}
+        pendingBuild={pendingBuild}
         onSelectCard={handleSelectCard}
         onPlayer2Card={handlePlayer2Card}
+        onSelectBuildTarget={handleSelectBuildTarget}
         onNextRound={handleNextRound}
         onNewGame={handleNewGame}
         onBackToMenu={handleBackToMenu}
