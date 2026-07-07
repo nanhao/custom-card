@@ -122,7 +122,7 @@ export default function GameBoard({
               <div className="status-energy">{energyBar} {p.energy}/5</div>
               {statusTags.length > 0 && <div className="status-tags">{statusTags}</div>}
               {chips.length > 0 && <div className="status-history">{chips}</div>}
-              <div className="status-piles" onClick={onViewPiles} title="Click to view draw & discard piles">
+              <div className="status-piles" onClick={pid === '1' ? onViewPiles : undefined} title={pid === '1' ? 'Click to view draw & discard piles' : undefined}>
                 Hand: {p.hand.length} | Deck: {p.draw_pile_count ?? 0} | Disc: {p.discard_pile_count ?? 0}
               </div>
             </div>
