@@ -105,6 +105,12 @@ def _serialize_round_result(rr: RoundResult) -> dict:
         "cycle_ended": rr.cycle_ended,
         "bleed_damage_1": rr.bleed_damage_1,
         "bleed_damage_2": rr.bleed_damage_2,
+        "after_cycle": rr.after_cycle,
+        "after_round_in_cycle": rr.after_round_in_cycle,
+        "after_hp_1": rr.after_hp_1,
+        "after_hp_2": rr.after_hp_2,
+        "after_statuses_1": rr.after_statuses_1,
+        "after_statuses_2": rr.after_statuses_2,
     }
 
 
@@ -131,6 +137,12 @@ def _deserialize_round_result(data: dict) -> RoundResult:
         cycle_ended=data.get("cycle_ended", False),
         bleed_damage_1=data.get("bleed_damage_1", 0),
         bleed_damage_2=data.get("bleed_damage_2", 0),
+        after_cycle=data.get("after_cycle", data.get("cycle", 1)),
+        after_round_in_cycle=data.get("after_round_in_cycle", data.get("round_in_cycle", 1)),
+        after_hp_1=data.get("after_hp_1", data.get("hp_1_after", 20)),
+        after_hp_2=data.get("after_hp_2", data.get("hp_2_after", 20)),
+        after_statuses_1=data.get("after_statuses_1", []),
+        after_statuses_2=data.get("after_statuses_2", []),
     )
 
 

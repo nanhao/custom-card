@@ -19,20 +19,19 @@ from src.backend.game.resolver import CardResolver
 class RoundResult:
     """Value object returned by GameCore.play_round().
 
-    Attributes:
-        round: Global round number.
-        cycle: Current cycle number.
-        round_in_cycle: Position within the cycle (1–5).
-        cards_1, cards_2: Cards played this round.
-        damage_1, damage_2: Damage dealt to each player.
-        hp_1_after, hp_2_after: HP after resolution.
-        energy_1_after, energy_2_after: Energy after resolution.
-        statuses_1, statuses_2: Statuses after resolution.
-        details: Human-readable resolution details.
-        is_game_over: Whether the game ended this round.
-        winner: "1", "2", "draw", or None.
+    Phase 1 — After card resolution, before cycle-end processing:
+        round, cycle, round_in_cycle, cards, damage, hp, energy, statuses, details.
+        Statuses are still active; HP does NOT include cycle bleed.
+
+    Phase 2 — Cycle-end actions (informational):
+        cycle_ended, bleed_damage_1, bleed_damage_2.
+
+    Phase 3 — Final state after all processing (tick + bleed + cycle switch):
+        after_cycle, after_round_in_cycle, after_hp, after_statuses.
+        When no cycle end, these equal Phase 1 values.
     """
 
+    # Phase 1: After card resolution
     round: int
     cycle: int
     round_in_cycle: int
@@ -47,11 +46,22 @@ class RoundResult:
     statuses_1: list[str]
     statuses_2: list[str]
     details: list[str]
-    is_game_over: bool
-    winner: str | None
+
+    # Phase 2: Cycle-end actions
     cycle_ended: bool = False
     bleed_damage_1: int = 0
     bleed_damage_2: int = 0
+
+    # Phase 3: Final state after all processing
+    after_cycle: int = 0
+    after_round_in_cycle: int = 0
+    after_hp_1: int = 0
+    after_hp_2: int = 0
+    after_statuses_1: list[str] = field(default_factory=list)
+    after_statuses_2: list[str] = field(default_factory=list)
+
+    is_game_over: bool = False
+    winner: str | None = None
 
 
 class GameCore:
@@ -186,7 +196,8 @@ class GameCore:
         self.player_1.history.extend(cards_1)
         self.player_2.history.extend(cards_2)
 
-        # Step 9: Build initial result (pre-cycle-end check)
+        # Step 9: Build Phase 1 — snapshot after card resolution, before cycle processing.
+        # HP does NOT include bleed; statuses are still active.
         result = RoundResult(
             round=self.round_number,
             cycle=self.cycle_number,
@@ -206,6 +217,13 @@ class GameCore:
             winner=None,
             cycle_ended=False,
         )
+        # Default Phase 3 = Phase 1 (no cycle transition)
+        result.after_cycle = result.cycle
+        result.after_round_in_cycle = result.round_in_cycle
+        result.after_hp_1 = result.hp_1_after
+        result.after_hp_2 = result.hp_2_after
+        result.after_statuses_1 = list(result.statuses_1)
+        result.after_statuses_2 = list(result.statuses_2)
 
         # Step 10: Check game end from damage
         is_over, winner = self._check_game_end()
@@ -215,27 +233,35 @@ class GameCore:
             self.round_log.append(result)
             return result
 
-        # Step 11: Check cycle end — if round 5 complete, apply bleed + new cycle
+        # Step 11: Cycle-end processing — tick statuses, apply bleed, start new cycle
         if self.round_in_cycle >= self.ROUNDS_PER_CYCLE:
-            self.player_1.take_damage(1)
-            self.player_2.take_damage(1)
-            # Update result to reflect cycle-end processing
-            result.hp_1_after = self.player_1.hp
-            result.hp_2_after = self.player_2.hp
+            # Phase 2: record cycle-end actions
             result.cycle_ended = True
             result.bleed_damage_1 = 1
             result.bleed_damage_2 = 1
-            # Check game end again after cycle bleed
+            # Expire statuses and apply bleed
+            self._tick_status_lifetimes()
+            self.player_1.take_damage(1)
+            self.player_2.take_damage(1)
+            # Check game end after bleed
             is_over, winner = self._check_game_end()
             if is_over:
                 result.is_game_over = True
                 result.winner = winner
-                self.round_log.append(result)
-                return result
             # Start new cycle
             self.cycle_number += 1
-            self.round_in_cycle = 0  # Will be incremented to 1 below
+            self.round_in_cycle = 0  # incremented to 1 below
             self._start_cycle()
+            # Phase 3: final snapshot after all processing
+            result.after_cycle = self.cycle_number
+            result.after_round_in_cycle = 1  # will be 1 after increment below
+            result.after_hp_1 = self.player_1.hp
+            result.after_hp_2 = self.player_2.hp
+            result.after_statuses_1 = list(self.player_1.statuses)
+            result.after_statuses_2 = list(self.player_2.statuses)
+            if is_over:
+                self.round_log.append(result)
+                return result
 
         # Step 12: Advance round
         self.round_number += 1
@@ -313,6 +339,12 @@ class GameCore:
                     "cycle_ended": rr.cycle_ended,
                     "bleed_damage_1": rr.bleed_damage_1,
                     "bleed_damage_2": rr.bleed_damage_2,
+                    "after_cycle": rr.after_cycle,
+                    "after_round_in_cycle": rr.after_round_in_cycle,
+                    "after_hp_1": rr.after_hp_1,
+                    "after_hp_2": rr.after_hp_2,
+                    "after_statuses_1": rr.after_statuses_1,
+                    "after_statuses_2": rr.after_statuses_2,
                 }
                 for rr in self.round_log
             ],

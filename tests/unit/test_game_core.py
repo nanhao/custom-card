@@ -76,14 +76,18 @@ class TestCycleMechanics:
         gm.player_2.hp = 10
 
         result = gm.play_round([CardType.ATTACK], [CardType.ATTACK])
-        # Both took 1 attack damage + 1 cycle bleed = 2 total → hp 10→8
+        # Both took 1 attack damage → hp 10→9 (Phase 1, pre-bleed)
+        # Then cycle bleed 1 → hp 9→8 (Phase 3, after_)
         assert gm.player_1.hp == 8
         assert gm.player_2.hp == 8
-        assert result.hp_1_after == 8  # HP reflects bleed
-        assert result.hp_2_after == 8
+        assert result.hp_1_after == 9  # Phase 1: before bleed
+        assert result.hp_2_after == 9
         assert result.cycle_ended is True
-        assert gm.cycle_number == 2
-        assert gm.round_in_cycle == 1
+        assert result.bleed_damage_1 == 1
+        assert result.after_hp_1 == 8  # Phase 3: after bleed
+        assert result.after_hp_2 == 8
+        assert result.after_cycle == 2
+        assert result.after_round_in_cycle == 1
 
     def test_mid_cycle_no_bleed(self):
         """Round 3 of a cycle: no cycle_ended, no HP bleed."""

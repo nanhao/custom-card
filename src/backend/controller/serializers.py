@@ -80,6 +80,12 @@ def round_result_to_dict(rr: RoundResult) -> dict:
         "cycle_ended": rr.cycle_ended,
         "bleed_damage_1": rr.bleed_damage_1,
         "bleed_damage_2": rr.bleed_damage_2,
+        "after_cycle": rr.after_cycle,
+        "after_round_in_cycle": rr.after_round_in_cycle,
+        "after_hp_1": rr.after_hp_1,
+        "after_hp_2": rr.after_hp_2,
+        "after_statuses_1": rr.after_statuses_1,
+        "after_statuses_2": rr.after_statuses_2,
     }
 
 
