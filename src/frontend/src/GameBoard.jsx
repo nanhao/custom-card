@@ -142,42 +142,6 @@ export default function GameBoard({
 
     // P1 cards: clickable in select phase; during BUILD target selection show different UI.
     const renderP1Cards = () => {
-      // BUILD target selection sub-phase
-      if (buildPhase === 'select_target') {
-        const energy = pH.energy;
-        const allTargets = ['attack', 'defense', 'heavy', 'counter', 'energy', 'build', 'flex'];
-        return (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ textAlign: 'center', color: 'var(--gold)', marginBottom: 8, fontSize: '0.85rem' }}>
-              🔨 Select a card to build (Energy: {energy})
-            </div>
-            <div className="card-grid">
-              {allTargets.map(card => {
-                // build_cost: counter=2, flex=2, others=1
-                const cost = (card === 'counter' || card === 'flex') ? 2 : 1;
-                const canAfford = cost <= energy;
-                return (
-                  <button key={card} className={`card-btn card-${card}`}
-                    disabled={!canAfford}
-                    onClick={() => onSelectBuildTarget?.(card)}
-                    title={canAfford ? `Cost: ${cost} energy` : `Need ${cost} energy (have ${energy})`}
-                  >
-                    <span className="icon">{CARD_ICONS[card]}</span>
-                    <span>{CARD_NAMES[card]}</span>
-                    <span className="count">{canAfford ? `${cost}⚡` : '✘'}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ textAlign: 'center', marginTop: 8 }}>
-              <button className="btn btn-secondary btn-small" onClick={() => onSelectBuildTarget?.(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        );
-      }
-
       // Normal select phase
       if (phase === 'select') {
         return (
@@ -271,15 +235,6 @@ export default function GameBoard({
           Cycle {state.cycle}, Round {state.round_in_cycle}/5{' '}
           — <span className="highlight">{turnLabel}</span>{' '}
           — Select a card
-        </div>
-      );
-    }
-
-    // BUILD target selection
-    if (buildPhase === 'select_target') {
-      return (
-        <div className="round-info">
-          🔨 Select which card to build with your BUILD card
         </div>
       );
     }
@@ -448,6 +403,34 @@ export default function GameBoard({
                       <span key={i} className={`pile-card-chip chip-${c}`}>{CARD_ICONS[c]}</span>
                     ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {buildPhase === 'select_target' && (
+        <div className="pile-overlay" onClick={() => onSelectBuildTarget?.(null)}>
+          <div className="pile-modal" onClick={e => e.stopPropagation()}>
+            <h3>🔨 选择要构建的卡牌</h3>
+            <div className="energy-info" style={{ color: 'var(--muted)', fontSize: '0.85rem', margin: '8px 0 14px' }}>
+              当前能量：<span style={{ color: 'var(--energy)', fontWeight: 700 }}>{state.players['1'].energy}</span>
+            </div>
+            <div className="build-grid">
+              {CARD_ORDER.map(card => {
+                const cost = (card === 'counter' || card === 'flex') ? 2 : 1;
+                const canAfford = cost <= state.players['1'].energy;
+                return (
+                  <button key={card} className={`build-card card-${card}`}
+                    disabled={!canAfford}
+                    onClick={() => onSelectBuildTarget?.(card)}>
+                    <span className="build-icon">{CARD_ICONS[card]}</span>
+                    <span>{CARD_NAMES[card]}</span>
+                    <span className="build-cost">{cost}⚡</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 12 }}>
+              <button className="btn btn-secondary" onClick={() => onSelectBuildTarget?.(null)}>取消</button>
             </div>
           </div>
         </div>
