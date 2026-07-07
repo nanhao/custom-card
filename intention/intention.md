@@ -96,3 +96,6 @@ The logs should meet the following critiria:
 
 # intention_id=7
 现在的 sample 文件有问题，首先，每一局游戏应该组成一个单元，然后每局游戏里应该有两个玩家视角，每个玩家视角的动作序列应该又组成一个子单元才对。因为训练的时候，是按照子单元为单位喂给模型的。一个子单元喂完，h要清空重来的。
+
+# intention_id=8
+修复了 sample 里面 reward 全部为终局奖励的问题
