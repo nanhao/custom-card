@@ -312,14 +312,16 @@ class GameCore:
         """Start a new cycle: reclaim hands → shuffle discard into draw → draw 7 cards.
 
         Per design/11 D4:
-        1. Move all cards from hands to discard_pile.
-        2. Move all cards from discard_pile to draw_pile.
-        3. Shuffle the draw_pile.
-        4. Draw 7 cards from draw_pile into hand.
+        1. Clear statuses (each status only lasts until end of round).
+        2. Move all cards from hands to discard_pile.
+        3. Move all cards from discard_pile to draw_pile.
+        4. Shuffle the draw_pile.
+        5. Draw 7 cards from draw_pile into hand.
         """
         for player in (self.player_1, self.player_2):
             if player is None:
                 continue
+            player.statuses = []  # Clear per-round statuses at cycle start
             # Move hand cards to discard
             player.discard_pile.extend(player.hand)
             player.hand = []
