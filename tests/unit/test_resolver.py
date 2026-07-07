@@ -244,16 +244,18 @@ class TestHeavyStrike:
     """TC-RS-10, TC-RS-11: Heavy strike mechanics."""
 
     def test_heavy_blocked_by_guard(self):
-        """TC-RS-10: HEAVY blocked by '联防'."""
+        """TC-RS-10: HEAVY blocked by '联防' (granted same-round by DEFENSE with pre-existing defense)."""
         result = CardResolver.resolve(
             cards_1=[CardType.HEAVY],
-            cards_2=[CardType.ATTACK],
+            cards_2=[CardType.DEFENSE],
             player_1_statuses=[],
-            player_2_statuses=["联防"],
+            player_2_statuses=["defense"],  # pre-existing from previous round
             p1_attack_streak=0,
             p2_attack_streak=0,
         )
+        # P2's DEFENSE grants 联防 (had defense pre-round), blocks HEAVY
         assert result.damage_2 == 0
+        assert "联防" in result.statuses_granted_2
 
     def test_heavy_not_blocked_by_defense(self):
         """TC-RS-11: HEAVY NOT blocked by plain 'defense'."""

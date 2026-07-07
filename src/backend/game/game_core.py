@@ -158,7 +158,7 @@ class GameCore:
         # Step 5: Apply energy and statuses
         self.player_1.add_energy(resolution.energy_delta_1)
         self.player_2.add_energy(resolution.energy_delta_2)
-        # Clear previous round statuses, apply new ones
+        # Replace statuses with the full set computed by resolver this round
         self.player_1.statuses = list(resolution.statuses_granted_1)
         self.player_2.statuses = list(resolution.statuses_granted_2)
 

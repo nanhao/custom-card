@@ -118,9 +118,10 @@ class CardResolver:
         p1_had_defense_pre = "defense" in player_1_statuses
         p2_had_defense_pre = "defense" in player_2_statuses
 
-        # Working state — mutated during resolution
-        statuses_1: list[str] = list(player_1_statuses)
-        statuses_2: list[str] = list(player_2_statuses)
+        # Working state — start empty; all statuses must be re-granted by effects each round.
+        # player_1_statuses/player_2_statuses are only used for had_defense_pre checks.
+        statuses_1: list[str] = []
+        statuses_2: list[str] = []
         dmg_1 = 0
         dmg_2 = 0
         energy_1 = 0
@@ -151,17 +152,15 @@ class CardResolver:
                 if detail:
                     details.append(detail)
 
-        # Compute newly granted statuses
-        new_1 = [s for s in statuses_1 if s not in player_1_statuses]
-        new_2 = [s for s in statuses_2 if s not in player_2_statuses]
+        # Return all statuses computed this round (no pre-round carry-over)
 
         return ResolutionResult(
             damage_1=dmg_1,
             damage_2=dmg_2,
             energy_delta_1=energy_1,
             energy_delta_2=energy_2,
-            statuses_granted_1=new_1,
-            statuses_granted_2=new_2,
+            statuses_granted_1=list(statuses_1),
+            statuses_granted_2=list(statuses_2),
             details=details,
         )
 
@@ -194,10 +193,10 @@ def _process_effect(
     src = effect.source_player
 
     if effect.effect_type == "grant_defense":
-        if src == "1" and "defense" not in statuses_1:
+        if src == "1":
             statuses_1 = list(statuses_1) + ["defense"]
             detail = "P1 gains defense"
-        elif src == "2" and "defense" not in statuses_2:
+        elif src == "2":
             statuses_2 = list(statuses_2) + ["defense"]
             detail = "P2 gains defense"
 
