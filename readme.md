@@ -92,10 +92,8 @@ Open **http://localhost:5173** in your browser. The Vite dev server proxies
 
 ```bash
 # Build the React frontend
-cd src/frontend && npm run build
-
-# Start the server (serves both API and static frontend)
-cd ../.. && python src/backend/scripts/run.py
+# Build frontend then start server
+npm run build --prefix src/frontend ; python src/backend/scripts/run.py
 ```
 
 Open **http://127.0.0.1:5000** in your browser.
