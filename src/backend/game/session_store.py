@@ -147,6 +147,8 @@ def _serialize_game_core(
         "winner": gm.winner,
         "round_log": [_serialize_round_result(rr) for rr in gm.round_log],
         "mode": gm.mode,
+        "status_lifetimes_1": gm._status_lifetimes_1,
+        "status_lifetimes_2": gm._status_lifetimes_2,
     }
     if gm.mode == "pve" and ai is not None:
         data["ai"] = ai
@@ -193,6 +195,8 @@ def _deserialize_game_core(data: dict) -> tuple[GameCore, dict]:
     gm.is_over = data["is_over"]
     gm.winner = data["winner"]
     gm.round_log = [_deserialize_round_result(rr) for rr in data["round_log"]]
+    gm._status_lifetimes_1 = data.get("status_lifetimes_1", [])
+    gm._status_lifetimes_2 = data.get("status_lifetimes_2", [])
 
     metadata = {
         "mode": mode, "ai": ai,

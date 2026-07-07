@@ -80,6 +80,9 @@ class GameCore:
         self.is_over: bool = False
         self.winner: str | None = None
         self.round_log: list[RoundResult] = []
+        # Status lifetime tracking: index-aligned with player.statuses
+        self._status_lifetimes_1: list[int] = []
+        self._status_lifetimes_2: list[int] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -135,10 +138,13 @@ class GameCore:
             ValueError: If game is over, cards not in hand, energy insufficient
                         for BUILD, or players are not initialized.
         """
-        # Step 1: Validate
+        # Step 1: Expire statuses from previous round (decrement lifetimes, remove expired)
+        self._tick_status_lifetimes()
+
+        # Step 2: Validate
         self._validate(cards_1, cards_2, build_target_1, build_target_2)
 
-        # Step 2: Compute attack streaks from history
+        # Step 3: Compute attack streaks from history
         p1_streak = CardResolver.get_consecutive_attack(self.player_1.history)
         p2_streak = CardResolver.get_consecutive_attack(self.player_2.history)
 
@@ -158,9 +164,11 @@ class GameCore:
         # Step 5: Apply energy and statuses
         self.player_1.add_energy(resolution.energy_delta_1)
         self.player_2.add_energy(resolution.energy_delta_2)
-        # Replace statuses with the full set computed by resolver this round
+        # Replace statuses with the full set computed this round, lifetime=1 each
         self.player_1.statuses = list(resolution.statuses_granted_1)
         self.player_2.statuses = list(resolution.statuses_granted_2)
+        self._status_lifetimes_1 = [1] * len(resolution.statuses_granted_1)
+        self._status_lifetimes_2 = [1] * len(resolution.statuses_granted_2)
 
         # Step 6: Process BUILD construction
         self._process_build(cards_1[0], build_target_1, self.player_1)
@@ -308,20 +316,43 @@ class GameCore:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _tick_status_lifetimes(self) -> None:
+        """Decrement all status lifetimes by 1, remove expired ones.
+
+        Called at the start of each round. Each status has a remaining
+        lifetime in rounds; when it reaches 0 the status is removed.
+        """
+        for player, lifetimes in (
+            (self.player_1, self._status_lifetimes_1),
+            (self.player_2, self._status_lifetimes_2),
+        ):
+            if player is None:
+                continue
+            new_statuses = []
+            new_lifetimes = []
+            for s, life in zip(player.statuses, lifetimes):
+                remaining = life - 1
+                if remaining > 0:
+                    new_statuses.append(s)
+                    new_lifetimes.append(remaining)
+            player.statuses = new_statuses
+            if player is self.player_1:
+                self._status_lifetimes_1 = new_lifetimes
+            else:
+                self._status_lifetimes_2 = new_lifetimes
+
     def _start_cycle(self) -> None:
         """Start a new cycle: reclaim hands → shuffle discard into draw → draw 7 cards.
 
         Per design/11 D4:
-        1. Clear statuses (each status only lasts until end of round).
-        2. Move all cards from hands to discard_pile.
-        3. Move all cards from discard_pile to draw_pile.
-        4. Shuffle the draw_pile.
-        5. Draw 7 cards from draw_pile into hand.
+        1. Move all cards from hands to discard_pile.
+        2. Move all cards from discard_pile to draw_pile.
+        3. Shuffle the draw_pile.
+        4. Draw 7 cards from draw_pile into hand.
         """
         for player in (self.player_1, self.player_2):
             if player is None:
                 continue
-            player.statuses = []  # Clear per-round statuses at cycle start
             # Move hand cards to discard
             player.discard_pile.extend(player.hand)
             player.hand = []
