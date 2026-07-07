@@ -4,13 +4,14 @@ Per design/5 D1, this script contains NO business logic — only argument
 parsing and delegation. The game loop lives in app/selfplay_runner.py.
 
 NEW (design/6): reads config/backend.json, calls LoggerBuilder.init().
+NEW (design/10): adds --perspective argument for viewpoint filtering.
 
 Usage:
     python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1
     python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 200
     python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \\
         --temperature 0.5 --temp_step 3 --temp_side both \\
-        --sample_output data/samples.jsonl --temp_seed 42
+        --perspective ai1 --sample_output data/samples.jsonl --temp_seed 42
 """
 
 import argparse
@@ -70,6 +71,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--sample_output", type=str, default=None,
         help="Path for PPO sample JSONL output file",
     )
+    parser.add_argument(
+        "--perspective", choices=["ai1", "ai2", "both"], default="both",
+        help="Perspectives to include in sample file (default: both)",
+    )
     return parser
 
 
@@ -114,6 +119,16 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
+    # Per design/10 TC-SP-05: warn if perspective is set but
+    # sample_output is missing (perspective has no effect).
+    if args.perspective != "both" and args.sample_output is None:
+        print(
+            "WARNING: --perspective is set to '{}' but --sample_output "
+            "is not specified. Perspective filtering has no effect "
+            "without sample output.".format(args.perspective),
+            file=sys.stderr,
+        )
+
     # Per design/6 D4: initialize the logger singleton from config.
     # Defaults to disabled if config is missing or logging section absent.
     logging_enabled, log_dir = _load_logging_config()
@@ -129,6 +144,7 @@ def main() -> None:
         temp_side=args.temp_side,
         temp_seed=args.temp_seed,
         sample_output=args.sample_output,
+        perspective=args.perspective,
     )
 
     # Create AppManager and run

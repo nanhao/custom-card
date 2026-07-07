@@ -1,15 +1,14 @@
 """Split PPO Training CLI — thin wrapper around TrainingRunner.run().
 
-Per design/9 D3, this script contains NO business logic — only argument
-parsing, config loading, and delegation. Training logic in training_runner.py.
+Per design/9 D3 and design/10 D3, this script contains NO business logic —
+only argument parsing, config loading, and delegation. Training logic in
+training_runner.py.
 
 Usage:
     python src/backend/scripts/train.py ^
         --sample-path samples/rnn_v2_self_play.json ^
-        --policy-output-path src/backend/ai/rnn_v1/gen2/policy.pth ^
-        --value-output-path src/backend/ai/rnn_v1/gen2/value.pth ^
+        --output-dir src/backend/ai/rnn_v1/gen2 ^
         --model rnn_v2.1 ^
-        --value-epochs 20 ^
         --epoch 10
 """
 
@@ -37,24 +36,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="File path or directory of JSON sample files",
     )
     parser.add_argument(
-        "--policy-output-path", required=True,
-        help="Output .pth for policy network weights",
-    )
-    parser.add_argument(
-        "--value-output-path", required=True,
-        help="Output .pth for value network weights",
+        "--output-dir", required=True,
+        help="Directory to save policy.pth and value.pth",
     )
     parser.add_argument(
         "--model", required=True,
         help="AI registry name to train (e.g. rnn_v2.1)",
     )
     parser.add_argument(
-        "--value-epochs", type=int, required=True,
-        help="Number of value training epochs (Phase 1)",
-    )
-    parser.add_argument(
         "--epoch", type=int, required=True,
-        help="Number of policy training epochs (Phase 3)",
+        help="Number of training epochs for both value and policy phases",
     )
     return parser
 
@@ -112,11 +103,9 @@ def main() -> None:
 
     config = TrainingConfig(
         sample_path=args.sample_path,
-        policy_output_path=args.policy_output_path,
-        value_output_path=args.value_output_path,
+        output_dir=args.output_dir,
         model=args.model,
         epoch=args.epoch,
-        value_epochs=args.value_epochs,
         policy_lr=training_cfg["policy_lr"],
         value_lr=training_cfg["value_lr"],
         weight_decay=training_cfg["weight_decay"],

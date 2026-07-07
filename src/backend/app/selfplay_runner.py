@@ -76,6 +76,7 @@ class SelfPlayRunner:
             temp_side=config.temp_side,
             temp_seed=config.temp_seed,
             sample_output=config.sample_output,
+            perspective=config.perspective,
         )
 
         # 1. Validate that both AIs exist in the registry
@@ -318,6 +319,7 @@ class SelfPlayRunner:
                 )
 
             # Record PPO samples (if sample output is configured)
+            # Per design/10 D2: filter by config.perspective
             if config.sample_output is not None:
                 state_vec_p1 = Converter.build_input_vector(
                     pre_state, player_key="1"
@@ -325,20 +327,22 @@ class SelfPlayRunner:
                 state_vec_p2 = Converter.build_input_vector(
                     pre_state, player_key="2"
                 )
-                game_samples.append({
-                    "player": "1",
-                    "state": state_vec_p1,
-                    "action": card1,
-                    "value": val1,
-                    "log_prob": lp1,
-                })
-                game_samples.append({
-                    "player": "2",
-                    "state": state_vec_p2,
-                    "action": card2,
-                    "value": val2,
-                    "log_prob": lp2,
-                })
+                if config.perspective in ("ai1", "both"):
+                    game_samples.append({
+                        "player": "1",
+                        "input": state_vec_p1,
+                        "action": card1,
+                        "value": val1,
+                        "log_prob": lp1,
+                    })
+                if config.perspective in ("ai2", "both"):
+                    game_samples.append({
+                        "player": "2",
+                        "input": state_vec_p2,
+                        "action": card2,
+                        "value": val2,
+                        "log_prob": lp2,
+                    })
 
         # d. Determine winner and rewards
         winner = gm.winner
@@ -371,6 +375,7 @@ class SelfPlayRunner:
                 p2_reward=p2_reward,
                 ai1=config.ai1,
                 ai2=config.ai2,
+                perspective=config.perspective,
             )
             logger.log(
                 "DEBUG", "selfplay.sample_game_built",
@@ -414,11 +419,15 @@ class SelfPlayRunner:
         p2_reward: float,
         ai1: str,
         ai2: str,
+        perspective: str = "both",
     ) -> dict:
         """Build a structured game sample dict (game → perspective → steps).
 
         Splits flat game_samples by 'player' field, assigns rewards,
         and returns the hierarchy defined in design/7 interfaces.md §2.
+
+        Per design/10 D2: only perspectives matching the `perspective`
+        parameter are included in the output.
         """
         # Find the last step index for each player.
         # Only the terminal step receives the game-outcome reward;
@@ -440,7 +449,7 @@ class SelfPlayRunner:
             else:
                 reward = p2_reward if i == last_p2_idx else 0.0
             step = {
-                "state": entry["state"],
+                "input": entry["input"],
                 "action": entry["action"],
                 "reward": reward,
                 "value": entry["value"],
@@ -451,15 +460,19 @@ class SelfPlayRunner:
             else:
                 p2_steps.append(step)
 
-        # Build the structured game sample dict
+        # Build the structured game sample dict.
+        # Per design/10 D2: only include perspectives matching config.perspective.
+        perspectives: list[dict] = []
+        if perspective in ("ai1", "both"):
+            perspectives.append({"player": "1", "ai": ai1, "steps": p1_steps})
+        if perspective in ("ai2", "both"):
+            perspectives.append({"player": "2", "ai": ai2, "steps": p2_steps})
+
         return {
             "game_id": game_id,
             "winner": winner,
             "rounds": rounds_played,
-            "perspectives": [
-                {"player": "1", "ai": ai1, "steps": p1_steps},
-                {"player": "2", "ai": ai2, "steps": p2_steps},
-            ],
+            "perspectives": perspectives,
         }
 
     # ------------------------------------------------------------------

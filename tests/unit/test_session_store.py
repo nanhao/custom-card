@@ -450,12 +450,12 @@ class TestSessionStoreModeSerialization:
         gm = GameCore(mode="pve")
         gm.start_game()
         ai_state = [0.1, -0.2, 0.3, 0.0, 0.5, -0.1, 0.2, 0.0]
-        store.save("game-1", gm, ai_state=ai_state, ai="rnn_v2.1")
+        store.save("game-1", gm, ai_state=ai_state, ai="rnn_v1.1")
 
         restored, metadata = store.load("game-1")
         assert restored.mode == "pve"
         assert metadata["mode"] == "pve"
-        assert metadata["ai"] == "rnn_v2.1"
+        assert metadata["ai"] == "rnn_v1.1"
         assert metadata["ai_state"] == ai_state
 
     def test_legacy_file_no_mode_defaults_to_pvp(self, temp_dir):
@@ -496,11 +496,11 @@ class TestSessionStoreModeSerialization:
         store = SessionStore(config_path=str(config_path))
         gm = GameCore(mode="pve")
         gm.start_game()
-        store.save("game-1", gm, ai_state=[0.0] * 8, ai="rnn_v2.1")
+        store.save("game-1", gm, ai_state=[0.0] * 8, ai="rnn_v1.1")
 
         data = json.loads((saves_dir / "game-1.json").read_text())
         assert data["mode"] == "pve"
-        assert data["ai"] == "rnn_v2.1"
+        assert data["ai"] == "rnn_v1.1"
 
     def test_pvp_save_file_has_no_ai_state(self, temp_dir):
         """TC-SS5: PVP save file does not contain ai_state."""
@@ -536,7 +536,7 @@ class TestSessionStoreModeSerialization:
             "winner": None,
             "round_log": [],
             "mode": "pve",
-            "ai": "rnn_v2.1",
+            "ai": "rnn_v1.1",
             # ai_state intentionally missing
         }
         (saves_dir / "pve_no_state.json").write_text(json.dumps(data))
@@ -562,7 +562,7 @@ class TestSessionStoreModeSerialization:
             "winner": None,
             "round_log": [],
             "mode": "pve",
-            "ai": "rnn_v2.1",
+            "ai": "rnn_v1.1",
             "ai_state": ["abc", 1, 2, 3, 4, 5, 6, 7],  # non-numeric
         }
         (saves_dir / "pve_corrupt.json").write_text(json.dumps(data))
@@ -588,7 +588,7 @@ class TestSessionStoreModeSerialization:
             "winner": None,
             "round_log": [],
             "mode": "pve",
-            "ai": "rnn_v2.1",
+            "ai": "rnn_v1.1",
             "ai_state": [0.1, 0.2],  # length 2, not 8
         }
         (saves_dir / "pve_short.json").write_text(json.dumps(data))
@@ -639,7 +639,7 @@ class TestSessionStoreModeSerialization:
             "winner": None,
             "round_log": [],
             "mode": "pvp",
-            "ai": "rnn_v2.1",
+            "ai": "rnn_v1.1",
             "ai_state": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
         }
         (saves_dir / "pvp_stray.json").write_text(json.dumps(data))

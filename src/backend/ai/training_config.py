@@ -1,17 +1,16 @@
 """Training configuration dataclass for split PPO training runs.
 
-Per design/9 interfaces.md §3: immutable frozen dataclass with
-validation in __post_init__. Supports split policy/value networks
-with separate learning rates and phase-specific epoch counts.
+Per design/9 interfaces.md §3 and design/10: immutable frozen dataclass
+with validation in __post_init__. Supports split policy/value networks
+with separate learning rates and unified epoch count.
 
 Attributes:
     sample_path: File path or directory. If directory, all .json files
                  inside are loaded as training samples.
-    policy_output_path: Output .pth for policy network weights.
-    value_output_path: Output .pth for value network weights.
+    output_dir: Directory to save policy.pth and value.pth.
     model: AI registry name to train (e.g. "rnn_v2.1").
-    epoch: Number of policy training epochs — Phase 3 (>=1).
-    value_epochs: Number of value training epochs — Phase 1 (>=1).
+    epoch: Number of training epochs for both value (Phase 1)
+           and policy (Phase 3) phases (>=1).
     policy_lr: Learning rate for policy optimizer (>0).
     value_lr: Learning rate for value optimizer (>0).
     weight_decay: Weight decay coefficient for AdamW (>=0).
@@ -33,11 +32,9 @@ class TrainingConfig:
     """Configuration for a three-phase split PPO training run."""
 
     sample_path: str
-    policy_output_path: str
-    value_output_path: str
+    output_dir: str
     model: str
     epoch: int
-    value_epochs: int
     policy_lr: float
     value_lr: float
     weight_decay: float
@@ -58,10 +55,12 @@ class TrainingConfig:
         # Validate integer fields
         if self.epoch < 1:
             raise ValueError("epoch must be >= 1")
-        if self.value_epochs < 1:
-            raise ValueError("value_epochs must be >= 1")
         if self.batch_size < 1:
             raise ValueError("batch_size must be >= 1")
+
+        # Validate output_dir is non-empty
+        if not self.output_dir:
+            raise ValueError("output_dir must be non-empty")
 
         # Validate gamma: (0, 1]
         if not (0 < self.gamma <= 1):

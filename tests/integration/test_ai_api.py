@@ -38,10 +38,10 @@ def app_client(tmp_path):
 
 @pytest.fixture
 def ai_game_id(app_client):
-    """Create a PVE game against rnn_v2.1 and return its game_id."""
+    """Create a PVE game against rnn_v1.1 and return its game_id."""
     resp = app_client.post(
         "/api/games",
-        data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+        data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
         content_type="application/json",
     )
     assert resp.status_code == 201
@@ -81,7 +81,7 @@ class TestListAis:
         resp = app_client.get("/api/ais")
         data = resp.get_json()
         names = [a["name"] for a in data["ais"]]
-        assert "rnn_v2.1" in names
+        assert "rnn_v1.1" in names
 
     def test_list_ais_entries_have_name_and_description(self, app_client):
         resp = app_client.get("/api/ais")
@@ -103,13 +103,13 @@ class TestCreateAIGame:
         """TC-API2: Creating a PVE game returns 201 with AI state."""
         resp = app_client.post(
             "/api/games",
-            data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+            data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
             content_type="application/json",
         )
         assert resp.status_code == 201
         data = resp.get_json()
         assert data["state"]["mode"] == "pve"
-        assert data["state"]["ai"] == "rnn_v2.1"
+        assert data["state"]["ai"] == "rnn_v1.1"
 
     def test_create_pvp_game_backward_compat(self, app_client):
         """TC-API3: Empty body creates PVP game (backward compatible)."""
@@ -294,7 +294,7 @@ class TestStateIncludesModeAI:
         resp = app_client.get(f"/api/games/{ai_game_id}")
         state = resp.get_json()["state"]
         assert state["mode"] == "pve"
-        assert state["ai"] == "rnn_v2.1"
+        assert state["ai"] == "rnn_v1.1"
 
     def test_state_includes_mode_and_ai_pvp(self, app_client, pvp_game_id):
         """GET state for PVP game includes mode='pvp' and ai=null."""
@@ -386,7 +386,7 @@ class TestFullAIGameFlow:
         # Create a fresh AI game for this test
         resp = app_client.post(
             "/api/games",
-            data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+            data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
             content_type="application/json",
         )
         gid = resp.get_json()["game_id"]
@@ -425,7 +425,7 @@ class TestFullAIGameFlow:
         # Create first game
         resp = app_client.post(
             "/api/games",
-            data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+            data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
             content_type="application/json",
         )
         gid1 = resp.get_json()["game_id"]
@@ -439,7 +439,7 @@ class TestFullAIGameFlow:
         # Create new game with same AI
         resp2 = app_client.post(
             "/api/games",
-            data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+            data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
             content_type="application/json",
         )
         gid2 = resp2.get_json()["game_id"]
@@ -514,10 +514,10 @@ def app_client(tmp_path):
 
 @pytest.fixture
 def ai_game_id(app_client):
-    """Create a PVE game against rnn_v2.1 and return its game_id."""
+    """Create a PVE game against rnn_v1.1 and return its game_id."""
     resp = app_client.post(
         "/api/games",
-        data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+        data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
         content_type="application/json",
     )
     assert resp.status_code == 201
@@ -557,7 +557,7 @@ class TestListAis:
         resp = app_client.get("/api/ais")
         data = resp.get_json()
         names = [a["name"] for a in data["ais"]]
-        assert "rnn_v2.1" in names
+        assert "rnn_v1.1" in names
 
     def test_list_ais_entries_have_name_and_description(self, app_client):
         resp = app_client.get("/api/ais")
@@ -579,13 +579,13 @@ class TestCreateAIGame:
         """TC-API2: Creating a PVE game returns 201 with AI state."""
         resp = app_client.post(
             "/api/games",
-            data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+            data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
             content_type="application/json",
         )
         assert resp.status_code == 201
         data = resp.get_json()
         assert data["state"]["mode"] == "pve"
-        assert data["state"]["ai"] == "rnn_v2.1"
+        assert data["state"]["ai"] == "rnn_v1.1"
 
     def test_create_pvp_game_backward_compat(self, app_client):
         """TC-API3: Empty body creates PVP game (backward compatible)."""
@@ -770,7 +770,7 @@ class TestStateIncludesModeAI:
         resp = app_client.get(f"/api/games/{ai_game_id}")
         state = resp.get_json()["state"]
         assert state["mode"] == "pve"
-        assert state["ai"] == "rnn_v2.1"
+        assert state["ai"] == "rnn_v1.1"
 
     def test_state_includes_mode_and_ai_pvp(self, app_client, pvp_game_id):
         """GET state for PVP game includes mode='pvp' and ai=null."""
@@ -862,7 +862,7 @@ class TestFullAIGameFlow:
         # Create a fresh AI game for this test
         resp = app_client.post(
             "/api/games",
-            data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+            data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
             content_type="application/json",
         )
         gid = resp.get_json()["game_id"]
@@ -901,7 +901,7 @@ class TestFullAIGameFlow:
         # Create first game
         resp = app_client.post(
             "/api/games",
-            data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+            data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
             content_type="application/json",
         )
         gid1 = resp.get_json()["game_id"]
@@ -915,7 +915,7 @@ class TestFullAIGameFlow:
         # Create new game with same AI
         resp2 = app_client.post(
             "/api/games",
-            data=json.dumps({"mode": "pve", "ai": "rnn_v2.1"}),
+            data=json.dumps({"mode": "pve", "ai": "rnn_v1.1"}),
             content_type="application/json",
         )
         gid2 = resp2.get_json()["game_id"]

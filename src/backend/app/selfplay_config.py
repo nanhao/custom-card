@@ -30,17 +30,24 @@ class SelfPlayConfig:
     temp_step: int | None = None
     temp_seed: int | None = None
     temp_side: str = "both"
+    perspective: str = "both"
 
     def __post_init__(self):
         """Validate field values after initialization.
 
         Raises:
-            ValueError: If temp_side is invalid or temperature is negative.
+            ValueError: If temp_side, perspective is invalid or
+                temperature is negative.
         """
         if self.temp_side not in ("player1", "player2", "both"):
             raise ValueError(
                 f"Invalid temp_side: {self.temp_side!r}. "
                 f"Must be 'player1', 'player2', or 'both'."
+            )
+        if self.perspective not in ("ai1", "ai2", "both"):
+            raise ValueError(
+                f"Invalid perspective: {self.perspective!r}. "
+                f"Must be 'ai1', 'ai2', or 'both'."
             )
         if self.temperature < 0.0:
             raise ValueError(

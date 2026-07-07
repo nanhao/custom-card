@@ -40,7 +40,7 @@ class TestSingleGame:
     def test_single_game_produces_valid_result(self, app_manager):
         """Result has correct total, winner counts sum to 1."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
+            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
         )
         result = app_manager.run_selfplay(config)
 
@@ -51,7 +51,7 @@ class TestSingleGame:
     def test_single_game_winner_is_valid(self, app_manager):
         """Winner is '1', '2', or 'draw' (reflected in counts)."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=1
+            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=1
         )
         result = app_manager.run_selfplay(config)
 
@@ -71,7 +71,7 @@ class TestZeroGames:
     def test_zero_games_empty_result(self, app_manager):
         """All counts are 0, avg_rounds is 0."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1", game_count=0
+            ai1="rnn_v1.1", ai2="rnn_v1.1", game_count=0
         )
         result = app_manager.run_selfplay(config)
 
@@ -93,7 +93,7 @@ class TestInvalidAIName:
     def test_invalid_ai1_raises_value_error(self, app_manager):
         """Unknown ai1 raises ValueError."""
         config = SelfPlayConfig(
-            ai1="nonexistent_ai", ai2="rnn_v2.1", game_count=1
+            ai1="nonexistent_ai", ai2="rnn_v1.1", game_count=1
         )
         with pytest.raises(ValueError):
             app_manager.run_selfplay(config)
@@ -101,7 +101,7 @@ class TestInvalidAIName:
     def test_invalid_ai2_raises_value_error(self, app_manager):
         """Unknown ai2 raises ValueError."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="nonexistent_ai", game_count=1
+            ai1="rnn_v1.1", ai2="nonexistent_ai", game_count=1
         )
         with pytest.raises(ValueError):
             app_manager.run_selfplay(config)
@@ -118,7 +118,7 @@ class TestDeterministicGames:
     def test_deterministic_games_produce_same_outcome(self, app_manager):
         """Two runs with temperature=0 produce identical winner counts."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1",
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=3, temperature=0.0,
         )
 
@@ -147,7 +147,7 @@ class TestSeedReproducibility:
     def test_seeded_games_are_reproducible(self, app_manager):
         """Two runs with same temp_seed produce identical win counts."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1",
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=3, temperature=1.0, temp_seed=42,
         )
 
@@ -171,7 +171,7 @@ class TestProgressLogging:
     def test_progress_printed_per_game(self, app_manager):
         """TC-L1: Each game produces a summary line."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1",
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=3, temperature=0.0,
         )
 
@@ -192,7 +192,7 @@ class TestProgressLogging:
     def test_summary_printed_at_end(self, app_manager):
         """TC-L2: Summary block with total, win counts, percentages."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1",
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=2, temperature=0.0,
         )
 
@@ -212,7 +212,7 @@ class TestProgressLogging:
         """TC-L3: Summary includes 'Samples saved to' when configured."""
         sample_path = tmp_path / "logged.jsonl"
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1",
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=1, temperature=0.0,
             sample_output=str(sample_path),
         )
@@ -231,7 +231,7 @@ class TestProgressLogging:
     def test_no_sample_path_not_in_summary(self, app_manager):
         """TC-L2: No 'Samples saved' line when sample_output is None."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1",
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=1, temperature=0.0,
             sample_output=None,
         )
@@ -260,7 +260,7 @@ class TestBalancedOutcomes:
     def test_balanced_outcomes_for_identical_ais(self, app_manager):
         """|ai1_wins − ai2_wins| ≤ 30 for 100 games with identical AIs."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1",
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=100, temperature=0.0,
         )
         result = app_manager.run_selfplay(config)
@@ -283,7 +283,7 @@ class TestNoSampleOutput:
     def test_no_sample_output_creates_no_file(self, app_manager, tmp_path):
         """Run without sample_output; no .jsonl file appears."""
         config = SelfPlayConfig(
-            ai1="rnn_v2.1", ai2="rnn_v2.1",
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
             game_count=1, sample_output=None,
         )
         app_manager.run_selfplay(config)

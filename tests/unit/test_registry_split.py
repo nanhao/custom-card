@@ -18,8 +18,8 @@ class TestSplitFormatEntry:
     """TC-REG1: split-format entry with policy/value sub-dicts."""
 
     def test_get_ai_info_returns_policy_and_value_keys(self):
-        """get_ai_info('rnn_v2.1') has 'policy' and 'value' keys."""
-        info = get_ai_info("rnn_v2.1")
+        """get_ai_info('rnn_v1.1') has 'policy' and 'value' keys."""
+        info = get_ai_info("rnn_v1.1")
         assert isinstance(info, dict)
         assert "policy" in info
         assert "value" in info
@@ -28,7 +28,7 @@ class TestSplitFormatEntry:
 
     def test_policy_subdict_has_required_keys(self):
         """'policy' sub-dict has weight_path, module, class."""
-        info = get_ai_info("rnn_v2.1")
+        info = get_ai_info("rnn_v1.1")
         policy = info["policy"]
         assert "weight_path" in policy
         assert "module" in policy
@@ -36,7 +36,7 @@ class TestSplitFormatEntry:
 
     def test_value_subdict_has_required_keys(self):
         """'value' sub-dict has weight_path, module, class."""
-        info = get_ai_info("rnn_v2.1")
+        info = get_ai_info("rnn_v1.1")
         value = info["value"]
         assert "weight_path" in value
         assert "module" in value
@@ -44,12 +44,12 @@ class TestSplitFormatEntry:
 
     def test_policy_class_is_GRUPolicyModel(self):
         """Policy entry references GRUPolicyModel."""
-        info = get_ai_info("rnn_v2.1")
+        info = get_ai_info("rnn_v1.1")
         assert info["policy"]["class"] == "GRUPolicyModel"
 
     def test_value_class_is_GRUValueModel(self):
         """Value entry references GRUValueModel."""
-        info = get_ai_info("rnn_v2.1")
+        info = get_ai_info("rnn_v1.1")
         assert info["value"]["class"] == "GRUValueModel"
 
     def test_all_entries_have_split_format(self):

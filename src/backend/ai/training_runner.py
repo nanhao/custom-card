@@ -92,9 +92,9 @@ class TrainingRunner:
         phase_records: list[dict] = []
 
         # ==============================================================
-        # Phase 1: Value Training (value_epochs)
+        # Phase 1: Value Training (epoch)
         # ==============================================================
-        for epoch in range(1, config.value_epochs + 1):
+        for epoch in range(1, config.epoch + 1):
             random.shuffle(all_perspectives)
             metrics = self._train_value_epoch(
                 all_perspectives, value_model, policy_model,
@@ -110,7 +110,7 @@ class TrainingRunner:
                 "value_grad_norm": metrics["avg_grad_norm"],
             })
             print(
-                f"[Value] Epoch {epoch}/{config.value_epochs} | "
+                f"[Value] Epoch {epoch}/{config.epoch} | "
                 f"value_loss: {metrics['avg_value_loss']:.4f} | "
                 f"grad_norm: {metrics['avg_grad_norm']:.4f}"
             )
@@ -148,8 +148,12 @@ class TrainingRunner:
             )
 
         # --- Save weights and artifacts ---
-        self._save_weights(policy_model, config.policy_output_path)
-        self._save_weights(value_model, config.value_output_path)
+        # Per design/10 D3: weights saved to {output_dir}/policy.pth
+        # and {output_dir}/value.pth.
+        policy_path = os.path.join(config.output_dir, "policy.pth")
+        value_path = os.path.join(config.output_dir, "value.pth")
+        self._save_weights(policy_model, policy_path)
+        self._save_weights(value_model, value_path)
         save_split_training_artifacts(phase_records, output_dir=None)
 
     # ------------------------------------------------------------------
@@ -233,7 +237,7 @@ class TrainingRunner:
             for game in games:
                 for p_idx, perspective in enumerate(game.get("perspectives", [])):
                     for s_idx, step in enumerate(perspective.get("steps", [])):
-                        for key in ("state", "action", "reward", "value"):
+                        for key in ("input", "action", "reward", "value"):
                             if key not in step:
                                 raise RuntimeError(
                                     f"Step {s_idx} in perspective {p_idx} "
@@ -259,18 +263,18 @@ class TrainingRunner:
                                 f"of game {game.get('game_id', '?')} "
                                 f"in {file_path!r}: invalid numeric value — {exc}"
                             ) from exc
-                        if len(step["state"]) != INPUT_SIZE:
+                        if len(step["input"]) != INPUT_SIZE:
                             raise RuntimeError(
                                 f"Step {s_idx} in perspective {p_idx} "
                                 f"of game {game.get('game_id', '?')} "
-                                f"in {file_path!r}: state has {len(step['state'])} elements, "
+                                f"in {file_path!r}: input has {len(step['input'])} elements, "
                                 f"expected {INPUT_SIZE}"
                             )
                         # Deep-copy perspective
                         all_perspectives.append({
                             "steps": [
                                 {
-                                    "state": list(step["state"]),
+                                    "input": list(step["input"]),
                                     "action": step["action"],
                                     "reward": float(step["reward"]),
                                     "value": float(step["value"]),
@@ -380,7 +384,7 @@ class TrainingRunner:
         states_14d: list[list[float]] = []
 
         for step in steps:
-            states_14d.append(step["state"])
+            states_14d.append(step["input"])
             old_values.append(step["value"])
             rewards.append(step["reward"])
 
@@ -442,7 +446,7 @@ class TrainingRunner:
 
                 for t in range(T):
                     x = torch.tensor(
-                        steps[t]["state"], dtype=torch.float32, device=device,
+                        steps[t]["input"], dtype=torch.float32, device=device,
                     ).view(1, 1, INPUT_SIZE)
                     val, h = value_model(x, h)
                     new_values.append(float(val.item()))
@@ -558,7 +562,7 @@ class TrainingRunner:
         actions: list[str] = []
 
         for step in steps:
-            states_14d.append(step["state"])
+            states_14d.append(step["input"])
             actions.append(step["action"])
             old_log_probs.append(step["log_prob"])
 

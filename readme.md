@@ -52,8 +52,8 @@ src/backend/controller/  REST API adapter (thin, no business logic)
 
 src/backend/scripts/     Entry points
   run.py                 Start Flask server (python src/backend/scripts/run.py)
-  selfplay.py            AI self-play (python src/backend/scripts/selfplay.py --ai1 rnn_v2.1 --ai2 rnn_v2.1)
-  train.py               PPO training (python src/backend/scripts/train.py --sample-path ... --policy-output-path ... --value-output-path ... --model rnn_v2.1 --value-epochs 20 --epoch 10)
+  selfplay.py            AI self-play (python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1)
+  train.py               PPO training (python src/backend/scripts/train.py --sample-path ... --output-dir ... --model rnn_v1.1 --epoch 10)
 
 src/frontend/            React SPA (Vite + React 19)
   src/api.js             REST API client
@@ -104,15 +104,15 @@ Open **http://127.0.0.1:5000** in your browser.
 
 ```bash
 # Run 100 games between two AI instances
-python src/backend/scripts/selfplay.py --ai1 rnn_v2.1 --ai2 rnn_v2.1
-python src/backend/scripts/selfplay.py --ai1 rnn_v2.1 --ai2 rnn_v2.1 --game 100 --temperature 2 --temp_step 1 
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 100 --temperature 2 --temp_step 1 
 
-# With temperature sampling and PPO sample output
-python src/backend/scripts/selfplay.py --ai1 rnn_v2.1 --ai2 rnn_v2.1 \
+# With temperature sampling, perspective filtering, and PPO sample output
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
     --game 200 --temperature 0.5 --temp_step 3 --temp_side both \
-    --sample_output data/samples.json --temp_seed 42
+    --perspective ai1 --sample_output data/samples.json --temp_seed 42
 
-python src/backend/scripts/selfplay.py --ai1 rnn_v2.1 --ai2 rnn_v2.1 --game 200 --temperature 1 --temp_step 20 --temp_side both --sample_output samples/rnn_v2_self_play.json 
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 200 --temperature 1 --temp_step 20 --temp_side both --perspective both --sample_output samples/rnn_v2_self_play.json 
 ```
 
 **Structured Logging:** Set `enabled` to `true` in `src/backend/config/backend.json`
@@ -132,7 +132,8 @@ design/6/main_docs/ for the full specification.
 | `--temp_step` | `int` | *(none)* | First N rounds use sampling, then switch to greedy. Omit for no limit |
 | `--temp_side` | `str` | `both` | Which side to apply temperature sampling: `player1`, `player2`, or `both` |
 | `--temp_seed` | `int` | *(none)* | Random seed for reproducible sampling |
-| `--sample_output` | `str` | *(none)* | File path for PPO sample JSON array output (game → perspective → steps hierarchy). Omit to skip sample recording |
+| `--sample_output` | `str` | *(none)* | File path for PPO sample JSON array output (game -> perspective -> steps hierarchy). Omit to skip sample recording |
+| `--perspective` | `str` | `both` | Perspectives to include in sample file: `ai1`, `ai2`, or `both` |
 
 ### AI Training
 
@@ -144,43 +145,36 @@ the `training` section.
 # Train with split networks (three-phase PPO)
 python src/backend/scripts/train.py ^
     --sample-path samples/rnn_v2_self_play.json ^
-    --policy-output-path src/backend/ai/rnn_v1/gen2/policy.pth ^
-    --value-output-path src/backend/ai/rnn_v1/gen2/value.pth ^
-    --model rnn_v2.1 ^
-    --value-epochs 20 ^
+    --output-dir src/backend/ai/rnn_v1/gen2 ^
+    --model rnn_v1.1 ^
     --epoch 10
 
 # Train on all JSON files in a directory
 python src/backend/scripts/train.py ^
     --sample-path data/samples/ ^
-    --policy-output-path policy.pth ^
-    --value-output-path value.pth ^
-    --model rnn_v2.1 ^
-    --value-epochs 20 ^
+    --output-dir src/backend/ai/rnn_v1/gen2 ^
+    --model rnn_v1.1 ^
     --epoch 10
 
-python src/backend/scripts/train.py --sample-path samples/v1 --policy-output-path src/backend/ai/rnn_v1/gen2/policy.pth --value-output-path src/backend/ai/rnn_v1/gen2/value.pth --model rnn_v1.1 --epoch 10 --value-epochs 10
+python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/backend/ai/rnn_v1/gen2 --model rnn_v1.1 --epoch 10
 ```
 
 **Training Outputs:** After training, two weight files are saved
-(`policy.pth` + `value.pth`) plus loss/grad charts in `loss/`.
+(`{output_dir}/policy.pth` + `{output_dir}/value.pth`) plus loss/grad charts in `loss/`.
 
 **Parameters:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--sample-path` | `str` | *(required)* | File path or directory of JSON sample files |
-| `--policy-output-path` | `str` | *(required)* | Output `.pth` for policy network weights |
-| `--value-output-path` | `str` | *(required)* | Output `.pth` for value network weights |
-| `--model` | `str` | *(required)* | AI registry name to train (e.g. `rnn_v2.1`) |
-| `--value-epochs` | `int` | *(required)* | Number of value training epochs (Phase 1) |
-| `--epoch` | `int` | *(required)* | Number of policy training epochs (Phase 3) |
+| `--output-dir` | `str` | *(required)* | Directory to save `policy.pth` and `value.pth` |
+| `--model` | `str` | *(required)* | AI registry name to train (e.g. `rnn_v1.1`) |
+| `--epoch` | `int` | *(required)* | Number of training epochs for both value and policy phases |
 
-**Hyperparameters** (in `config/backend.json` → `training`):
+**Hyperparameters** (in `config/backend.json` -> `training`):
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `value_epochs` | `int` | `20` | Value training epochs (Phase 1) |
 | `value_lr` | `float` | `0.001` | Learning rate for value optimizer (AdamW) |
 | `policy_lr` | `float` | `0.001` | Learning rate for policy optimizer (AdamW) |
 | `weight_decay` | `float` | `0.01` | Weight decay for AdamW |
@@ -207,7 +201,7 @@ python src/backend/scripts/train.py --sample-path samples/v1 --policy-output-pat
 ### Backend (Python)
 
 ```bash
-# All backend tests (492 tests)
+# All backend tests (506 tests)
 python -m pytest tests/
 
 # Unit tests only

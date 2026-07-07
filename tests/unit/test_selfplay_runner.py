@@ -18,22 +18,22 @@ from src.backend.app.selfplay_runner import SelfPlayRunner
 # ---------------------------------------------------------------------------
 
 
-def _make_step(player, state, action, value, log_prob):
+def _make_step(player, input_vec, action, value, log_prob):
     """Build a single per-step sample dict matching _play_one_game output.
 
     Args:
         player: "1" or "2".
-        state: List of 14 floats (state vector).
+        input_vec: List of 14 floats (input vector).
         action: Card action string.
         value: Value estimate float.
         log_prob: Log probability float or None.
 
     Returns:
-        dict with keys player, state, action, value, log_prob.
+        dict with keys player, input, action, value, log_prob.
     """
     return {
         "player": player,
-        "state": state,
+        "input": input_vec,
         "action": action,
         "value": value,
         "log_prob": log_prob,
@@ -44,18 +44,18 @@ def _make_game_samples(num_rounds=3):
     """Build a realistic game_samples list for num_rounds.
 
     Returns alternating P1/P2 steps: [P1_r1, P2_r1, P1_r2, P2_r2, ...].
-    Each player gets a distinct state vector prefix for validation.
+    Each player gets a distinct input vector prefix for validation.
     """
     samples = []
     for r in range(num_rounds):
-        # P1 state: prefix [r+1, 0, ...], P2 state: prefix [0, r+1, ...]
-        p1_state = [float(r + 1)] + [0.0] * 13
-        p2_state = [0.0, float(r + 1)] + [0.0] * 12
+        # P1 input: prefix [r+1, 0, ...], P2 input: prefix [0, r+1, ...]
+        p1_input = [float(r + 1)] + [0.0] * 13
+        p2_input = [0.0, float(r + 1)] + [0.0] * 12
         samples.append(_make_step(
-            "1", p1_state, "attack", -0.1, -1.2,
+            "1", p1_input, "attack", -0.1, -1.2,
         ))
         samples.append(_make_step(
-            "2", p2_state, "defense", -0.2, -0.8,
+            "2", p2_input, "defense", -0.2, -0.8,
         ))
     return samples
 
@@ -78,7 +78,7 @@ class TestBuildGameSampleStructure:
             rounds_played=2,
             p1_reward=1.0,
             p2_reward=-1.0,
-            ai1="rnn_v2.1",
+            ai1="rnn_v1.1",
             ai2="rnn_v2.2",
         )
 
@@ -189,8 +189,8 @@ class TestBuildGameSampleStructure:
         for p in result["perspectives"]:
             assert set(p.keys()) == {"player", "ai", "steps"}
 
-    def test_step_keys_are_state_action_reward_value_log_prob(self):
-        """TC-F7: each step has exactly the 5 required keys."""
+    def test_step_keys_are_input_action_reward_value_log_prob(self):
+        """TC-F7: each step has exactly the 5 required keys (using 'input' not 'state')."""
         game_samples = _make_game_samples(2)
         result = SelfPlayRunner._build_game_sample(
             game_samples=game_samples,
@@ -203,7 +203,7 @@ class TestBuildGameSampleStructure:
         )
         for p in result["perspectives"]:
             for step in p["steps"]:
-                assert set(step.keys()) == {"state", "action", "reward", "value", "log_prob"}
+                assert set(step.keys()) == {"input", "action", "reward", "value", "log_prob"}
 
 
 # ---------------------------------------------------------------------------
@@ -321,8 +321,8 @@ class TestBuildGameSampleRewards:
 class TestBuildGameSampleContent:
     """Validates step-level content is preserved correctly."""
 
-    def test_state_vector_preserved(self):
-        """State vector from game_samples is preserved in output."""
+    def test_input_vector_preserved(self):
+        """Input vector from game_samples is preserved in output."""
         game_samples = _make_game_samples(2)
         result = SelfPlayRunner._build_game_sample(
             game_samples=game_samples,
@@ -333,14 +333,14 @@ class TestBuildGameSampleContent:
             p2_reward=-1.0,
             ai1="a", ai2="b",
         )
-        # P1 r1 state should be [1.0] + 13 zeros
-        p1_step0_state = result["perspectives"][0]["steps"][0]["state"]
-        assert p1_step0_state[0] == 1.0
-        assert len(p1_step0_state) == 14
-        # P2 r1 state should be [0.0, 1.0] + 12 zeros
-        p2_step0_state = result["perspectives"][1]["steps"][0]["state"]
-        assert p2_step0_state[0] == 0.0
-        assert p2_step0_state[1] == 1.0
+        # P1 r1 input should be [1.0] + 13 zeros
+        p1_step0_input = result["perspectives"][0]["steps"][0]["input"]
+        assert p1_step0_input[0] == 1.0
+        assert len(p1_step0_input) == 14
+        # P2 r1 input should be [0.0, 1.0] + 12 zeros
+        p2_step0_input = result["perspectives"][1]["steps"][0]["input"]
+        assert p2_step0_input[0] == 0.0
+        assert p2_step0_input[1] == 1.0
 
     def test_action_preserved(self):
         """Action strings are preserved in output."""

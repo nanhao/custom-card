@@ -96,32 +96,32 @@ class TestCreateGamePVE:
     """TC-AM2: create_game in PVE mode."""
 
     def test_returns_game_id_and_state(self, app_manager):
-        """create_game(mode='pve', ai_name='rnn_v2.1') returns (game_id, state)."""
-        game_id, state = app_manager.create_game(mode="pve", ai_name="rnn_v2.1")
+        """create_game(mode='pve', ai_name='rnn_v1.1') returns (game_id, state)."""
+        game_id, state = app_manager.create_game(mode="pve", ai_name="rnn_v1.1")
         assert isinstance(game_id, str)
         uuid.UUID(game_id)
         assert isinstance(state, dict)
 
     def test_state_mode_is_pve(self, app_manager):
         """State must have mode='pve'."""
-        _, state = app_manager.create_game(mode="pve", ai_name="rnn_v2.1")
+        _, state = app_manager.create_game(mode="pve", ai_name="rnn_v1.1")
         assert state["mode"] == "pve"
 
     def test_state_ai_is_correct(self, app_manager):
-        """State must have ai='rnn_v2.1'."""
-        _, state = app_manager.create_game(mode="pve", ai_name="rnn_v2.1")
-        assert state["ai"] == "rnn_v2.1"
+        """State must have ai='rnn_v1.1'."""
+        _, state = app_manager.create_game(mode="pve", ai_name="rnn_v1.1")
+        assert state["ai"] == "rnn_v1.1"
 
     def test_save_file_contains_ai_metadata(self, app_manager, session_store):
         """Save file must contain ai_state and ai fields."""
-        game_id, _ = app_manager.create_game(mode="pve", ai_name="rnn_v2.1")
+        game_id, _ = app_manager.create_game(mode="pve", ai_name="rnn_v1.1")
         gm, metadata = session_store.load(game_id)
-        assert metadata["ai"] == "rnn_v2.1"
+        assert metadata["ai"] == "rnn_v1.1"
         assert metadata["ai_state"] == [0.0] * 8
 
     def test_player2_hand_is_standard_7_cards(self, app_manager):
         """Player 2's hand must be a standard 7-card starting hand."""
-        _, state = app_manager.create_game(mode="pve", ai_name="rnn_v2.1")
+        _, state = app_manager.create_game(mode="pve", ai_name="rnn_v1.1")
         assert len(state["players"]["2"]["hand"]) == 7
 
 
@@ -201,7 +201,7 @@ class TestAiSelectAction:
         """TC-AM6: Returns (card_str, new_hidden) with full hand."""
         state = make_game_state()
         h0 = _init_hidden()
-        card_str, new_hidden = app_manager.ai_select_action(state, h0, "rnn_v2.1")
+        card_str, new_hidden = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert isinstance(card_str, str)
         assert isinstance(new_hidden, list)
         assert len(new_hidden) == 8
@@ -210,29 +210,29 @@ class TestAiSelectAction:
         """TC-AM6: Returned card must be a valid card type."""
         state = make_game_state()
         h0 = _init_hidden()
-        card_str, _ = app_manager.ai_select_action(state, h0, "rnn_v2.1")
+        card_str, _ = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert card_str in ("attack", "defense", "heavy", "counter")
 
     def test_hidden_state_evolves(self, app_manager):
         """TC-AM6: Hidden state must change after inference."""
         state = make_game_state()
         h0 = _init_hidden()
-        _, new_hidden = app_manager.ai_select_action(state, h0, "rnn_v2.1")
+        _, new_hidden = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert new_hidden != [0.0] * 8, "Hidden state should evolve"
 
     def test_limited_hand_returns_only_legal_card(self, app_manager):
         """TC-AM7: With only one card, must return that card."""
         state = make_game_state(hand_2=["counter"])
         h0 = _init_hidden()
-        card_str, _ = app_manager.ai_select_action(state, h0, "rnn_v2.1")
+        card_str, _ = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert card_str == "counter"
 
     def test_hidden_state_evolves_across_calls(self, app_manager):
         """TC-AM8: Hidden state evolves across sequential calls."""
         state = make_game_state()
         h0 = _init_hidden()
-        _, h1 = app_manager.ai_select_action(state, h0, "rnn_v2.1")
-        _, h2 = app_manager.ai_select_action(state, h1, "rnn_v2.1")
+        _, h1 = app_manager.ai_select_action(state, h0, "rnn_v1.1")
+        _, h2 = app_manager.ai_select_action(state, h1, "rnn_v1.1")
         assert h1 != h0
         assert h2 != h1
 
@@ -240,8 +240,8 @@ class TestAiSelectAction:
         """TC-AM9: Same input → same output (deterministic)."""
         state = make_game_state()
         h0 = _init_hidden()
-        card1, h1 = app_manager.ai_select_action(state, h0, "rnn_v2.1")
-        card2, h2 = app_manager.ai_select_action(state, h0, "rnn_v2.1")
+        card1, h1 = app_manager.ai_select_action(state, h0, "rnn_v1.1")
+        card2, h2 = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert card1 == card2
         assert h1 == h2
 
@@ -249,7 +249,7 @@ class TestAiSelectAction:
         """TC-AM12: AI with only 'defense' must return 'defense'."""
         state = make_game_state(hand_2=["defense"])
         h0 = _init_hidden()
-        card_str, _ = app_manager.ai_select_action(state, h0, "rnn_v2.1")
+        card_str, _ = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert card_str == "defense"
 
 
@@ -289,11 +289,11 @@ class TestModelCaching:
         h0 = [0.0] * 8
 
         # First call loads the model (importlib is called)
-        card1, h1 = app_manager.ai_select_action(state, h0, "rnn_v2.1")
+        card1, h1 = app_manager.ai_select_action(state, h0, "rnn_v1.1")
         assert card1 in ("attack", "defense", "heavy", "counter")
 
         # Second call should use cache — verify importlib is NOT called again
         with patch("importlib.import_module") as mock_import:
-            card2, h2 = app_manager.ai_select_action(state, h1, "rnn_v2.1")
+            card2, h2 = app_manager.ai_select_action(state, h1, "rnn_v1.1")
             mock_import.assert_not_called()
             assert card2 in ("attack", "defense", "heavy", "counter")

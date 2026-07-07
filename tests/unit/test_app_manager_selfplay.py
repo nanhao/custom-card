@@ -48,8 +48,8 @@ class TestSelfPlayConfig:
         """temp_side='invalid' raises ValueError at instantiation."""
         with pytest.raises(ValueError, match="temp_side"):
             SelfPlayConfig(
-                ai1="rnn_v2.1",
-                ai2="rnn_v2.1",
+                ai1="rnn_v1.1",
+                ai2="rnn_v1.1",
                 temp_side="invalid",
             )
 
@@ -57,40 +57,40 @@ class TestSelfPlayConfig:
         """Valid temp_side values ('player1','player2','both') do not raise."""
         for side in ("player1", "player2", "both"):
             cfg = SelfPlayConfig(
-                ai1="rnn_v2.1", ai2="rnn_v2.1", temp_side=side
+                ai1="rnn_v1.1", ai2="rnn_v1.1", temp_side=side
             )
             assert cfg.temp_side == side
 
     def test_default_temp_side_is_both(self):
         """Default temp_side should be 'both'."""
-        cfg = SelfPlayConfig(ai1="rnn_v2.1", ai2="rnn_v2.1")
+        cfg = SelfPlayConfig(ai1="rnn_v1.1", ai2="rnn_v1.1")
         assert cfg.temp_side == "both"
 
     def test_default_temperature_is_1(self):
         """Default temperature should be 1.0."""
-        cfg = SelfPlayConfig(ai1="rnn_v2.1", ai2="rnn_v2.1")
+        cfg = SelfPlayConfig(ai1="rnn_v1.1", ai2="rnn_v1.1")
         assert cfg.temperature == 1.0
 
     def test_negative_temperature_raises_value_error(self):
         """Negative temperature raises ValueError at instantiation."""
         with pytest.raises(ValueError, match="temperature"):
             SelfPlayConfig(
-                ai1="rnn_v2.1", ai2="rnn_v2.1", temperature=-1.0
+                ai1="rnn_v1.1", ai2="rnn_v1.1", temperature=-1.0
             )
 
     def test_default_game_count_is_100(self):
         """Default game_count should be 100."""
-        cfg = SelfPlayConfig(ai1="rnn_v2.1", ai2="rnn_v2.1")
+        cfg = SelfPlayConfig(ai1="rnn_v1.1", ai2="rnn_v1.1")
         assert cfg.game_count == 100
 
     def test_default_sample_output_is_none(self):
         """Default sample_output should be None."""
-        cfg = SelfPlayConfig(ai1="rnn_v2.1", ai2="rnn_v2.1")
+        cfg = SelfPlayConfig(ai1="rnn_v1.1", ai2="rnn_v1.1")
         assert cfg.sample_output is None
 
     def test_frozen_dataclass_prevents_mutation(self):
         """Frozen dataclass prevents attribute mutation."""
-        cfg = SelfPlayConfig(ai1="rnn_v2.1", ai2="rnn_v2.1")
+        cfg = SelfPlayConfig(ai1="rnn_v1.1", ai2="rnn_v1.1")
         with pytest.raises(Exception):  # frozendataclass raises FrozenInstanceError
             cfg.game_count = 200
 
@@ -113,10 +113,10 @@ class TestAiSampleAction:
         h0 = _init_hidden()
 
         greedy_card, greedy_h = app_manager.ai_select_action(
-            state, h0, "rnn_v2.1"
+            state, h0, "rnn_v1.1"
         )
         card, h_pol, lp, val, h_val = app_manager.ai_sample_action(
-            state, h0, h0, "rnn_v2.1", temperature=0.0
+            state, h0, h0, "rnn_v1.1", temperature=0.0
         )
 
         assert card == greedy_card
@@ -131,7 +131,7 @@ class TestAiSampleAction:
         h0 = _init_hidden()
 
         card, h_pol, lp, val, h_val = app_manager.ai_sample_action(
-            state, h0, h0, "rnn_v2.1", temperature=1.0
+            state, h0, h0, "rnn_v1.1", temperature=1.0
         )
 
         assert card in ("attack", "defense", "heavy", "counter")
@@ -152,7 +152,7 @@ class TestAiSampleAction:
 
         for _ in range(50):
             card, h_pol, _, _, h_val = app_manager.ai_sample_action(
-                state, h_pol, h_val, "rnn_v2.1", temperature=1.0
+                state, h_pol, h_val, "rnn_v1.1", temperature=1.0
             )
             assert card in ("attack", "defense"), (
                 f"Expected attack or defense, got {card}"
@@ -167,7 +167,7 @@ class TestAiSampleAction:
         h0 = _init_hidden()
 
         card, _, _, _, _ = app_manager.ai_sample_action(
-            state, h0, h0, "rnn_v2.1", temperature=1.0, player_key="1"
+            state, h0, h0, "rnn_v1.1", temperature=1.0, player_key="1"
         )
 
         assert card == "heavy", (
@@ -188,12 +188,12 @@ class TestAiSampleAction:
         # With seed 42
         torch.manual_seed(42)
         card1, h_pol1, lp1, val1, h_val1 = app_manager.ai_sample_action(
-            state, h0, h0, "rnn_v2.1", temperature=0.0
+            state, h0, h0, "rnn_v1.1", temperature=0.0
         )
         # With seed 99
         torch.manual_seed(99)
         card2, h_pol2, lp2, val2, h_val2 = app_manager.ai_sample_action(
-            state, h0, h0, "rnn_v2.1", temperature=0.0
+            state, h0, h0, "rnn_v1.1", temperature=0.0
         )
 
         # Greedy actions must be identical (deterministic argmax)
@@ -224,7 +224,7 @@ class TestAiSampleAction:
             actions = []
             for _ in range(10):
                 card, h_pol, _, _, h_val = app_manager.ai_sample_action(
-                    state, h_pol, h_val, "rnn_v2.1", temperature=1.0
+                    state, h_pol, h_val, "rnn_v1.1", temperature=1.0
                 )
                 actions.append(card)
             return actions

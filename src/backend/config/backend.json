@@ -4,7 +4,6 @@
     "log_dir": "logs"
   },
   "training": {
-    "value_epochs": 20,
     "value_lr": 0.001,
     "policy_lr": 0.001,
     "weight_decay": 0.01,
