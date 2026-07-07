@@ -301,11 +301,16 @@ class AppManager:
                 # Block BUILD if energy is 0
                 if card_str == "build" and energy == 0:
                     masked[0, idx] = float("-inf")
-            # Back segment: mask build targets exceeding energy budget
+            # Back segment: mask build targets exceeding energy budget.
+            # Also mask ALL build targets if BUILD is not in hand.
+            can_build = "build" in legal_cards and energy > 0
             for i in range(NUM_CARD_TYPES):
-                cost = Converter.build_cost_for_index(i)
-                if cost > energy:
+                if not can_build:
                     masked[0, NUM_CARD_TYPES + i] = float("-inf")
+                else:
+                    cost = Converter.build_cost_for_index(i)
+                    if cost > energy:
+                        masked[0, NUM_CARD_TYPES + i] = float("-inf")
             return masked
 
         return mask_fn
