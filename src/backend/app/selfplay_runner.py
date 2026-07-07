@@ -355,10 +355,15 @@ class SelfPlayRunner:
 
         # Derive rounds_played from round log, or from sample count
         # if round 1 errored before completing (round_log empty).
+        # Per design/10 D2: account for perspective filtering when
+        # computing rounds from sample count.
         if gm.round_log:
             rounds_played = gm.round_log[-1].round
         elif game_samples:
-            rounds_played = len(game_samples) // 2
+            # When perspective is "both", each round produces 2 entries.
+            # When filtered to "ai1" or "ai2", each round produces 1 entry.
+            entries_per_round = 1 if config.perspective in ("ai1", "ai2") else 2
+            rounds_played = len(game_samples) // entries_per_round
         else:
             rounds_played = 0
 

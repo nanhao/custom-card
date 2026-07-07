@@ -17,11 +17,11 @@ from src.backend.app.selfplay_runner import SelfPlayRunner
 # ---------------------------------------------------------------------------
 
 
-def _make_step(player, input_vec, action, value, log_prob):
+def _make_step(player, input_vector, action, value, log_prob):
     """Build a single per-step sample dict."""
     return {
         "player": player,
-        "input": input_vec,
+        "input": input_vector,
         "action": action,
         "value": value,
         "log_prob": log_prob,

@@ -3,7 +3,7 @@
 Per design/9 architecture: trains policy and value networks independently
 through sequential phases to eliminate gradient interference.
 
-Phase 1: Value Training — train GRUValueModel (value_epochs).
+Phase 1: Value Training — train GRUValueModel (epoch).
 Phase 2: Advantage Re-computation — GAE with trained value network (no_grad).
 Phase 3: Policy Training — train GRUPolicyModel using Phase 2 advantages.
 

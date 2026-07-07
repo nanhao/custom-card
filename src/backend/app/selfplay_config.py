@@ -20,6 +20,8 @@ class SelfPlayConfig:
         temp_step: First N rounds use sampling, then greedy. None = no limit.
         temp_seed: Random seed for sampling reproducibility, or None.
         temp_side: Which side to sample — "player1", "player2", or "both".
+        perspective: Which perspective(s) to include in sample output —
+                     "ai1", "ai2", or "both" (default).
     """
 
     ai1: str

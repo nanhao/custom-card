@@ -1,8 +1,8 @@
 """Integration tests for PPO sample output — file output and boundaries.
 
 Covers TC-O1 through TC-O4 (file output), TC-T1 through TC-T3
-(sub-unit boundaries), temp_step behavior, and temp_side behavior
-from design/7 test_cases.md.
+(sub-unit boundaries), temp_step behavior, temp_side behavior
+from design/7 test_cases.md, and TC-PF-05/06 from design/10.
 
 For structure, rewards, and step content tests, see
 test_selfplay_samples.py.
@@ -299,3 +299,60 @@ class TestTempSide:
                 assert step["log_prob"] is not None, (
                     "P2 should have non-null log_prob"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Design/10 TC-PF-05, TC-PF-06: Perspective filtering boundaries
+# ---------------------------------------------------------------------------
+
+
+class TestPerspectiveFilteringIntegration:
+    """TC-PF-05/06: Perspective filtering edge cases."""
+
+    def test_perspective_without_sample_output_no_effect(
+        self, app_manager,
+    ):
+        """TC-PF-05: perspective="ai1" with sample_output=None —
+        no file created, no exception raised."""
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=2, perspective="ai1",
+            sample_output=None,
+        )
+        result = app_manager.run_selfplay(config)
+        # Run completes normally
+        assert result.total_games == 2
+
+    def test_perspective_with_zero_games(self, app_manager, tmp_path):
+        """TC-PF-06: perspective="ai1" with game_count=0 —
+        produces empty JSON array []."""
+        sample_path = tmp_path / "filtered_empty.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=0, perspective="ai1",
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        assert sample_path.exists()
+        games = read_sample_file(sample_path)
+        assert games == []
+
+    def test_perspective_ai1_single_game_produces_one_perspective(
+        self, app_manager, tmp_path,
+    ):
+        """perspective="ai1" → each game has exactly 1 perspective (player=1)."""
+        sample_path = tmp_path / "filtered_single.json"
+        config = SelfPlayConfig(
+            ai1="rnn_v1.1", ai2="rnn_v1.1",
+            game_count=2, temperature=0.0,
+            perspective="ai1",
+            sample_output=str(sample_path),
+        )
+        app_manager.run_selfplay(config)
+
+        games = read_sample_file(sample_path)
+        assert len(games) == 2
+        for game in games:
+            assert len(game["perspectives"]) == 1
+            assert game["perspectives"][0]["player"] == "1"
