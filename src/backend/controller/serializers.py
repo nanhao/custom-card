@@ -77,6 +77,7 @@ def round_result_to_dict(rr: RoundResult) -> dict:
         "details": rr.details,
         "is_game_over": rr.is_game_over,
         "winner": rr.winner,
+        "cycle_ended": rr.cycle_ended,
     }
 
 

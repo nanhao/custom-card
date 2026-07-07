@@ -49,6 +49,7 @@ class RoundResult:
     details: list[str]
     is_game_over: bool
     winner: str | None
+    cycle_ended: bool = False
 
 
 class GameCore:
@@ -199,6 +200,7 @@ class GameCore:
             details=resolution.details,
             is_game_over=False,
             winner=None,
+            cycle_ended=False,
         )
 
         # Step 10: Check game end from damage
@@ -213,11 +215,13 @@ class GameCore:
         if self.round_in_cycle >= self.ROUNDS_PER_CYCLE:
             self.player_1.take_damage(1)
             self.player_2.take_damage(1)
+            # Update result HP to reflect cycle bleed
+            result.hp_1_after = self.player_1.hp
+            result.hp_2_after = self.player_2.hp
+            result.cycle_ended = True
             # Check game end again after cycle bleed
             is_over, winner = self._check_game_end()
             if is_over:
-                result.hp_1_after = self.player_1.hp
-                result.hp_2_after = self.player_2.hp
                 result.is_game_over = True
                 result.winner = winner
                 self.round_log.append(result)
@@ -300,6 +304,7 @@ class GameCore:
                     "details": rr.details,
                     "is_game_over": rr.is_game_over,
                     "winner": rr.winner,
+                    "cycle_ended": rr.cycle_ended,
                 }
                 for rr in self.round_log
             ],

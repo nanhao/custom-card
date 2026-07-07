@@ -101,6 +101,7 @@ def _serialize_round_result(rr: RoundResult) -> dict:
         "details": rr.details,
         "is_game_over": rr.is_game_over,
         "winner": rr.winner,
+        "cycle_ended": rr.cycle_ended,
     }
 
 
@@ -124,6 +125,7 @@ def _deserialize_round_result(data: dict) -> RoundResult:
         details=data["details"],
         is_game_over=data["is_game_over"],
         winner=data["winner"],
+        cycle_ended=data.get("cycle_ended", False),
     )
 
 

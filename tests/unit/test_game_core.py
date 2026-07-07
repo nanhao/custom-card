@@ -76,13 +76,29 @@ class TestCycleMechanics:
         gm.player_2.hp = 10
 
         result = gm.play_round([CardType.ATTACK], [CardType.ATTACK])
-        # Both took 1 attack damage + 1 cycle bleed = 2 damage
-        # Actually: same-priority ATTACK vs ATTACK with 0 streak → 1 each
-        # Then cycle bleed: 1 each → total 2 each → hp 10→8
+        # Both took 1 attack damage + 1 cycle bleed = 2 total → hp 10→8
         assert gm.player_1.hp == 8
         assert gm.player_2.hp == 8
+        assert result.hp_1_after == 8  # HP reflects bleed
+        assert result.hp_2_after == 8
+        assert result.cycle_ended is True
         assert gm.cycle_number == 2
         assert gm.round_in_cycle == 1
+
+    def test_mid_cycle_no_bleed(self):
+        """Round 3 of a cycle: no cycle_ended, no HP bleed."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.round_in_cycle = 3
+        gm.round_number = 3
+        gm.player_1.hand = [CardType.ATTACK]
+        gm.player_2.hand = [CardType.DEFENSE]
+        gm.player_1.hp = 10
+        gm.player_2.hp = 10
+
+        result = gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
+        assert result.cycle_ended is False
+        assert gm.player_1.hp == 10  # No bleed
 
     def test_cycle_bleed_causes_game_end(self):
         """TC-GC-04: Cycle end bleed with hp=1 each → both die → draw."""

@@ -25,7 +25,8 @@ else game found
       round, cycle, round_in_cycle,
       players.1/2 {hp, energy, statuses,
         hand, draw_pile_count, discard_pile_count, history},
-      is_over, winner, mode, round_log
+      is_over, winner, mode,
+      round_log[{..., cycle_ended}]
     end note
     GM --> Controller : state dict
 
