@@ -159,14 +159,8 @@ class GameCore:
         self.player_1.add_energy(resolution.energy_delta_1)
         self.player_2.add_energy(resolution.energy_delta_2)
         # Clear previous round statuses, apply new ones
-        self.player_1.statuses = []
-        self.player_2.statuses = []
-        for s in resolution.statuses_granted_1:
-            if s not in self.player_1.statuses:
-                self.player_1.statuses.append(s)
-        for s in resolution.statuses_granted_2:
-            if s not in self.player_2.statuses:
-                self.player_2.statuses.append(s)
+        self.player_1.statuses = list(resolution.statuses_granted_1)
+        self.player_2.statuses = list(resolution.statuses_granted_2)
 
         # Step 6: Process BUILD construction
         self._process_build(cards_1[0], build_target_1, self.player_1)

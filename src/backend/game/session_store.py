@@ -11,6 +11,7 @@ ai_state length changed from 8 to 32.
 import json
 import logging
 import os
+import tempfile
 from pathlib import Path
 
 from src.backend.game.card import CardType, get_initial_draw_pile
@@ -259,7 +260,15 @@ class SessionStore:
         data = _serialize_game_core(
             game_core, ai=ai, ai_state=ai_state, ai_value_state=ai_value_state,
         )
-        file_path.write_text(json.dumps(data, indent=4, ensure_ascii=False))
+        # Write to temp file then atomically replace to avoid partial writes
+        fd, tmp_path = tempfile.mkstemp(dir=str(self.save_dir), suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+            os.replace(tmp_path, file_path)
+        except Exception:
+            os.unlink(tmp_path)
+            raise
 
     def load(self, game_id: str) -> tuple[GameCore | None, dict | None]:
         """Read and deserialize from {save_dir}/{game_id}.json.

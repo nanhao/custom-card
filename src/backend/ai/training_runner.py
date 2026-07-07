@@ -286,6 +286,7 @@ class TrainingRunner:
                                         if step.get("log_prob") is not None
                                         else 0.0
                                     ),
+                                    "build_target": step.get("build_target"),
                                 }
                                 for step in perspective["steps"]
                             ],
@@ -384,10 +385,10 @@ class TrainingRunner:
 
         old_values: list[float] = []
         rewards: list[float] = []
-        states_14d: list[list[float]] = []
+        states_25d: list[list[float]] = []
 
         for step in steps:
-            states_14d.append(step["input"])
+            states_25d.append(step["input"])
             old_values.append(step["value"])
             rewards.append(step["reward"])
 
@@ -565,7 +566,7 @@ class TrainingRunner:
         actions: list[str] = []
 
         for step in steps:
-            states_14d.append(step["input"])
+            states_25d.append(step["input"])
             actions.append(step["action"])
             old_log_probs.append(step["log_prob"])
 
@@ -580,7 +581,7 @@ class TrainingRunner:
 
         for t in range(T):
             x = torch.tensor(
-                states_14d[t], dtype=torch.float32, device=device,
+                states_25d[t], dtype=torch.float32, device=device,
             ).view(1, 1, INPUT_SIZE)
             probs, log_probs, h = policy_model(x, h, mask_fn=None, temperature=1.0)
             action_idx = ACTION_TO_INDEX[actions[t]]
