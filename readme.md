@@ -112,7 +112,7 @@ python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
     --game 200 --temperature 0.5 --temp_step 3 --temp_side both \
     --perspective ai1 --sample_output data/samples.json --temp_seed 42
 
-python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 200 --temperature 1 --temp_step 20 --temp_side both --perspective both --sample_output samples/rnn_v2_self_play.json 
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 200 --temperature 1 --temp_step 20 --temp_side both --perspective both --sample_output samples/rnn_v2_self_play.json --perspective ai1
 ```
 
 **Structured Logging:** Set `enabled` to `true` in `src/backend/config/backend.json`
