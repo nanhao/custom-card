@@ -218,11 +218,11 @@ class SelfPlayRunner:
             game_idx=game_idx, game_count=config.game_count,
         )
 
-        # b. Initialize dual hidden states per player (design/9 D3)
-        h1_pol = [0.0] * 8
-        h1_val = [0.0] * 8
-        h2_pol = [0.0] * 8
-        h2_val = [0.0] * 8
+        # b. Initialize dual hidden states per player (32-d, design/11)
+        h1_pol = [0.0] * 32
+        h1_val = [0.0] * 32
+        h2_pol = [0.0] * 32
+        h2_val = [0.0] * 32
 
         # Per-step sample buffer for this game
         game_samples: list[dict] = []
@@ -245,7 +245,7 @@ class SelfPlayRunner:
                     and config.temp_side in ("player1", "both"))
                 else 0.0
             )
-            card1, h1_pol, lp1, val1, h1_val = self._sample_action(
+            card1, bt1, h1_pol, lp1, val1, h1_val = self._sample_action(
                 pre_state, h1_pol, h1_val, config.ai1,
                 temperature=temp_p1, player_key="1",
             )
@@ -257,7 +257,7 @@ class SelfPlayRunner:
                     and config.temp_side in ("player2", "both"))
                 else 0.0
             )
-            card2, h2_pol, lp2, val2, h2_val = self._sample_action(
+            card2, bt2, h2_pol, lp2, val2, h2_val = self._sample_action(
                 pre_state, h2_pol, h2_val, config.ai2,
                 temperature=temp_p2, player_key="2",
             )
@@ -289,7 +289,9 @@ class SelfPlayRunner:
             # Play the round
             try:
                 gm.play_round(
-                    [CardType(card1)], [CardType(card2)]
+                    [CardType(card1)], [CardType(card2)],
+                    build_target_1=CardType(bt1) if bt1 else None,
+                    build_target_2=CardType(bt2) if bt2 else None,
                 )
             except ValueError as exc:
                 print(
@@ -334,6 +336,7 @@ class SelfPlayRunner:
                         "action": card1,
                         "value": val1,
                         "log_prob": lp1,
+                        "build_target": bt1,
                     })
                 if config.perspective in ("ai2", "both"):
                     game_samples.append({
@@ -342,6 +345,7 @@ class SelfPlayRunner:
                         "action": card2,
                         "value": val2,
                         "log_prob": lp2,
+                        "build_target": bt2,
                     })
 
         # d. Determine winner and rewards
@@ -460,6 +464,9 @@ class SelfPlayRunner:
                 "value": entry["value"],
                 "log_prob": entry["log_prob"],
             }
+            # Include build_target if present
+            if entry.get("build_target") is not None:
+                step["build_target"] = entry["build_target"]
             if entry["player"] == "1":
                 p1_steps.append(step)
             else:

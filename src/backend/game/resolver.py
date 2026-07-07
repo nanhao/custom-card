@@ -1,14 +1,35 @@
-"""Stateless card resolution engine for the custom card game.
+"""Priority-layered card resolution engine for the v2 game (design/11).
 
-Per architecture D1, CardResolver is stateless — all methods are pure functions
-with no side effects. Per architecture D7, Defense never deals damage.
-Per architecture D8, when both cards imply damage to the same player, use max().
+Per design/11 D3, cards are decomposed into Effect units and resolved
+in priority order (11 first, then 10). Statuses are applied immediately
+within each priority group; damage is accumulated and returned.
+
 Per architecture D9, this module is pure logic — no UI, no I/O.
 """
 
 from dataclasses import dataclass, field
 
-from src.backend.game.card import CardType
+from src.backend.game.card import CardType, get_card_def
+
+# Maximum damage from consecutive attack streak
+MAX_ATTACK_STREAK_DAMAGE = 3
+
+
+@dataclass
+class Effect:
+    """Single card effect unit used internally by CardResolver.
+
+    Attributes:
+        source_player: "1" or "2" — which player produced this effect.
+        priority: 10 or 11 — resolution priority.
+        source_card: The CardType that produced this effect.
+        effect_type: String identifier for the effect logic.
+    """
+
+    source_player: str
+    priority: int
+    source_card: CardType
+    effect_type: str
 
 
 @dataclass
@@ -18,29 +39,43 @@ class ResolutionResult:
     Attributes:
         damage_1: Damage dealt to Player 1 this round.
         damage_2: Damage dealt to Player 2 this round.
-        details: Human-readable resolution steps (for logging/debugging).
+        energy_delta_1: Energy gained by Player 1 this round (before clamping).
+        energy_delta_2: Energy gained by Player 2 this round (before clamping).
+        statuses_granted_1: New statuses granted to Player 1 this round.
+        statuses_granted_2: New statuses granted to Player 2 this round.
+        details: Human-readable resolution steps.
     """
 
     damage_1: int
     damage_2: int
+    energy_delta_1: int = 0
+    energy_delta_2: int = 0
+    statuses_granted_1: list[str] = field(default_factory=list)
+    statuses_granted_2: list[str] = field(default_factory=list)
     details: list[str] = field(default_factory=list)
 
 
 class CardResolver:
-    """Stateless card-vs-card resolution engine.
+    """Stateless priority-layered card resolution engine.
 
-    All methods are static — no instantiation needed.
-    Resolves any combination of two cards given each player's history.
+    All methods are static. The resolve() method decomposes played cards
+    into Effect units, groups by priority, and resolves statuses and damage.
     """
 
     @staticmethod
     def get_consecutive_attack(history: list[CardType]) -> int:
-        """Count consecutive Attack cards from the end of history.
+        """Count consecutive ATTACK cards from the end of history.
 
-        Used to determine the damage multiplier for the Attack card.
-        Traverses the history backwards; stops at the first non-Attack card.
+        Only ATTACK cards count toward the streak. COUNTER, DEFENSE, and
+        all other card types break it.
 
-        Per architecture D4: empty history returns 0 (round 1 edge case).
+        Used externally by GameCore (cross-round retention).
+
+        Args:
+            history: Chronological list of cards played in previous rounds.
+
+        Returns:
+            Number of consecutive ATTACK cards at the end of history.
         """
         count = 0
         for card in reversed(history):
@@ -51,190 +86,193 @@ class CardResolver:
         return count
 
     @staticmethod
-    def played_defense_last_round(history: list[CardType]) -> bool:
-        """Check if the last card in history was Defense.
-
-        Used by Heavy Strike and Defense resolution to determine
-        whether the "consecutive Defense" condition is met.
-
-        Per architecture D4: empty history returns False (round 1 edge case).
-        """
-        return len(history) > 0 and history[-1] == CardType.DEFENSE
-
-    @staticmethod
     def resolve(
         cards_1: list[CardType],
         cards_2: list[CardType],
-        history_1: list[CardType],
-        history_2: list[CardType],
+        player_1_statuses: list[str],
+        player_2_statuses: list[str],
+        p1_attack_streak: int,
+        p2_attack_streak: int,
     ) -> ResolutionResult:
-        """Compute damage for both players given their played cards and history.
+        """Compute all effects for one turn via priority-layered resolution.
 
-        Accepts lists for future multi-card support (architecture D12).
-        Current version expects exactly 1 card per list.
-
-        Per architecture D3: both card effects are computed independently,
-        then combined with max() per D8 to avoid double-counting.
-
-        Per architecture D7: Defense never deals damage — any damage from
-        a Heavy Strike hitting Defense comes from the HS card, not the Defense.
+        Algorithm:
+        1. Decompose each card into Effect units from CardDef.effects.
+        2. Group effects by priority (11, 10).
+        3. Process priority 11 first: status effects applied immediately.
+        4. Process priority 10: damage accumulated, energy counted.
+        5. Return aggregated ResolutionResult.
 
         Args:
-            cards_1: Cards played by Player 1 this round.
-            cards_2: Cards played by Player 2 this round.
-            history_1: Cards played by 1 in previous rounds (chronological).
-            history_2: Cards played by 2 in previous rounds (chronological).
+            cards_1: Cards played by Player 1 (expects exactly 1).
+            cards_2: Cards played by Player 2 (expects exactly 1).
+            player_1_statuses: P1's statuses before this round.
+            player_2_statuses: P2's statuses before this round.
+            p1_attack_streak: P1's consecutive attack count before this round.
+            p2_attack_streak: P2's consecutive attack count before this round.
 
         Returns:
-            ResolutionResult with damage_1, damage_2, and resolution details.
-
-        Raises:
-            ValueError: If either cards list is not exactly 1 element
-                       (current version limitation).
+            ResolutionResult with damage, energy deltas, and granted statuses.
         """
-        if len(cards_1) != 1 or len(cards_2) != 1:
-            raise ValueError(
-                f"Current version supports exactly 1 card per player per round. "
-                f"Got {len(cards_1)} for 1, {len(cards_2)} for 2."
-            )
-        card_1 = cards_1[0]
-        card_2 = cards_2[0]
-        # ---- Step 1: Compute damage from each card independently ----
-        d1_from_1, d2_from_1 = CardResolver._card_effect(
-            card_1, card_2, history_1, history_2, is_player_1=True
-        )
-        # For player 2: _card_effect returns (dmg_to_2, dmg_to_1).
-        # We need (dmg_to_1, dmg_to_2), so swap the unpacking.
-        d2_from_2, d1_from_2 = CardResolver._card_effect(
-            card_2, card_1, history_2, history_1, is_player_1=False
-        )
+        # Track whether defensive status was pre-existing (for grant_guard logic).
+        p1_had_defense_pre = "defense" in player_1_statuses
+        p2_had_defense_pre = "defense" in player_2_statuses
 
-        # ---- Step 2: Combine with max() (D8) ----
-        damage_1 = max(d1_from_1, d1_from_2)
-        damage_2 = max(d2_from_1, d2_from_2)
+        # Working state — mutated during resolution
+        statuses_1: list[str] = list(player_1_statuses)
+        statuses_2: list[str] = list(player_2_statuses)
+        dmg_1 = 0
+        dmg_2 = 0
+        energy_1 = 0
+        energy_2 = 0
+        details: list[str] = []
 
-        # ---- Step 3: Build human-readable details ----
-        details = []
-        # Card 1's perspective
-        details.append(CardResolver._describe_effect(
-            card_1, card_2, history_1, history_2, "1", "2"
-        ))
-        # Card 2's perspective
-        details.append(CardResolver._describe_effect(
-            card_2, card_1, history_2, history_1, "2", "1"
-        ))
+        # Decompose both cards into Effect units
+        cd1 = get_card_def(cards_1[0])
+        cd2 = get_card_def(cards_2[0])
+        all_effects: list[Effect] = []
+        for (etype, pri) in cd1.effects:
+            all_effects.append(Effect("1", pri, cards_1[0], etype))
+        for (etype, pri) in cd2.effects:
+            all_effects.append(Effect("2", pri, cards_2[0], etype))
+
+        # Process by priority: 11 first, then 10
+        for priority in [11, 10]:
+            group = [e for e in all_effects if e.priority == priority]
+            for effect in group:
+                opp = cards_2[0] if effect.source_player == "1" else cards_1[0]
+                result = _process_effect(
+                    effect, statuses_1, statuses_2,
+                    p1_had_defense_pre, p2_had_defense_pre,
+                    p1_attack_streak, p2_attack_streak, opp,
+                    dmg_1, dmg_2, energy_1, energy_2,
+                )
+                dmg_1, dmg_2, energy_1, energy_2, statuses_1, statuses_2, detail = result
+                if detail:
+                    details.append(detail)
+
+        # Compute newly granted statuses
+        new_1 = [s for s in statuses_1 if s not in player_1_statuses]
+        new_2 = [s for s in statuses_2 if s not in player_2_statuses]
 
         return ResolutionResult(
-            damage_1=damage_1,
-            damage_2=damage_2,
+            damage_1=dmg_1,
+            damage_2=dmg_2,
+            energy_delta_1=energy_1,
+            energy_delta_2=energy_2,
+            statuses_granted_1=new_1,
+            statuses_granted_2=new_2,
             details=details,
         )
 
-    # ------------------------------------------------------------------
-    # Internal helpers (public for testability per interface design)
-    # ------------------------------------------------------------------
 
-    @staticmethod
-    def _card_effect(
-        my_card: CardType,
-        opp_card: CardType,
-        my_history: list[CardType],
-        opp_history: list[CardType],
-        is_player_1: bool,
-    ) -> tuple[int, int]:
-        """Compute (damage_to_me, damage_to_opponent) for one card's effect.
+# ---------------------------------------------------------------------------
+# Pure effect processor — no side effects, returns new state tuple
+# ---------------------------------------------------------------------------
 
-        This is called twice per resolution — once for each player's card.
 
-        Args:
-            my_card: The card being evaluated.
-            opp_card: The opponent's card.
-            my_history: This player's history (for consecutive checks).
-            opp_history: Opponent's history (for consecutive checks).
-            is_player_1: Whether this is Player 1's card.
+def _process_effect(
+    effect: Effect,
+    statuses_1: list[str],
+    statuses_2: list[str],
+    p1_had_defense_pre: bool,
+    p2_had_defense_pre: bool,
+    p1_attack_streak: int,
+    p2_attack_streak: int,
+    opp_card: CardType,
+    dmg_1: int,
+    dmg_2: int,
+    energy_1: int,
+    energy_2: int,
+) -> tuple[int, int, int, int, list[str], list[str], str]:
+    """Process a single Effect and return updated accumulators + detail string.
 
-        Returns:
-            (damage_to_self, damage_to_opponent) tuple.
-        """
-        dmg_self = 0
-        dmg_opp = 0
+    Returns a tuple of (dmg_1, dmg_2, energy_1, energy_2, statuses_1, statuses_2, detail).
+    Status lists are copied on modification to maintain immutability of the return.
+    """
+    detail = ""
+    src = effect.source_player
 
-        if my_card == CardType.ATTACK:
-            # Attack: deals X damage where X = consecutive attack count + 1
-            # Blocked by Defense or Counter
-            if opp_card != CardType.DEFENSE and opp_card != CardType.COUNTER:
-                consecutive = CardResolver.get_consecutive_attack(my_history) + 1
-                dmg_opp = consecutive
+    if effect.effect_type == "grant_defense":
+        if src == "1" and "defense" not in statuses_1:
+            statuses_1 = list(statuses_1) + ["defense"]
+            detail = "P1 gains defense"
+        elif src == "2" and "defense" not in statuses_2:
+            statuses_2 = list(statuses_2) + ["defense"]
+            detail = "P2 gains defense"
 
-        elif my_card == CardType.DEFENSE:
-            # Defense is pure-block (D7): never deals damage.
-            # When HS hits a non-consecutive Defense, the damage comes
-            # from the HS card's effect, not from the Defense card.
-            pass  # No damage assignment
+    elif effect.effect_type == "grant_guard":
+        if src == "1" and p1_had_defense_pre:
+            if "联防" not in statuses_1:
+                statuses_1 = list(statuses_1) + ["联防"]
+                detail = "P1 gains 联防 (consecutive defense)"
+        elif src == "2" and p2_had_defense_pre:
+            if "联防" not in statuses_2:
+                statuses_2 = list(statuses_2) + ["联防"]
+                detail = "P2 gains 联防 (consecutive defense)"
 
-        elif my_card == CardType.HEAVY_STRIKE:
-            # Heavy Strike: deals 1 damage unless opponent played Defense
-            # in BOTH the current round AND the previous round.
-            if opp_card == CardType.DEFENSE and CardResolver.played_defense_last_round(opp_history):
-                pass  # Blocked by consecutive Defense
+    elif effect.effect_type == "damage":
+        if effect.source_card == CardType.ATTACK:
+            streak = p1_attack_streak if src == "1" else p2_attack_streak
+            raw = min(streak + 1, MAX_ATTACK_STREAK_DAMAGE)
+            if src == "1":
+                if "defense" not in statuses_2:
+                    dmg_2 += raw
+                    detail = f"P1 Attack(streak={streak}) → P2 takes {raw}"
+                else:
+                    detail = "P1 Attack blocked by P2 defense"
             else:
-                dmg_opp = 1
+                if "defense" not in statuses_1:
+                    dmg_1 += raw
+                    detail = f"P2 Attack(streak={streak}) → P1 takes {raw}"
+                else:
+                    detail = "P2 Attack blocked by P1 defense"
+        elif effect.source_card == CardType.HEAVY:
+            if src == "1":
+                if "联防" not in statuses_2:
+                    dmg_2 += 1
+                    detail = "P1 Heavy Strike → P2 takes 1"
+                else:
+                    detail = "P1 Heavy Strike blocked by P2 联防"
+            else:
+                if "联防" not in statuses_1:
+                    dmg_1 += 1
+                    detail = "P2 Heavy Strike → P1 takes 1"
+                else:
+                    detail = "P2 Heavy Strike blocked by P1 联防"
 
-        elif my_card == CardType.COUNTER:
-            # Counter:
-            # - vs Attack: opponent takes 1, self takes 0
-            # - vs Heavy Strike: both take 1
-            # - otherwise: no effect
-            if opp_card == CardType.ATTACK:
-                dmg_opp = 1  # Opponent takes 1, self takes 0
-            elif opp_card == CardType.HEAVY_STRIKE:
-                dmg_opp = 1  # Opponent takes 1 (self damage comes from opponent's HS)
-                # Note: self damage (dmg_self) from this interaction is set by
-                # the opponent's HS effect when it's evaluated separately.
-                # The max() in resolve() combines them correctly per D8.
+    elif effect.effect_type == "reflect":
+        if opp_card in (CardType.ATTACK, CardType.HEAVY):
+            if src == "1":
+                dmg_2 += 1
+                detail = f"P1 Counter reflects {opp_card.value} → P2 takes 1"
+            else:
+                dmg_1 += 1
+                detail = f"P2 Counter reflects {opp_card.value} → P1 takes 1"
 
-        return dmg_self, dmg_opp
+    elif effect.effect_type == "gain_energy":
+        if src == "1":
+            energy_1 += 1
+            detail = "P1 gains 1 energy"
+        else:
+            energy_2 += 1
+            detail = "P2 gains 1 energy"
 
-    @staticmethod
-    def _describe_effect(
-        my_card: CardType,
-        opp_card: CardType,
-        my_history: list[CardType],
-        opp_history: list[CardType],
-        my_name: str,
-        opp_name: str,
-    ) -> str:
-        """Produce a human-readable description of one card's effect."""
-        cn = {
-            CardType.ATTACK: "Attack",
-            CardType.DEFENSE: "Defense",
-            CardType.HEAVY_STRIKE: "Heavy Strike",
-            CardType.COUNTER: "Counter",
-        }
+    elif effect.effect_type == "flex_damage":
+        if src == "1":
+            if "defense" not in statuses_2:
+                dmg_2 += 1
+                detail = "P1 FLEX damage → P2 takes 1"
+            else:
+                detail = "P1 FLEX damage blocked by P2 defense"
+        else:
+            if "defense" not in statuses_1:
+                dmg_1 += 1
+                detail = "P2 FLEX damage → P1 takes 1"
+            else:
+                detail = "P2 FLEX damage blocked by P1 defense"
 
-        if my_card == CardType.ATTACK:
-            if opp_card in (CardType.DEFENSE, CardType.COUNTER):
-                return f"{my_name} Attack blocked by {opp_name}'s {cn[opp_card]} → {opp_name} takes 0"
-            x = CardResolver.get_consecutive_attack(my_history) + 1
-            return f"{my_name} Attack (×{x}) → {opp_name} takes {x}"
+    elif effect.effect_type == "build":
+        detail = f"P{src} BUILD — no immediate effect"
 
-        if my_card == CardType.DEFENSE:
-            if opp_card == CardType.HEAVY_STRIKE:
-                if CardResolver.played_defense_last_round(my_history):
-                    return f"{my_name} consecutive Defense blocks Heavy Strike → {my_name} takes 0"
-                return f"{my_name} Defense fails vs Heavy Strike → {my_name} takes 1"
-            return f"{my_name} Defense vs {cn[opp_card]} → {my_name} takes 0"
-
-        if my_card == CardType.HEAVY_STRIKE:
-            if opp_card == CardType.DEFENSE and CardResolver.played_defense_last_round(opp_history):
-                return f"{my_name} Heavy Strike blocked by {opp_name} consecutive Defense → {opp_name} takes 0"
-            return f"{my_name} Heavy Strike → {opp_name} takes 1"
-
-        if my_card == CardType.COUNTER:
-            if opp_card == CardType.ATTACK:
-                return f"{my_name} Counter vs {opp_name} Attack → {opp_name} takes 1, {my_name} takes 0"
-            if opp_card == CardType.HEAVY_STRIKE:
-                return f"{my_name} Counter vs {opp_name} Heavy Strike → both take 1"
-            return f"{my_name} Counter vs {cn[opp_card]} → no effect"
-
-        return "Unknown effect"
+    return dmg_1, dmg_2, energy_1, energy_2, statuses_1, statuses_2, detail

@@ -1,0 +1,120 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam classFontName Microsoft YaHei
+
+title Game v2 类图
+
+package "game" {
+    enum CardType {
+        ATTACK
+        DEFENSE
+        HEAVY
+        COUNTER
+        ENERGY
+        BUILD
+        FLEX
+    }
+
+    class CardDef <<dataclass, frozen>> {
+        card_type: CardType
+        priority: int | None
+        effects: tuple[tuple[str,int], ...]
+        build_cost: int
+        display_name: str
+        icon: str
+    }
+
+    class Player <<dataclass>> {
+        hp: int = 20
+        energy: int = 0
+        statuses: list[str]
+        hand: list[CardType]
+        draw_pile: list[CardType]
+        discard_pile: list[CardType]
+        history: list[CardType]
+        +play_card(card)
+        +take_damage(amount)
+        +has_card(card)
+        +add_energy(amount)
+        +has_status(status)
+    }
+
+    class Effect {
+        source_player: str
+        priority: int
+        source_card: str
+        effect_type: str
+    }
+
+    class ResolutionResult <<dataclass>> {
+        damage_1: int
+        damage_2: int
+        energy_delta_1: int
+        energy_delta_2: int
+        statuses_granted_1: list[str]
+        statuses_granted_2: list[str]
+        details: list[str]
+    }
+
+    class CardResolver {
+        {static} +resolve(cards_1, cards_2, p1_statuses, p2_statuses, p1_streak, p2_streak)
+        {static} +get_consecutive_attack(history)
+    }
+
+    class RoundResult <<dataclass>> {
+        round: int
+        cycle: int
+        round_in_cycle: int
+        cards_1: list[CardType]
+        cards_2: list[CardType]
+        damage_1: int
+        damage_2: int
+        hp_1_after: int
+        hp_2_after: int
+        energy_1_after: int
+        energy_2_after: int
+        statuses_1: list[str]
+        statuses_2: list[str]
+        details: list[str]
+        is_game_over: bool
+        winner: str | None
+    }
+
+    class GameCore {
+        ROUNDS_PER_CYCLE = 5
+        mode: str
+        player_1: Player
+        player_2: Player
+        round_number: int
+        cycle_number: int
+        round_in_cycle: int
+        is_over: bool
+        winner: str | None
+        round_log: list[RoundResult]
+        +start_game()
+        +play_round(cards_1, cards_2)
+        +get_state()
+    }
+
+    class SessionStore {
+        +save(game_id, game_core, ai_state, ai_value_state, ai)
+        +load(game_id)
+        +delete(game_id)
+    }
+}
+
+CardType "1" --> "1" CardDef : defined by
+CardDef --> CardType : card_type
+Player "1" --> "*" CardType : hand/draw_pile/discard_pile
+CardResolver ..> Effect : creates
+CardResolver ..> ResolutionResult : returns
+GameCore --> Player : player_1/player_2
+GameCore --> CardResolver : calls
+GameCore --> RoundResult : produces
+SessionStore --> GameCore : persists
+ResolutionResult --> CardType : cards
+RoundResult --> CardType : cards
+RoundResult --> GameCore : round_log
+
+@enduml

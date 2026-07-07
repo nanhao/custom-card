@@ -250,7 +250,7 @@ def _register_routes(app: Flask) -> None:
             # PVE: auto-compute via AppManager
             app_manager: AppManager = app.config["APP_MANAGER"]
             try:
-                card_str, new_hidden_state = app_manager.ai_select_action(
+                card_str, build_target_str, new_hidden_state = app_manager.ai_select_action(
                     gm.get_state(), metadata["ai_state"], metadata["ai"]
                 )
             except ValueError as exc:
@@ -275,6 +275,7 @@ def _register_routes(app: Flask) -> None:
                 )), 500
 
             cards_2 = [str_to_card(card_str)]
+            build_target_2 = str_to_card(build_target_str) if build_target_str else None
         else:
             # PVP: deserialize cards_2 from request body
             cards_2_raw = data.get("cards_2", [])
@@ -289,10 +290,19 @@ def _register_routes(app: Flask) -> None:
                 return jsonify(error_response(
                     str(exc), "INVALID_CARD", 400
                 )), 400
+            build_target_2 = None
+
+        # Parse build_target_1 from request (optional, only for BUILD)
+        build_target_1_raw = data.get("build_target_1")
+        build_target_1 = str_to_card(build_target_1_raw) if build_target_1_raw else None
 
         # ---- Delegate to GameCore ----
         try:
-            result = gm.play_round(cards_1, cards_2)
+            result = gm.play_round(
+                cards_1, cards_2,
+                build_target_1=build_target_1,
+                build_target_2=build_target_2,
+            )
         except ValueError as exc:
             error_msg = str(exc)
             if "game is over" in error_msg.lower():
@@ -305,7 +315,12 @@ def _register_routes(app: Flask) -> None:
 
         # Persist updated state
         if gm.mode == "pve":
-            store.save(game_id, gm, ai_state=new_hidden_state, ai=metadata["ai"])
+            store.save(
+                game_id, gm,
+                ai_state=new_hidden_state,
+                ai_value_state=metadata.get("ai_value_state"),
+                ai=metadata["ai"],
+            )
         else:
             store.save(game_id, gm)
 

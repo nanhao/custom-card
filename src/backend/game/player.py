@@ -1,7 +1,9 @@
-"""Player state container for the custom card game.
+"""Player state container for the custom card game v2 (design/11).
 
 Per architecture D2, Player is a data container (dataclass) with minimal
-behavior. It holds hp, hand, and history. The GameManager mutates it.
+behavior. It holds hp (default 20), energy (0-5), statuses, hand, draw_pile,
+discard_pile, and history.
+
 Per architecture D9, this module is pure logic — no UI, no I/O.
 """
 
@@ -9,30 +11,41 @@ from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType
 
+# Energy cap per design/11 intention §1
+MAX_ENERGY = 5
+
 
 @dataclass
 class Player:
-    """Represents one player's state in the game.
+    """Represents one player's state in the v2 game.
 
     Attributes:
-        hp: Current HP, initially 3, clamped to ≥0 (architecture D5).
-        hand: Remaining cards. Modified by play_card().
+        hp: Current HP, default 20, clamped to >= 0.
+        energy: Current energy, default 0, clamped to [0, 5].
+        statuses: List of active status strings (e.g. "defense", "联防").
+        hand: Cards currently in hand.
+        draw_pile: Cards remaining in the draw pile.
+        discard_pile: Cards in the discard pile.
         history: Cards played in previous rounds, chronologically.
+                 Used for consecutive attack counting.
     """
 
-    hp: int = 3
+    hp: int = 20
+    energy: int = 0
+    statuses: list[str] = field(default_factory=list)
     hand: list[CardType] = field(default_factory=list)
+    draw_pile: list[CardType] = field(default_factory=list)
+    discard_pile: list[CardType] = field(default_factory=list)
     history: list[CardType] = field(default_factory=list)
 
+    # ------------------------------------------------------------------
+    # Card manipulation
+    # ------------------------------------------------------------------
+
     def play_card(self, card: CardType) -> None:
-        """Remove the first occurrence of `card` from hand.
+        """Remove one occurrence of `card` from hand.
 
-        Equivalent to list.remove(card). Raises ValueError if the card
-        is not present in the hand.
-
-        Per architecture D6, this is called AFTER resolution and damage
-        application, so resolution never depends on current hand state.
-
+        Raises ValueError if the card is not present in the hand.
         Convenience wrapper around play_cards for single-card use.
         """
         self.play_cards([card])
@@ -40,15 +53,11 @@ class Player:
     def play_cards(self, cards: list[CardType]) -> None:
         """Remove one occurrence of each card in `cards` from hand.
 
-        Raises ValueError if any card is not present (no partial removal).
-        Supports future multi-card gameplay (architecture D12).
-
-        Per architecture D6, this is called AFTER resolution and damage
-        application, so resolution never depends on current hand state.
+        Atomic: validates all cards present before removing any.
+        Raises ValueError if any card is not present.
         """
         if not cards:
             return
-        # Validate all cards present before removing any (atomic)
         remaining = list(self.hand)
         for card in cards:
             try:
@@ -59,13 +68,6 @@ class Player:
                 ) from None
         self.hand = remaining
 
-    def take_damage(self, amount: int) -> None:
-        """Reduce HP by `amount`, clamped to 0.
-
-        Per architecture D5: HP never goes negative.
-        """
-        self.hp = max(0, self.hp - amount)
-
     def has_card(self, card: CardType) -> bool:
         """Return True if `card` is present in hand."""
         return card in self.hand
@@ -74,7 +76,6 @@ class Player:
         """Return True if all cards in `cards` are present in hand.
 
         Checks duplicates correctly (e.g., two ATK requires at least two ATK in hand).
-        Supports future multi-card gameplay (architecture D12).
         """
         remaining = list(self.hand)
         for card in cards:
@@ -82,3 +83,34 @@ class Player:
                 return False
             remaining.remove(card)
         return True
+
+    # ------------------------------------------------------------------
+    # HP
+    # ------------------------------------------------------------------
+
+    def take_damage(self, amount: int) -> None:
+        """Reduce HP by `amount`, clamped to 0.
+
+        Per design: HP never goes negative.
+        """
+        self.hp = max(0, self.hp - amount)
+
+    # ------------------------------------------------------------------
+    # Energy
+    # ------------------------------------------------------------------
+
+    def add_energy(self, amount: int) -> None:
+        """Increase energy by `amount`, clamped to [0, MAX_ENERGY].
+
+        Args:
+            amount: Positive integer amount of energy to add.
+        """
+        self.energy = min(MAX_ENERGY, self.energy + amount)
+
+    # ------------------------------------------------------------------
+    # Statuses
+    # ------------------------------------------------------------------
+
+    def has_status(self, status: str) -> bool:
+        """Return True if the player has the specified status."""
+        return status in self.statuses

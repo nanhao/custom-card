@@ -1,10 +1,9 @@
-"""Bidirectional conversion between card strings and model tensors.
+"""Bidirectional conversion between card strings and model tensors for v2 (design/11).
 
-Per design/3 architecture D4, Converter separates transformations from models.
-All methods are stateless. The class serves as a namespace for conversion logic
-that bridges game domain types and AI model inputs.
+Per design/11 D6, Converter handles 7 card types and builds 25-d input vectors
+with round_in_cycle and cycle metadata.
 
-No PyTorch dependency — pure data transformation.
+All methods are stateless. No PyTorch dependency — pure data transformation.
 """
 
 
@@ -12,22 +11,26 @@ class Converter:
     """Bidirectional conversion between card strings and model tensors.
 
     All methods are stateless. The class serves as a namespace for
-    conversion logic that bridges game domain types and AI model inputs.
+    conversion logic bridging game domain types and AI model inputs.
     """
 
-    # Constants (per design/3 interfaces.md §3)
-    NUM_CARD_TYPES: int = 4
-    INPUT_SIZE: int = 14
+    NUM_CARD_TYPES: int = 7
+    INPUT_SIZE: int = 25
 
     # Public set of all valid card strings
-    ALL_CARD_TYPES: frozenset[str] = frozenset({"attack", "defense", "heavy", "counter"})
+    ALL_CARD_TYPES: frozenset[str] = frozenset({
+        "attack", "defense", "heavy", "counter", "energy", "build", "flex",
+    })
 
-    # Internal mapping tables (use card_to_index / index_to_card instead)
+    # Internal mapping tables
     _CARD_TO_INDEX: dict[str, int] = {
         "attack": 0,
         "defense": 1,
         "heavy": 2,
         "counter": 3,
+        "energy": 4,
+        "build": 5,
+        "flex": 6,
     }
 
     _INDEX_TO_CARD: dict[int, str] = {
@@ -35,24 +38,36 @@ class Converter:
         1: "defense",
         2: "heavy",
         3: "counter",
+        4: "energy",
+        5: "build",
+        6: "flex",
+    }
+
+    # Build cost lookup for mask_fn
+    _BUILD_COST: dict[int, int] = {
+        0: 1,  # attack
+        1: 1,  # defense
+        2: 1,  # heavy
+        3: 2,  # counter
+        4: 1,  # energy
+        5: 1,  # build
+        6: 2,  # flex
     }
 
     # ------------------------------------------------------------------
-    # Card ↔ Index conversion
+    # Card <-> Index conversion
     # ------------------------------------------------------------------
 
     @staticmethod
     def card_to_index(card_str: str) -> int:
         """Convert card string to policy head index.
 
-        Mapping: attack→0, defense→1, heavy→2, counter→3.
+        Mapping: attack->0, defense->1, heavy->2, counter->3,
+                 energy->4, build->5, flex->6.
         Returns -1 for unrecognized card strings.
 
-        Args:
-            card_str: Card string value (e.g. "attack", "defense").
-
-        Returns:
-            Integer index (0–3), or -1 if unrecognized.
+        This mapping is used for both the first 7-d (card action)
+        and the second 7-d (build target) policy outputs.
         """
         return Converter._CARD_TO_INDEX.get(card_str, -1)
 
@@ -60,16 +75,10 @@ class Converter:
     def index_to_card(index: int) -> str:
         """Convert policy head index to card string.
 
-        Mapping: 0→attack, 1→defense, 2→heavy, 3→counter.
-
-        Args:
-            index: Integer index (0–3).
-
-        Returns:
-            Corresponding card string.
+        0->attack ... 6->flex.
 
         Raises:
-            IndexError: If index is outside the valid range [0, 3].
+            IndexError: If index is outside [0, 6].
         """
         if index < 0 or index >= Converter.NUM_CARD_TYPES:
             raise IndexError(
@@ -77,27 +86,33 @@ class Converter:
             )
         return Converter._INDEX_TO_CARD[index]
 
+    @staticmethod
+    def build_cost_for_index(index: int) -> int:
+        """Return the build cost for a card by its index (0-6)."""
+        return Converter._BUILD_COST.get(index, 999)
+
     # ------------------------------------------------------------------
     # Input vector construction
     # ------------------------------------------------------------------
 
     @staticmethod
     def build_input_vector(state: dict, player_key: str = "2") -> list[float]:
-        """Build the 14-d input vector from a game state dict.
+        """Build the 25-d input vector from a game state dict.
 
-        Per design/3 interfaces.md §3 and design/5 D3:
-            indices 0–3:   This player's card counts (attack, defense, heavy, counter)
-            indices 4–5:   HP values (this player, opponent), clamped [0,3]
-            indices 6–9:   One-hot of this player's last move (zeros in round 1)
-            indices 10–13: One-hot of opponent's last move (zeros in round 1)
+        Per design/11 D6:
+            indices 0-6:   This player's hand card counts (7 types)
+            indices 7-8:   HP values (this player, opponent), NOT clamped/normalized
+            indices 9-15:  One-hot of this player's last move (7 types)
+            indices 16-22: One-hot of opponent's last move (7 types)
+            index 23:      Current round_in_cycle (1-5)
+            index 24:      Current cycle number
 
         Args:
             state: Game state dict from GameCore.get_state().
             player_key: Which player's perspective — "1" or "2".
-                        Default "2" preserves backward compatibility.
 
         Returns:
-            list[float] of length 14.
+            list[float] of length 25.
 
         Raises:
             ValueError: If player_key is not "1" or "2".
@@ -111,18 +126,18 @@ class Converter:
         opponent_key = "2" if player_key == "1" else "1"
         opp_player = state["players"][opponent_key]
 
-        # ---- Card counts (indices 0–3) ----
+        # Card counts (indices 0-6)
         counts = [0.0] * Converter.NUM_CARD_TYPES
         for card_str in this_player["hand"]:
             idx = Converter._CARD_TO_INDEX.get(card_str)
             if idx is not None:
                 counts[idx] += 1.0
 
-        # ---- HP values (indices 4–5), clamped to [0, 3] ----
-        this_hp = max(0.0, min(3.0, float(this_player["hp"])))
-        opp_hp = max(0.0, min(3.0, float(opp_player["hp"])))
+        # HP values (indices 7-8), NOT normalized per design D8
+        this_hp = float(this_player["hp"])
+        opp_hp = float(opp_player["hp"])
 
-        # ---- One-hot of last moves (indices 6–13) ----
+        # One-hot of last moves (indices 9-22)
         this_last = [0.0] * Converter.NUM_CARD_TYPES
         opp_last = [0.0] * Converter.NUM_CARD_TYPES
 
@@ -138,4 +153,8 @@ class Converter:
             if onehot_idx is not None:
                 opp_last[onehot_idx] = 1.0
 
-        return counts + [this_hp, opp_hp] + this_last + opp_last
+        # Round metadata (indices 23-24)
+        round_in_cycle = float(state.get("round_in_cycle", 1))
+        cycle = float(state.get("cycle", 1))
+
+        return counts + [this_hp, opp_hp] + this_last + opp_last + [round_in_cycle, cycle]

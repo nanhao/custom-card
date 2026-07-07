@@ -1,0 +1,59 @@
+@startuml game_lifecycle
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam sequenceMessageFontName Microsoft YaHei
+
+title 游戏生命周期 (跨 cycle)
+
+participant "Client" as C
+participant "GameCore" as GC
+participant "Player 1" as P1
+participant "Player 2" as P2
+
+== ① 游戏初始化 ==
+C -> GC: start_game()
+GC -> P1: hp=20, energy=0, draw_pile=7张, hand=[]
+GC -> P2: hp=20, energy=0, draw_pile=7张, hand=[]
+
+== ② 第1个 cycle 开始 ==
+GC -> GC: _start_cycle()
+GC -> P1: draw_pile → shuffle → 抽7张 → hand
+GC -> P2: draw_pile → shuffle → 抽7张 → hand
+
+== ③ 回合循环 (每 cycle 5回合) ==
+loop round_in_cycle = 1..5
+    C -> GC: play_round(card_1, card_2)
+    GC -> GC: CardResolver.resolve()
+    GC -> P1: take_damage, add_energy, play_card
+    GC -> P2: take_damage, add_energy, play_card
+    alt 含构建卡
+        GC -> GC: 消耗能量 → 目标卡→discard_pile
+    end
+    GC -> GC: 打出的卡 → discard_pile
+    GC --> C: RoundResult
+    
+    opt HP归零
+        GC --> C: is_game_over=True, winner
+        note over C: 游戏结束
+    end
+end
+
+== ④ cycle 末扣血 ==
+GC -> GC: 双方hp各-1
+GC -> P1: hp -= 1
+GC -> P2: hp -= 1
+
+alt hp归零
+    GC --> C: is_game_over=True, 游戏结束
+else 游戏继续
+    == ⑤ 进入下一 cycle ==
+    GC -> GC: cycle_number++, round_in_cycle=1\nround_number 持续递增
+    GC -> P1: hand → discard_pile\n(draw_pile += discard_pile)\n洗牌 → 抽7张
+    GC -> P2: hand → discard_pile\n(draw_pile += discard_pile)\n洗牌 → 抽7张
+
+    note right GC: statuses(本轮清空), history,\n连续攻击计数, hp 保留
+
+    note over GC: 从 ③ 循环直到游戏结束
+end
+
+@enduml

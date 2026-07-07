@@ -1,238 +1,291 @@
-"""Unit tests for src/backend/game/resolver.py — CardResolver and ResolutionResult.
+"""Unit tests for src/backend/game/resolver.py — priority-layered card resolution.
 
-Covers TC-GROUP-1, TC-GROUP-2, TC-GROUP-3, TC-GROUP-4 from test_cases.md.
+Test cases per design/11 test_cases.md §3 (TC-RS-01 ~ TC-RS-11).
 """
 
-import pytest
 from src.backend.game.card import CardType
-from src.backend.game.resolver import CardResolver, ResolutionResult
-
-# Short aliases for readability
-A = CardType.ATTACK
-D = CardType.DEFENSE
-H = CardType.HEAVY_STRIKE
-C = CardType.COUNTER
+from src.backend.game.resolver import CardResolver
 
 
-# ---------------------------------------------------------------------------
-# ResolutionResult tests
-# ---------------------------------------------------------------------------
+class TestPriorityLayered:
+    """TC-RS-01: Priority 11 resolves before priority 10."""
 
-class TestResolutionResult:
-    """Tests for the ResolutionResult value object."""
-
-    def test_creation_and_attributes(self):
-        """ResolutionResult should hold damage and details."""
-        result = ResolutionResult(damage_1=1, damage_2=2, details=["A takes 1", "B takes 2"])
-        assert result.damage_1 == 1
-        assert result.damage_2 == 2
-        assert result.details == ["A takes 1", "B takes 2"]
-
-    def test_zero_damage(self):
-        """ResolutionResult should handle zero damage."""
-        result = ResolutionResult(damage_1=0, damage_2=0, details=["no damage"])
+    def test_defense_blocks_attack(self):
+        """P1 DEFENSE(11) vs P2 ATTACK(10); no pre-existing statuses."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.DEFENSE],
+            cards_2=[CardType.ATTACK],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
         assert result.damage_1 == 0
         assert result.damage_2 == 0
+        assert "defense" in result.statuses_granted_1
 
 
-# ---------------------------------------------------------------------------
-# Helper constants for all table-driven tests
-# ---------------------------------------------------------------------------
-E = []  # Empty history
+class TestSamePriority:
+    """TC-RS-02: Same-priority effects resolve simultaneously."""
+
+    def test_attack_vs_attack_with_streak(self):
+        """P1 ATTACK(10) streak=0, P2 ATTACK(10) streak=1."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.ATTACK],
+            cards_2=[CardType.ATTACK],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=1,
+        )
+        assert result.damage_1 == 2  # P2: streak 1 → 1+1=2
+        assert result.damage_2 == 1  # P1: streak 0 → 0+1=1
 
 
-# ---------------------------------------------------------------------------
-# TC-GROUP-1: PRD Examples (7 cases)
-# ---------------------------------------------------------------------------
+class TestFlexMultiPriority:
+    """TC-RS-03: FLEX dual-priority independent resolution."""
 
-PRD_EXAMPLES = [
-    # (id, card_a, card_b, hist_a, hist_b, dmg_a, dmg_b, desc)
-    ("TC1",  A, A, E, E, 1, 1, "Both Attack (×1), both take 1"),
-    ("TC2",  D, D, E, E, 0, 0, "Both Defense, no damage"),
-    ("TC3",  A, D, E, E, 0, 0, "Attack blocked by Defense"),
-    ("TC4",  A, C, E, E, 1, 0, "Counter vs Attack, A takes 1"),
-    ("TC5",  H, C, E, E, 1, 1, "Both deal 1, both take 1"),
-    ("TC6",  A, A, [A], E, 1, 2, "A Attack ×2, B Attack ×1"),
-    ("TC7",  D, H, [D], E, 0, 0, "Consecutive Defense blocks Heavy Strike"),
-]
-
-
-# ---------------------------------------------------------------------------
-# TC-GROUP-2: Full Resolution Matrix — Round 1 (16 cases)
-# ---------------------------------------------------------------------------
-
-MATRIX_R1 = [
-    # (id, card_a, card_b, dmg_a, dmg_b, reason)
-    ("TC-M1",  A, A, 1, 1, "Both ×1 Attack"),
-    ("TC-M2",  A, D, 0, 0, "Attack blocked by Defense"),
-    ("TC-M3",  A, H, 1, 1, "Attack ×1 vs HS ×1"),
-    ("TC-M4",  A, C, 1, 0, "Counter blocks Attack, deals 1"),
-    ("TC-M5",  D, A, 0, 0, "Defense blocks Attack"),
-    ("TC-M6",  D, D, 0, 0, "Both Defense"),
-    ("TC-M7",  D, H, 1, 0, "No consecutive Defense → A takes 1"),
-    ("TC-M8",  D, C, 0, 0, "No effect"),
-    ("TC-M9",  H, A, 1, 1, "HS vs Attack, both deal 1"),
-    ("TC-M10", H, D, 0, 1, "No consecutive Defense → B takes 1"),  # dmg_a=0: HS A→B 1, DEF B no dmg
-    ("TC-M11", H, H, 1, 1, "Both HS, both take 1"),
-    ("TC-M12", H, C, 1, 1, "Both deal 1"),
-    ("TC-M13", C, A, 0, 1, "Counter deals 1 vs Attack"),
-    ("TC-M14", C, D, 0, 0, "No effect"),
-    ("TC-M15", C, H, 1, 1, "Counter vs HS, both take 1"),
-    ("TC-M16", C, C, 0, 0, "Neither triggers"),
-]
+    def test_flex_vs_attack(self):
+        """P1 FLEX vs P2 ATTACK."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.FLEX],
+            cards_2=[CardType.ATTACK],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.damage_1 == 0
+        assert result.damage_2 == 1
+        assert "defense" in result.statuses_granted_1
 
 
-# ---------------------------------------------------------------------------
-# TC-GROUP-3: Consecutive Attack Tracking (5 cases)
-# ---------------------------------------------------------------------------
+class TestDefenseGrantGuard:
+    """TC-RS-04: Defense grants guard when player already has defense."""
 
-CONSEC_ATTACK = [
-    # (id, card_a, card_b, hist_a, hist_b, dmg_a, dmg_b, desc)
-    ("TC-A1", A, A, [A], E, 1, 2, "A ×2 consecutive"),
-    ("TC-A2", A, A, [A, A], E, 1, 3, "A ×3 consecutive"),
-    ("TC-A3", A, A, [D], [A], 2, 1, "A ×1, B ×2 (interrupted by Defense)"),
-    ("TC-A4", A, A, [A, D, A], E, 1, 2, "A streak broken by Defense, now ×2"),
-    ("TC-A5", A, D, [A, A], E, 0, 0, "Attack ×3 blocked by Defense"),
-]
-
-
-# ---------------------------------------------------------------------------
-# TC-GROUP-4: Consecutive Defense vs Heavy Strike (7 cases)
-# ---------------------------------------------------------------------------
-
-CONSEC_DEFENSE = [
-    # (id, card_a, card_b, hist_a, hist_b, dmg_a, dmg_b, desc)
-    ("TC-D1", D, H, [D], E, 0, 0, "Consecutive Defense blocks HS"),
-    ("TC-D2", D, H, [A], E, 1, 0, "No consecutive Defense, A takes 1"),
-    ("TC-D3", D, H, [D, A, D], E, 0, 0, "Last round was Defense, blocks"),
-    ("TC-D4", H, D, E, [D], 0, 0, "B consecutive Defense blocks A HS"),
-    ("TC-D5", H, D, E, E, 0, 1, "B no prev Defense, R1 → B takes 1"),
-    ("TC-D6", D, H, E, E, 1, 0, "R1, no prev → A takes 1"),
-    ("TC-D7", D, H, [A, D, A], E, 1, 0, "Last card ATK, not DEF → A takes 1"),
-]
+    def test_defense_with_pre_existing_defense(self):
+        """P1 already has 'defense', P1 plays DEFENSE → gets '联防'."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.DEFENSE],
+            cards_2=[CardType.HEAVY],
+            player_1_statuses=["defense"],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.damage_1 == 0
+        assert "联防" in result.statuses_granted_1
 
 
-# ---------------------------------------------------------------------------
-# Parameterized test runners
-# ---------------------------------------------------------------------------
+class TestCounterReflect:
+    """TC-RS-05a~05d: Counter reflect mechanics."""
 
-class TestResolverPRDExamples:
-    """TC-GROUP-1: Verify all 7 PRD examples."""
+    def test_counter_vs_attack(self):
+        """TC-RS-05a: COUNTER vs ATTACK."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.COUNTER],
+            cards_2=[CardType.ATTACK],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.damage_1 == 0
+        assert result.damage_2 == 1
+        assert "defense" in result.statuses_granted_1
 
-    @pytest.mark.parametrize(
-        "tid,card_a,card_b,hist_a,hist_b,dmg_a,dmg_b,desc",
-        PRD_EXAMPLES,
-        ids=[t[0] for t in PRD_EXAMPLES],
-    )
-    def test_prd_example(self, tid, card_a, card_b, hist_a, hist_b, dmg_a, dmg_b, desc):
-        result = CardResolver.resolve([card_a], [card_b], list(hist_a), list(hist_b))
-        assert result.damage_1 == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_1}"
-        assert result.damage_2 == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_2}"
-        assert len(result.details) > 0, f"{tid}: expected non-empty details"
+    def test_counter_vs_heavy(self):
+        """TC-RS-05b: COUNTER vs HEAVY."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.COUNTER],
+            cards_2=[CardType.HEAVY],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.damage_1 == 1  # HEAVY penetrates defense
+        assert result.damage_2 == 1  # Reflect
+        assert "defense" in result.statuses_granted_1
 
-
-class TestResolverMatrix:
-    """TC-GROUP-2: Full 4×4 resolution matrix (round 1, empty histories)."""
-
-    @pytest.mark.parametrize(
-        "tid,card_a,card_b,dmg_a,dmg_b,reason",
-        MATRIX_R1,
-        ids=[t[0] for t in MATRIX_R1],
-    )
-    def test_matrix_r1(self, tid, card_a, card_b, dmg_a, dmg_b, reason):
-        result = CardResolver.resolve([card_a], [card_b], [], [])
-        assert result.damage_1 == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_1}"
-        assert result.damage_2 == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_2}"
-
-
-class TestResolverConsecutiveAttack:
-    """TC-GROUP-3: Consecutive attack tracking."""
-
-    @pytest.mark.parametrize(
-        "tid,card_a,card_b,hist_a,hist_b,dmg_a,dmg_b,desc",
-        CONSEC_ATTACK,
-        ids=[t[0] for t in CONSEC_ATTACK],
-    )
-    def test_consecutive_attack(self, tid, card_a, card_b, hist_a, hist_b, dmg_a, dmg_b, desc):
-        result = CardResolver.resolve([card_a], [card_b], list(hist_a), list(hist_b))
-        assert result.damage_1 == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_1}"
-        assert result.damage_2 == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_2}"
-
-
-class TestResolverConsecutiveDefense:
-    """TC-GROUP-4: Consecutive Defense vs Heavy Strike."""
-
-    @pytest.mark.parametrize(
-        "tid,card_a,card_b,hist_a,hist_b,dmg_a,dmg_b,desc",
-        CONSEC_DEFENSE,
-        ids=[t[0] for t in CONSEC_DEFENSE],
-    )
-    def test_consecutive_defense(self, tid, card_a, card_b, hist_a, hist_b, dmg_a, dmg_b, desc):
-        result = CardResolver.resolve([card_a], [card_b], list(hist_a), list(hist_b))
-        assert result.damage_1 == dmg_a, f"{tid}: expected dmg_a={dmg_a}, got {result.damage_1}"
-        assert result.damage_2 == dmg_b, f"{tid}: expected dmg_b={dmg_b}, got {result.damage_2}"
-
-
-# ---------------------------------------------------------------------------
-# Edge-case unit tests for resolver
-# ---------------------------------------------------------------------------
-
-class TestResolverEdgeCases:
-    """TC-GROUP-6 edge cases for the resolver (TC-X9)."""
-
-    def test_tc_x9_no_double_count_hs_vs_def(self):
-        """TC-X9: HS vs DEF with empty history → dmg(DEF player)=1, not 2."""
-        result = CardResolver.resolve([H], [D], [], [])
-        assert result.damage_2 == 1  # DEF player takes 1 from HS
-        assert result.damage_1 == 0  # HS player takes 0 from DEF
-
-    def test_defense_never_deals_damage_d7(self):
-        """Architecture D7: Defense is pure-block — never deals damage."""
-        # DEF vs ATTACK
-        result = CardResolver.resolve([D], [A], [], [])
+    def test_counter_vs_defense(self):
+        """TC-RS-05c: COUNTER vs DEFENSE."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.COUNTER],
+            cards_2=[CardType.DEFENSE],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
         assert result.damage_1 == 0
         assert result.damage_2 == 0
-        # DEF vs HEAVY (with prev DEF — blocks)
-        result = CardResolver.resolve([D], [H], [D], [])
+        assert "defense" in result.statuses_granted_1
+        assert "defense" in result.statuses_granted_2
+
+    def test_counter_vs_energy(self):
+        """TC-RS-05d: COUNTER vs ENERGY — no reflect."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.COUNTER],
+            cards_2=[CardType.ENERGY],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
         assert result.damage_1 == 0
         assert result.damage_2 == 0
-        # DEF vs HEAVY (no prev DEF — still Defense deals 0, HS deals the 1)
-        result = CardResolver.resolve([D], [H], [], [])
-        assert result.damage_1 == 1  # From HS, not from DEF
+        assert result.energy_delta_2 == 1
+        assert "defense" in result.statuses_granted_1
+
+
+class TestEnergyGain:
+    """TC-RS-06, TC-RS-07: Energy gain mechanics."""
+
+    def test_energy_gain(self):
+        """TC-RS-06: ENERGY card gives +1 energy_delta."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.ENERGY],
+            cards_2=[CardType.ATTACK],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.energy_delta_1 == 1
+
+    def test_energy_delta_unaffected_by_cap(self):
+        """TC-RS-07: energy_delta always 1 (clamping done by Player)."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.ENERGY],
+            cards_2=[CardType.ATTACK],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.energy_delta_1 == 1
+
+
+class TestBuildCard:
+    """TC-RS-08: BUILD card produces no damage or energy in resolver."""
+
+    def test_build_vs_attack(self):
+        """P1 BUILD, P2 ATTACK."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.BUILD],
+            cards_2=[CardType.ATTACK],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.damage_1 == 1  # P2 attack hits P1
+        assert result.damage_2 == 0  # BUILD has no damage effect
+        assert result.energy_delta_1 == 0
+        assert result.energy_delta_2 == 0
+        assert result.statuses_granted_1 == []
+        assert result.statuses_granted_2 == []
+
+
+class TestAttackStreak:
+    """TC-RS-09a~09d: Consecutive attack counting."""
+
+    def test_streak_normal(self):
+        """TC-RS-09a: streak=2 → damage = min(2+1,3) = 3."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.ATTACK],
+            cards_2=[CardType.ENERGY],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=2,
+            p2_attack_streak=0,
+        )
+        assert result.damage_2 == 3
+
+    def test_streak_max_cap(self):
+        """streak=5 → damage = min(5+1,3) = 3."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.ATTACK],
+            cards_2=[CardType.ENERGY],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=5,
+            p2_attack_streak=0,
+        )
+        assert result.damage_2 == 3
+
+    def test_streak_zero(self):
+        """TC-RS-09c: streak=0 → damage=1."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.ATTACK],
+            cards_2=[CardType.ENERGY],
+            player_1_statuses=[],
+            player_2_statuses=[],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.damage_2 == 1
+
+    def test_attack_blocked_by_defense(self):
+        """Attack blocked by defense status — 0 damage regardless of streak."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.ATTACK],
+            cards_2=[CardType.DEFENSE],
+            player_1_statuses=[],
+            player_2_statuses=["defense"],
+            p1_attack_streak=3,
+            p2_attack_streak=0,
+        )
         assert result.damage_2 == 0
 
 
-class TestHelperFunctions:
-    """Tests for CardResolver helper functions."""
+class TestHeavyStrike:
+    """TC-RS-10, TC-RS-11: Heavy strike mechanics."""
 
-    def test_get_consecutive_attack_empty(self):
-        """Empty history → 0 consecutive attacks."""
+    def test_heavy_blocked_by_guard(self):
+        """TC-RS-10: HEAVY blocked by '联防'."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.HEAVY],
+            cards_2=[CardType.ATTACK],
+            player_1_statuses=[],
+            player_2_statuses=["联防"],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.damage_2 == 0
+
+    def test_heavy_not_blocked_by_defense(self):
+        """TC-RS-11: HEAVY NOT blocked by plain 'defense'."""
+        result = CardResolver.resolve(
+            cards_1=[CardType.HEAVY],
+            cards_2=[CardType.ATTACK],
+            player_1_statuses=[],
+            player_2_statuses=["defense"],
+            p1_attack_streak=0,
+            p2_attack_streak=0,
+        )
+        assert result.damage_2 == 1
+
+
+class TestGetConsecutiveAttack:
+    """Static get_consecutive_attack helper."""
+
+    def test_continuous_attack_count(self):
+        """Count consecutive ATTACK from end of history."""
+        history = [CardType.ATTACK, CardType.ATTACK, CardType.DEFENSE, CardType.ATTACK]
+        assert CardResolver.get_consecutive_attack(history) == 1
+
+    def test_counter_breaks_streak(self):
+        """TC-RS-09d: COUNTER breaks attack streak."""
+        history = [CardType.ATTACK, CardType.COUNTER]
+        assert CardResolver.get_consecutive_attack(history) == 0
+
+    def test_empty_history(self):
+        """Empty history → streak = 0."""
         assert CardResolver.get_consecutive_attack([]) == 0
 
-    def test_get_consecutive_attack_single(self):
-        """Single attack in history → 1."""
-        assert CardResolver.get_consecutive_attack([A]) == 1
-
-    def test_get_consecutive_attack_multiple(self):
-        """Multiple consecutive attacks → correct count."""
-        assert CardResolver.get_consecutive_attack([A, A, A]) == 3
-
-    def test_get_consecutive_attack_interrupted(self):
-        """Attack streak broken by non-attack → count from last attack only."""
-        assert CardResolver.get_consecutive_attack([A, D, A]) == 1
-
-    def test_get_consecutive_attack_non_attack_last(self):
-        """No trailing attacks → 0."""
-        assert CardResolver.get_consecutive_attack([A, D]) == 0
-
-    def test_played_defense_last_round_empty(self):
-        """Empty history → False."""
-        assert CardResolver.played_defense_last_round([]) is False
-
-    def test_played_defense_last_round_true(self):
-        """Last card is Defense → True."""
-        assert CardResolver.played_defense_last_round([A, D]) is True
-
-    def test_played_defense_last_round_false(self):
-        """Last card is not Defense → False."""
-        assert CardResolver.played_defense_last_round([D, A]) is False
+    def test_defense_breaks_streak(self):
+        """DEFENSE breaks attack streak."""
+        history = [CardType.ATTACK, CardType.ATTACK, CardType.DEFENSE]
+        assert CardResolver.get_consecutive_attack(history) == 0

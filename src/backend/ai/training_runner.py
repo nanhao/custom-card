@@ -47,6 +47,9 @@ ACTION_TO_INDEX: dict[str, int] = {
     "defense": 1,
     "heavy": 2,
     "counter": 3,
+    "energy": 4,
+    "build": 5,
+    "flex": 6,
 }
 
 

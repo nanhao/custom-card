@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Custom Card Game — v2 Prototype</title>
+<style>
+  :root {
+    --bg: #1a1a2e; --panel: #16213e; --accent: #e94560; --gold: #f5c518;
+    --text: #eee; --muted: #8899aa;
+    --attack: #e94560; --defense: #4e9af1; --heavy: #f39c12; --counter: #9b59b6;
+    --energy: #2ecc71; --build: #1abc9c; --flex: #e67e22; --green: #2ecc71;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:16px;
+  }
+
+  h1 { font-size:1.5rem; color:var(--gold); margin-bottom:4px; text-align:center; }
+  .subtitle { color:var(--muted); font-size:0.8rem; margin-bottom:12px; text-align:center; }
+
+  .screen { display:none; flex-direction:column; align-items:center; width:100%; }
+  .screen.active { display:flex; }
+
+  /* ---- Menu ---- */
+  .menu-container {
+    background:var(--panel); border-radius:16px; padding:40px 32px;
+    max-width:480px; width:100%; text-align:center; margin-top:24px;
+    border:2px solid #2a2a5a;
+  }
+  .menu-container h2 { font-size:1.1rem; color:var(--text); margin-bottom:24px; }
+  .menu-btn {
+    display:block; width:100%; padding:18px 24px; margin-bottom:14px;
+    border-radius:12px; border:2px solid transparent; cursor:pointer;
+    font-size:1.05rem; font-weight:700; transition:all 0.2s;
+  }
+  .menu-btn:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,0.4); }
+  .menu-btn.pvp { background:var(--panel); border-color:var(--gold); color:var(--gold); }
+  .menu-btn.ai { background:var(--gold); color:#1a1a2e; }
+  .menu-btn.back { background:#334; color:var(--text); border-color:#556; font-size:0.9rem; padding:12px; }
+  .menu-desc { font-size:0.8rem; color:var(--muted); margin-top:-8px; margin-bottom:14px; }
+  .menu-hint { font-size:0.8rem; color:var(--muted); margin-top:8px; }
+
+  /* ---- Game Over Banner ---- */
+  .game-over-banner {
+    width:100%; max-width:700px; padding:16px 24px; border-radius:10px;
+    text-align:center; font-size:1.3rem; font-weight:700; margin-bottom:12px;
+  }
+  .banner-win { background:var(--green); color:#fff; }
+  .banner-draw { background:var(--gold); color:#1a1a2e; }
+  .banner-sub { font-size:0.9rem; font-weight:400; margin-top:4px; }
+
+  /* ---- Round / Turn Info ---- */
+  .round-turn-bar {
+    width:100%; max-width:700px; text-align:center; padding:4px 0 8px;
+    font-size:0.9rem; color:var(--gold); font-weight:700;
+  }
+
+  /* ---- Status Bar ---- */
+  .status-bar {
+    width:100%; max-width:700px; display:flex; gap:12px; margin-bottom:12px;
+  }
+  .status-player {
+    flex:1; background:var(--panel); border-radius:10px; padding:12px 14px;
+    border:2px solid transparent; transition:border-color 0.3s;
+  }
+  .status-player.current { border-color:var(--gold); }
+  .status-player.winner { border-color:var(--green); }
+  .status-player.loser { border-color:var(--accent); opacity:0.6; }
+  .status-name { font-size:0.85rem; font-weight:700; margin-bottom:6px; }
+  .status-row { display:flex; align-items:center; gap:6px; margin-bottom:4px; font-size:0.8rem; }
+  .status-label { color:var(--muted); min-width:36px; }
+  .hp-bar-wrap { flex:1; height:14px; background:#2a2a4a; border-radius:7px; overflow:hidden; }
+  .hp-bar-fill { height:100%; background:var(--accent); border-radius:7px; transition:width 0.4s; }
+  .hp-bar-fill.high { background:var(--green); }
+  .hp-text { font-weight:700; font-size:0.85rem; min-width:36px; text-align:right; }
+
+  /* Energy bar */
+  .energy-dots { display:flex; gap:3px; }
+  .energy-dot {
+    width:14px; height:14px; border-radius:50%; background:#2a2a4a;
+    border:2px solid #445; transition:all 0.3s;
+  }
+  .energy-dot.filled { background:var(--energy); border-color:var(--energy); box-shadow:0 0 6px rgba(46,204,113,0.5); }
+
+  /* Status tags */
+  .status-tags { display:flex; gap:4px; flex-wrap:wrap; }
+  .status-tag {
+    font-size:0.65rem; padding:2px 8px; border-radius:10px; font-weight:700;
+  }
+  .tag-defense { background:var(--defense); color:#fff; }
+  .tag-guard { background:#8e44ad; color:#fff; }
+
+  /* Deck info */
+  .deck-info { font-size:0.7rem; color:var(--muted); display:flex; gap:8px; }
+  .deck-info span { cursor:pointer; text-decoration:underline; }
+  .deck-info span:hover { color:var(--gold); }
+
+  /* ---- Hand Area ---- */
+  .hand-area {
+    width:100%; max-width:700px; background:var(--panel);
+    border-radius:10px; padding:14px; margin-bottom:10px;
+  }
+  .hand-title { font-size:0.8rem; font-weight:700; color:var(--gold); text-align:center; margin-bottom:8px; }
+  .card-grid { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+
+  .card-btn {
+    width:75px; height:100px; border-radius:10px; border:2px solid transparent;
+    cursor:pointer; font-weight:700; font-size:0.75rem; transition:all 0.2s;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; color:inherit;
+  }
+  .card-btn:hover:not(:disabled) { transform:translateY(-4px); box-shadow:0 6px 20px rgba(0,0,0,0.4); }
+  .card-btn:disabled { opacity:0.35; cursor:not-allowed; }
+  .card-btn .icon { font-size:1.5rem; }
+  .card-btn .count { font-size:0.65rem; opacity:0.6; }
+
+  .card-attack { background:var(--attack); color:#fff; }
+  .card-defense { background:var(--defense); color:#fff; }
+  .card-heavy { background:var(--heavy); color:#1a1a2e; }
+  .card-counter { background:var(--counter); color:#fff; }
+  .card-energy { background:var(--energy); color:#1a1a2e; }
+  .card-build { background:var(--build); color:#1a1a2e; }
+  .card-flex { background:var(--flex); color:#fff; }
+
+  /* ---- Opponent Hand (Hidden) ---- */
+  .opp-hand-area {
+    width:100%; max-width:700px; background:var(--panel);
+    border-radius:10px; padding:14px; margin-bottom:10px; opacity:0.5;
+  }
+  .opp-hand-title { font-size:0.75rem; color:var(--muted); text-align:center; margin-bottom:8px; }
+  .opp-card-grid { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .opp-card-back {
+    width:75px; height:100px; border-radius:10px; background:#2c3e50;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.5rem; border:2px dashed #444;
+  }
+
+  /* ---- Pass Screen ---- */
+  .pass-screen {
+    width:100%; max-width:700px; background:var(--panel); border-radius:12px;
+    padding:28px; text-align:center; margin-bottom:10px; border:2px solid var(--gold);
+  }
+  .pass-text { font-size:1rem; margin-bottom:12px; }
+  .pass-hint { font-size:0.75rem; color:var(--muted); }
+
+  /* ---- Round Info ---- */
+  .round-info {
+    text-align:center; padding:6px 0; color:var(--muted); font-size:0.85rem;
+  }
+
+  /* ---- Result Panel ---- */
+  .result-panel {
+    width:100%; max-width:700px; background:var(--panel); border-radius:12px;
+    padding:18px; margin-bottom:10px; border:2px solid var(--gold);
+  }
+  .result-title { text-align:center; font-size:0.9rem; color:var(--gold); margin-bottom:10px; }
+  .result-cards { display:flex; gap:20px; justify-content:center; align-items:center; margin-bottom:10px; }
+  .result-card {
+    width:80px; height:105px; border-radius:10px; display:flex;
+    flex-direction:column; align-items:center; justify-content:center; font-weight:700; font-size:0.8rem;
+  }
+  .result-vs { font-size:1.2rem; color:var(--gold); font-weight:700; }
+  .result-details { font-size:0.8rem; text-align:center; line-height:1.5; margin-bottom:10px; }
+  .res-dmg { color:var(--accent); font-weight:700; }
+  .res-safe { color:var(--green); }
+  .res-hp { color:var(--muted); font-size:0.75rem; margin-top:4px; }
+
+  /* ---- Buttons ---- */
+  .btn-row { margin-bottom:10px; display:flex; gap:10px; justify-content:center; }
+  .btn {
+    padding:10px 24px; border-radius:8px; border:none; cursor:pointer;
+    font-weight:700; font-size:0.85rem; transition:all 0.2s;
+  }
+  .btn-primary { background:var(--gold); color:#1a1a2e; }
+  .btn-primary:hover { background:#e0b010; }
+  .btn-secondary { background:#334; color:var(--text); }
+  .btn-secondary:hover { background:#445; }
+  .btn-big { padding:14px 36px; font-size:1rem; }
+  .btn-small { padding:5px 14px; font-size:0.75rem; }
+
+  /* ---- Round Log ---- */
+  .log-area {
+    width:100%; max-width:700px; background:var(--panel); border-radius:8px;
+    padding:10px 14px; max-height:160px; overflow-y:auto; margin-bottom:8px;
+  }
+  .log-area h3 { font-size:0.75rem; color:var(--muted); margin-bottom:6px; }
+  .log-entry { font-size:0.75rem; padding:3px 0; border-bottom:1px solid #2a2a4a; }
+  .log-entry:last-child { border-bottom:none; }
+  .log-dmg { color:var(--accent); }
+  .log-safe { color:var(--green); }
+
+  /* ---- Build Modal ---- */
+  .modal-overlay {
+    display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+    background:rgba(0,0,0,0.7); z-index:100; justify-content:center; align-items:center;
+  }
+  .modal-overlay.active { display:flex; }
+  .modal {
+    background:var(--panel); border-radius:16px; padding:24px;
+    max-width:420px; width:90%; border:2px solid var(--gold); text-align:center;
+  }
+  .modal h3 { color:var(--gold); margin-bottom:8px; font-size:1rem; }
+  .modal .energy-info { color:var(--muted); font-size:0.8rem; margin-bottom:14px; }
+  .build-grid { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:16px; }
+  .build-card {
+    width:70px; height:90px; border-radius:10px; border:2px solid transparent;
+    cursor:pointer; font-weight:700; font-size:0.7rem; transition:all 0.2s;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; color:inherit;
+  }
+  .build-card:hover:not(:disabled) { transform:translateY(-3px); box-shadow:0 4px 16px rgba(0,0,0,0.4); }
+  .build-card:disabled { opacity:0.3; cursor:not-allowed; }
+  .build-card .cost { font-size:0.6rem; opacity:0.7; }
+  .build-card .icon { font-size:1.3rem; }
+
+  /* ---- Deck Viewer Modal ---- */
+  .deck-list { text-align:left; font-size:0.8rem; line-height:1.6; max-height:200px; overflow-y:auto; margin-bottom:12px; }
+  .deck-list .section-title { color:var(--gold); font-weight:700; margin-top:6px; }
+</style>
+</head>
+<body>
+<h1>⚔️ Custom Card Game <span style="font-size:0.7rem;color:var(--muted);">v2</span></h1>
+
+<!-- ===== Screen: Menu ===== -->
+<div id="screen-menu" class="screen active">
+  <div class="subtitle">Select Game Mode</div>
+  <div class="menu-container">
+    <h2>Select Mode</h2>
+    <button class="menu-btn pvp" onclick="startGame('pvp')">👥 Player vs Player</button>
+    <button class="menu-btn ai" onclick="showAISelect()">🤖 Player vs AI</button>
+    <div class="menu-hint">Hot-seat — pass the device between players</div>
+  </div>
+</div>
+
+<!-- ===== Screen: AI Select ===== -->
+<div id="screen-ai" class="screen">
+  <div class="subtitle">Choose Your Opponent</div>
+  <div class="menu-container">
+    <h2>Select AI</h2>
+    <button class="menu-btn ai" onclick="startGame('pve')">🤖 rnn_v1.1<br><span style="font-size:0.7rem;opacity:0.7;">Split policy/value, random weights</span></button>
+    <button class="menu-btn back" onclick="showMenu()">← Back</button>
+  </div>
+</div>
+
+<!-- ===== Screen: Game ===== -->
+<div id="screen-game" class="screen">
+  <div class="subtitle" id="game-subtitle">vs AI — rnn_v1.1</div>
+
+  <div id="game-over-banner"></div>
+
+  <!-- Round / Turn Bar -->
+  <div class="round-turn-bar" id="round-turn-bar">第 1 轮 · 第 1/5 回合</div>
+
+  <!-- Status Bar -->
+  <div class="status-bar" id="status-bar"></div>
+
+  <!-- Hand Area -->
+  <div class="hand-area" id="hand-area-p1"></div>
+
+  <!-- Opponent Hand (hidden) -->
+  <div class="opp-hand-area" id="hand-area-p2-hidden"></div>
+
+  <!-- PVP Pass Screen -->
+  <div class="pass-screen" id="pvp-pass" style="display:none;"></div>
+
+  <!-- Round Info -->
+  <div class="round-info" id="round-info"></div>
+
+  <!-- Result -->
+  <div class="result-panel" id="result-panel" style="display:none;"></div>
+
+  <!-- Round Log -->
+  <div class="log-area" id="log-area"></div>
+
+  <!-- Bottom Buttons -->
+  <div class="btn-row">
+    <button class="btn btn-secondary btn-small" onclick="showMenu()">🏠 Menu</button>
+    <button class="btn btn-secondary btn-small" onclick="resetGame()">🔄 New Game</button>
+  </div>
+</div>
+
+<!-- ===== Build Modal ===== -->
+<div class="modal-overlay" id="build-modal">
+  <div class="modal">
+    <h3>🔨 选择要构建的卡牌</h3>
+    <div class="energy-info">当前能量：<span id="build-energy" style="color:var(--energy);font-weight:700;">3</span></div>
+    <div class="build-grid" id="build-grid"></div>
+    <button class="btn btn-secondary" onclick="closeBuildModal()">取消</button>
+  </div>
+</div>
+
+<!-- ===== Deck Viewer Modal ===== -->
+<div class="modal-overlay" id="deck-modal">
+  <div class="modal">
+    <h3 id="deck-modal-title">📦 牌堆查看</h3>
+    <div class="deck-list" id="deck-list"></div>
+    <button class="btn btn-secondary" onclick="closeDeckModal()">关闭</button>
+  </div>
+</div>
+
+<script>
+// =========================================================================
+// Game State
+// =========================================================================
+const CARD_DEFS = {
+  attack:  { name:'攻击', icon:'⚔️', css:'card-attack', cost:1 },
+  defense: { name:'防御', icon:'🛡️', css:'card-defense', cost:1 },
+  heavy:   { name:'重击', icon:'💥', css:'card-heavy', cost:1 },
+  counter: { name:'反击', icon:'↩️', css:'card-counter', cost:2 },
+  energy:  { name:'聚能', icon:'⚡', css:'card-energy', cost:1 },
+  build:   { name:'构建', icon:'🏗️', css:'card-build', cost:1 },
+  flex:    { name:'攻守兼备', icon:'🔄', css:'card-flex', cost:2 },
+};
+const CARD_ORDER = ['attack','defense','heavy','counter','energy','build','flex'];
+
+let mode = 'pvp';
+let game = null;
+
+// =========================================================================
+// Navigation
+// =========================================================================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function showMenu() { game = null; showScreen('screen-menu'); }
+function showAISelect() { showScreen('screen-ai'); }
+
+// =========================================================================
+// Game init
+// =========================================================================
+function startGame(gm) {
+  mode = gm;
+  document.getElementById('game-subtitle').textContent =
+    mode === 'pve' ? 'vs AI — rnn_v1.1' : 'Hot-seat — pass the device';
+  const aiState = mode === 'pve' ? { energy:0, statuses:[], attackStreak:0 } : null;
+  game = {
+    round:1, turn:1, isOver:false, winner:null,
+    p1: { hp:20, hand:[], drawPile:['attack','attack','defense','heavy','counter','energy','build'],
+          discard:[], energy:0, statuses:[], attackStreak:0 },
+    p2: { hp:20, hand:[], drawPile:['attack','attack','defense','heavy','counter','energy','build'],
+          discard:[], energy:0, statuses:[], attackStreak:0 },
+    p1Card:null, p2Card:null, log:[], phase:'select'
+  };
+  startRound();
+  showScreen('screen-game');
+  renderAll();
+}
+
+function resetGame() { startGame(mode); }
+
+// =========================================================================
+// Round / Turn
+// =========================================================================
+function shuffle(arr) { for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+
+function startRound() {
+  const p = game.p1, o = game.p2;
+  // return hand → discard
+  p.discard.push(...p.hand); p.hand = [];
+  o.discard.push(...o.hand); o.hand = [];
+  // discard → draw pile
+  p.drawPile.push(...p.discard); p.discard = [];
+  o.drawPile.push(...o.discard); o.discard = [];
+  // shuffle
+  shuffle(p.drawPile); shuffle(o.drawPile);
+  // draw 7
+  for(let i=0;i<7;i++) { if(p.drawPile.length) p.hand.push(p.drawPile.pop()); if(o.drawPile.length) o.hand.push(o.drawPile.pop()); }
+  game.turn = 1;
+}
+
+function endOfRound() {
+  // bleed 1 HP
+  game.p1.hp = Math.max(0, game.p1.hp-1);
+  game.p2.hp = Math.max(0, game.p2.hp-1);
+  game.log.push({type:'round_bleed', hp1:game.p1.hp, hp2:game.p2.hp});
+  checkGameOver();
+  if(!game.isOver) { game.round++; startRound(); }
+  renderAll();
+}
+
+function checkGameOver() {
+  if(game.p1.hp <= 0 && game.p2.hp <= 0) { game.isOver=true; game.winner='draw'; }
+  else if(game.p1.hp <= 0) { game.isOver=true; game.winner='2'; }
+  else if(game.p2.hp <= 0) { game.isOver=true; game.winner='1'; }
+  if(game.isOver) game.phase = 'gameover';
+}
+
+// =========================================================================
+// Card Selection
+// =========================================================================
+function selectCard(card) {
+  if(game.phase !== 'select') return;
+  if(!game.p1.hand.includes(card)) return;
+  game.p1Card = card;
+
+  if(mode === 'pve') {
+    // AI auto-select
+    const aiHand = game.p2.hand;
+    const aiPick = aiHand[Math.floor(Math.random()*aiHand.length)];
+    game.p2Card = aiPick;
+    resolveRound();
+  } else {
+    game.phase = 'pvp_pass';
+    document.getElementById('pvp-pass').style.display = 'block';
+    renderHandP2();
+  }
+}
+
+function selectP2Card(card) {
+  if(game.phase !== 'pvp_pass') return;
+  if(!game.p2.hand.includes(card)) return;
+  game.p2Card = card;
+  document.getElementById('pvp-pass').style.display = 'none';
+  resolveRound();
+}
+
+// =========================================================================
+// Resolution (simplified for prototype)
+// =========================================================================
+function resolveRound() {
+  const c1 = game.p1Card, c2 = game.p2Card;
+  let dmg1=0, dmg2=0, details=[];
+
+  // ---- Priority 11 first ----
+  // Defense/Counter status application
+  const p1HadDef = game.p1.statuses.includes('defense');
+  const p2HadDef = game.p2.statuses.includes('defense');
+
+  // P1 defense effects
+  if(c1==='defense'||c1==='counter'||c1==='flex') {
+    if(!p1HadDef) { game.p1.statuses.push('defense'); details.push('P1 获得 防御状态'); }
+    else { details.push('P1 防御状态 回合数+1'); }
+    if(p1HadDef && (c1==='defense'||c1==='counter')) { game.p1.statuses.push('联防'); details.push('P1 获得 联防状态'); }
+  }
+  // P2 defense effects
+  if(c2==='defense'||c2==='counter'||c2==='flex') {
+    if(!p2HadDef) { game.p2.statuses.push('defense'); details.push('P2 获得 防御状态'); }
+    else { details.push('P2 防御状态 回合数+1'); }
+    if(p2HadDef && (c2==='defense'||c2==='counter')) { game.p2.statuses.push('联防'); details.push('P2 获得 联防状态'); }
+  }
+  // Counter reflect (priority 11)
+  if(c1==='counter' && (c2==='attack'||c2==='heavy')) { dmg2+=1; details.push('P1 反击 → P2 受到 1 伤害'); }
+  if(c2==='counter' && (c1==='attack'||c1==='heavy')) { dmg1+=1; details.push('P2 反击 → P1 受到 1 伤害'); }
+
+  // ---- Priority 10 ----
+  const p1HasDef = game.p1.statuses.includes('defense');
+  const p2HasDef = game.p2.statuses.includes('defense');
+  const p1HasGuard = game.p1.statuses.includes('联防');
+  const p2HasGuard = game.p2.statuses.includes('联防');
+
+  // P1 Attack
+  if(c1==='attack') { game.p1.attackStreak++; if(!p2HasDef){ let x=Math.min(game.p1.attackStreak,3); dmg2+=x; details.push(`P1 攻击(x${x}) → P2 受到 ${x} 伤害`); } else details.push(`P1 攻击 被 P2 防御阻挡`); } else game.p1.attackStreak=0;
+
+  // P2 Attack
+  if(c2==='attack') { game.p2.attackStreak++; if(!p1HasDef){ let x=Math.min(game.p2.attackStreak,3); dmg1+=x; details.push(`P2 攻击(x${x}) → P1 受到 ${x} 伤害`); } else details.push(`P2 攻击 被 P1 防御阻挡`); } else game.p2.attackStreak=0;
+
+  // Heavy Strike
+  if(c1==='heavy') { if(!p2HasGuard){ dmg2+=1; details.push('P1 重击 → P2 受到 1 伤害'); } else details.push('P1 重击 被 P2 联防阻挡'); }
+  if(c2==='heavy') { if(!p1HasGuard){ dmg1+=1; details.push('P2 重击 → P1 受到 1 伤害'); } else details.push('P2 重击 被 P1 联防阻挡'); }
+
+  // Energy Charge
+  if(c1==='energy') { game.p1.energy=Math.min(5,game.p1.energy+1); details.push(`P1 聚能 → 能量+1 (${game.p1.energy})`); }
+  if(c2==='energy') { game.p2.energy=Math.min(5,game.p2.energy+1); details.push(`P2 聚能 → 能量+1 (${game.p2.energy})`); }
+
+  // Build
+  if(c1==='build') { details.push('P1 构建 (原型：在弹窗中选择)'); }
+  if(c2==='build') { details.push('P2 构建 (原型：在弹窗中选择)'); }
+
+  // Flex (attack part, priority 10)
+  if(c1==='flex') { if(!p2HasDef){ dmg2+=1; details.push('P1 攻守兼备(攻) → P2 受到 1 伤害'); } else details.push('P1 攻守兼备(攻) 被 P2 防御阻挡'); }
+  if(c2==='flex') { if(!p1HasDef){ dmg1+=1; details.push('P2 攻守兼备(攻) → P1 受到 1 伤害'); } else details.push('P2 攻守兼备(攻) 被 P1 防御阻挡'); }
+
+  // ---- Apply damage ----
+  game.p1.hp = Math.max(0, game.p1.hp - dmg1);
+  game.p2.hp = Math.max(0, game.p2.hp - dmg2);
+
+  // ---- Discard ----
+  game.p1.hand = game.p1.hand.filter((c,i,a) => { if(c===game.p1Card){ game.p1Card=null; return false; } return a.indexOf(c)===i; });
+  game.p2.hand = game.p2.hand.filter((c,i,a) => { if(c===game.p2Card){ game.p2Card=null; return false; } return a.indexOf(c)===i; });
+  game.p1.discard.push(c1); game.p2.discard.push(c2);
+
+  // ---- Clear statuses ----
+  game.p1.statuses = []; game.p2.statuses = [];
+
+  // ---- Log ----
+  game.log.push({type:'round', round:game.round, turn:game.turn, c1, c2, dmg1, dmg2, hp1:game.p1.hp, hp2:game.p2.hp, details });
+
+  game.turn++;
+  checkGameOver();
+
+  if(!game.isOver && game.turn > 5) {
+    game.phase = 'reveal';
+  } else if(!game.isOver) {
+    game.phase = 'reveal';
+  } else {
+    game.phase = 'gameover';
+  }
+  renderAll();
+}
+
+function nextTurn() {
+  if(game.turn > 5) {
+    endOfRound();
+  } else {
+    game.phase = 'select';
+    game.p1Card = null; game.p2Card = null;
+    renderAll();
+  }
+}
+
+function nextAfterRound() {
+  game.phase = 'select';
+  game.p1Card = null; game.p2Card = null;
+  renderAll();
+}
+
+// =========================================================================
+// Build Modal
+// =========================================================================
+let buildForPlayer = null;
+function openBuildModal(player) {
+  buildForPlayer = player;
+  const pl = player==='p1'?game.p1:game.p2;
+  document.getElementById('build-energy').textContent = pl.energy;
+  const grid = document.getElementById('build-grid');
+  grid.innerHTML = '';
+  CARD_ORDER.forEach(c => {
+    const def = CARD_DEFS[c];
+    const canAfford = pl.energy >= def.cost;
+    const btn = document.createElement('button');
+    btn.className = `build-card ${def.css}`;
+    btn.disabled = !canAfford;
+    btn.innerHTML = `<span class="icon">${def.icon}</span><span>${def.name}</span><span class="cost">${def.cost}⚡</span>`;
+    btn.onclick = () => { if(canAfford) buildCard(c); };
+    grid.appendChild(btn);
+  });
+  document.getElementById('build-modal').classList.add('active');
+}
+function closeBuildModal() { document.getElementById('build-modal').classList.remove('active'); buildForPlayer=null; }
+function buildCard(card) {
+  const pl = buildForPlayer==='p1'?game.p1:game.p2;
+  const cost = CARD_DEFS[card].cost;
+  pl.energy -= cost;
+  pl.discard.push(card);
+  game.log.push({type:'build', player:buildForPlayer, card, cost, energyAfter:pl.energy});
+  closeBuildModal();
+  renderAll();
+}
+
+// =========================================================================
+// Deck Modal
+// =========================================================================
+function openDeckModal(player) {
+  const pl = player==='p1'?game.p1:game.p2;
+  const title = player==='p2' ? '📦 对方牌堆 — 不可查看' : '📦 你的牌堆';
+  document.getElementById('deck-modal-title').textContent = title;
+  const list = document.getElementById('deck-list');
+  if(player==='p2') {
+    list.innerHTML = '<span style="color:var(--muted);">对方牌堆处于隐藏状态</span>';
+  } else {
+    const drawCounts = {};
+    pl.drawPile.forEach(c => drawCounts[c] = (drawCounts[c]||0)+1);
+    const discCounts = {};
+    pl.discard.forEach(c => discCounts[c] = (discCounts[c]||0)+1);
+    let html = `<div class="section-title">🎴 抽牌堆 (${pl.drawPile.length}张)</div>`;
+    CARD_ORDER.forEach(c => { if(drawCounts[c]) html += `<div>${CARD_DEFS[c].icon} ${CARD_DEFS[c].name} ×${drawCounts[c]}</div>`; });
+    if(!pl.drawPile.length) html += '<div style="color:var(--muted);">空</div>';
+    html += `<div class="section-title" style="margin-top:8px;">🗑️ 弃牌堆 (${pl.discard.length}张)</div>`;
+    CARD_ORDER.forEach(c => { if(discCounts[c]) html += `<div>${CARD_DEFS[c].icon} ${CARD_DEFS[c].name} ×${discCounts[c]}</div>`; });
+    if(!pl.discard.length) html += '<div style="color:var(--muted);">空</div>';
+    list.innerHTML = html;
+  }
+  document.getElementById('deck-modal').classList.add('active');
+}
+function closeDeckModal() { document.getElementById('deck-modal').classList.remove('active'); }
+
+// =========================================================================
+// Render
+// =========================================================================
+function renderAll() {
+  if(!game) return;
+  renderBanner();
+  renderRoundTurn();
+  renderStatusBar();
+  renderHandP1();
+  renderOppHand();
+  renderAction();
+  renderLog();
+}
+
+function renderBanner() {
+  const el = document.getElementById('game-over-banner');
+  if(game.isOver) {
+    let cls='', txt='', sub='';
+    if(game.winner==='draw') { cls='banner-draw'; txt='🤝 Draw!'; sub='Both players ended with equal HP'; }
+    else { cls='banner-win'; txt=`🏆 ${game.winner==='1'?'Player 1':(mode==='pve'?'AI (rnn_v1.1)':'Player 2')} Wins!`; sub=`Opponent HP reached 0`; }
+    el.innerHTML = `<div class="game-over-banner ${cls}">${txt}<div class="banner-sub">${sub}</div></div>`;
+    el.style.display = 'block';
+  } else el.style.display = 'none';
+}
+
+function renderRoundTurn() {
+  document.getElementById('round-turn-bar').textContent =
+    `第 ${game.round} 轮 · 第 ${Math.min(game.turn,5)}/5 回合`;
+}
+
+function renderStatusBar() {
+  const bar = document.getElementById('status-bar');
+  bar.innerHTML = ['p1','p2'].map(pid => {
+    const pl = pid==='p1'?game.p1:game.p2;
+    const label = pid==='p2'&&mode==='pve'?'AI':'Player '+(pid==='p1'?'1':'2');
+    const hpPct = Math.max(0, pl.hp/20*100);
+    const hpCls = pl.hp>10?'high':'';
+    const dots = Array.from({length:5},(_,i)=>`<div class="energy-dot${i<pl.energy?' filled':''}"></div>`).join('');
+    const tags = pl.statuses.map(s => {
+      if(s==='defense') return '<span class="status-tag tag-defense">🛡️ 防御</span>';
+      if(s==='联防') return '<span class="status-tag tag-guard">🔰 联防</span>';
+      return '';
+    }).join('');
+    const deckHtml = pid==='p1'
+      ? `<span onclick="openDeckModal('p1')">抽牌堆${pl.drawPile.length}张</span> | <span onclick="openDeckModal('p1')">弃牌堆${pl.discard.length}张</span>`
+      : `<span onclick="openDeckModal('p2')">抽牌堆${pl.drawPile.length}张</span> | <span onclick="openDeckModal('p2')">弃牌堆${pl.discard.length}张</span>`;
+
+    return `
+      <div class="status-player${pid==='p1'&&game.phase==='select'?' current':''}">
+        <div class="status-name">${label}</div>
+        <div class="status-row">
+          <span class="status-label">HP</span>
+          <div class="hp-bar-wrap"><div class="hp-bar-fill ${hpCls}" style="width:${hpPct}%"></div></div>
+          <span class="hp-text">${pl.hp}/20</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">能量</span>
+          <div class="energy-dots">${dots}</div>
+        </div>
+        ${tags?`<div class="status-tags" style="margin-top:4px;">${tags}</div>`:''}
+        <div class="deck-info" style="margin-top:4px;">${deckHtml}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderHandP1() {
+  const el = document.getElementById('hand-area-p1');
+  if(game.isOver) { el.style.display='none'; return; }
+  el.style.display = 'block';
+  const hand = game.p1.hand;
+  const cards = CARD_ORDER.map(c => {
+    const cnt = hand.filter(x=>x===c).length;
+    const def = CARD_DEFS[c];
+    const disabled = cnt===0 || game.phase!=='select';
+    return `<button class="card-btn ${def.css}" ${disabled?'disabled':''} onclick="selectCard('${c}')">
+      <span class="icon">${def.icon}</span><span>${def.name}</span><span class="count">×${cnt}</span></button>`;
+  }).join('');
+  el.innerHTML = `<div class="hand-title">🎯 Your Hand — Player 1 (${hand.length} cards)</div><div class="card-grid">${cards}</div>`;
+}
+
+function renderHandP2() {
+  const el = document.getElementById('hand-area-p2-hidden');
+  if(game.isOver || game.phase==='pvp_pass') { el.style.display='none'; return; }
+  el.style.display = 'block';
+  const hand = game.p2.hand;
+  const label = mode==='pve'?`AI (rnn_v1.1)'s Hand`:`Player 2's Hand`;
+  el.innerHTML = `<div class="opp-hand-title">${label} (${hand.length} cards)</div>
+    <div class="opp-card-grid">${hand.length?Array(hand.length).fill('<div class="opp-card-back">🂠</div>').join(''):'<span style="color:var(--muted);">No cards</span>'}</div>`;
+  if(game.phase==='pvp_pass') {
+    const cards = CARD_ORDER.map(c => {
+      const cnt = hand.filter(x=>x===c).length;
+      const def = CARD_DEFS[c];
+      return `<button class="card-btn ${def.css}" ${cnt===0?'disabled':''} onclick="selectP2Card('${c}')">
+        <span class="icon">${def.icon}</span><span>${def.name}</span><span class="count">×${cnt}</span></button>`;
+    }).join('');
+    el.innerHTML += `<div class="hand-area" style="margin-top:8px;"><div class="hand-title" style="color:var(--defense);">🎮 Player 2's Hand</div><div class="card-grid">${cards}</div></div>`;
+  }
+}
+
+function renderOppHand() {
+  const el = document.getElementById('hand-area-p2-hidden');
+  if(game.isOver) { el.style.display='none'; return; }
+  if(game.phase==='pvp_pass') { renderHandP2(); return; }
+  el.style.display = 'block';
+  const hand = game.p2.hand;
+  const label = mode==='pve'?`AI (rnn_v1.1)'s Hand`:`Player 2's Hand`;
+  el.innerHTML = `<div class="opp-hand-title">${label} (${hand.length} cards)</div>
+    <div class="opp-card-grid">${hand.length?Array(hand.length).fill('<div class="opp-card-back">🂠</div>').join(''):'<span style="color:var(--muted);">No cards</span>'}</div>`;
+}
+
+function renderAction() {
+  const pass = document.getElementById('pvp-pass');
+  const info = document.getElementById('round-info');
+  const result = document.getElementById('result-panel');
+  pass.style.display = 'none';
+  info.innerHTML = '';
+  result.style.display = 'none';
+
+  if(game.isOver) return;
+
+  if(game.phase==='select') {
+    info.innerHTML = `第 ${game.round} 轮 · 第 ${game.turn}/5 回合 — <span style="color:var(--gold);font-weight:700;">选择一张卡牌</span>`;
+    return;
+  }
+  if(game.phase==='pvp_pass') {
+    pass.style.display = 'block';
+    pass.innerHTML = `<div class="pass-text">Player 1 已选择卡牌</div><div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">Player 2 — 请在下方选择你的卡牌</div><div class="pass-hint">双方选择完成后同时翻牌</div>`;
+    return;
+  }
+  if(game.phase==='reveal'||game.phase==='gameover') {
+    const lastLog = game.log.filter(l=>l.type==='round').pop();
+    if(!lastLog) return;
+    const details = lastLog.details.map(d => {
+      const cls = d.includes('受到')?'res-dmg':'res-safe';
+      return `<div class="${cls}">${d}</div>`;
+    }).join('');
+    const p2Label = mode==='pve'?'AI':'P2';
+    result.style.display = 'block';
+    const def1 = CARD_DEFS[lastLog.c1], def2 = CARD_DEFS[lastLog.c2];
+    const btnHtml = game.phase==='reveal'
+      ? `<button class="btn btn-primary btn-big" onclick="nextTurn()">▶ ${game.turn>5?'下一轮':'下一回合'}</button>`
+      : `<div class="btn-row"><button class="btn btn-primary btn-big" onclick="resetGame()">🔄 New Game</button><button class="btn btn-secondary btn-big" onclick="showMenu()">🏠 Menu</button></div>`;
+    result.innerHTML = `<div class="result-title">⚡ 第 ${lastLog.round} 轮 · 第 ${lastLog.turn} 回合 结果</div>
+      <div class="result-cards">
+        <div class="result-card ${def1.css}"><span style="font-size:1.6rem;">${def1.icon}</span><span>P1</span></div>
+        <div class="result-vs">VS</div>
+        <div class="result-card ${def2.css}"><span style="font-size:1.6rem;">${def2.icon}</span><span>${p2Label}</span></div>
+      </div>
+      <div class="result-details">${details}</div>
+      <div class="res-hp">结算后：P1 <strong>${lastLog.hp1} HP</strong> | ${p2Label} <strong>${lastLog.hp2} HP</strong></div>
+      <div class="btn-row" style="margin-top:10px;">${btnHtml}</div>`;
+  }
+}
+
+function renderLog() {
+  const el = document.getElementById('log-area');
+  const entries = game.log.filter(l=>l.type==='round'||l.type==='round_bleed').reverse();
+  if(!entries.length) {
+    el.innerHTML = `<h3>📜 对局记录</h3><span style="color:var(--muted);">游戏开始。双方20HP，7张初始牌组。</span>`;
+    return;
+  }
+  let html = '<h3>📜 对局记录</h3>';
+  entries.forEach(e => {
+    if(e.type==='round_bleed') {
+      html += `<div class="log-entry" style="color:var(--accent);">💔 轮末扣血 → P1 ${e.hp1}HP | P2 ${e.hp2}HP</div>`;
+    } else {
+      const def1=CARD_DEFS[e.c1], def2=CARD_DEFS[e.c2];
+      html += `<div class="log-entry"><strong>R${e.round}T${e.turn}:</strong> P1 ${def1.icon} vs ${mode==='pve'?'AI':'P2'} ${def2.icon} → P1 ${e.hp1}HP | ${mode==='pve'?'AI':'P2'} ${e.hp2}HP</div>`;
+    }
+  });
+  el.innerHTML = html;
+}
+
+// Init — build modal on P1 build card selection
+const origSelect = selectCard;
+selectCard = function(card) {
+  if(card==='build' && game.phase==='select') {
+    openBuildModal('p1');
+    return;
+  }
+  origSelect(card);
+};
+</script>
+</body>
+</html>

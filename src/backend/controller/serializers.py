@@ -62,12 +62,18 @@ def round_result_to_dict(rr: RoundResult) -> dict:
     """
     return {
         "round": rr.round,
+        "cycle": rr.cycle,
+        "round_in_cycle": rr.round_in_cycle,
         "cards_1": [card_to_str(c) for c in rr.cards_1],
         "cards_2": [card_to_str(c) for c in rr.cards_2],
         "damage_1": rr.damage_1,
         "damage_2": rr.damage_2,
         "hp_1_after": rr.hp_1_after,
         "hp_2_after": rr.hp_2_after,
+        "energy_1_after": rr.energy_1_after,
+        "energy_2_after": rr.energy_2_after,
+        "statuses_1": rr.statuses_1,
+        "statuses_2": rr.statuses_2,
         "details": rr.details,
         "is_game_over": rr.is_game_over,
         "winner": rr.winner,

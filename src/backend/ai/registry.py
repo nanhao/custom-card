@@ -68,7 +68,21 @@ _REGISTRY: list[dict] = [
             "module": "src.backend.ai.rnn_v1.model",
             "class": "GRUValueModel",
         },
-    }
+    },
+    {
+        "name": "rnn_v2.1",
+        "description": "v2 game, random weights (gen1)",
+        "policy": {
+            "weight_path": "src/backend/ai/rnn_v1/gen5/policy.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUPolicyModel",
+        },
+        "value": {
+            "weight_path": "src/backend/ai/rnn_v1/gen5/value.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUValueModel",
+        },
+    },
 ]
 
 

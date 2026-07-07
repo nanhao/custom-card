@@ -1,0 +1,58 @@
+@startuml round_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam sequenceMessageFontName Microsoft YaHei
+skinparam noteFontName Microsoft YaHei
+
+title 单回合结算流程 (优先级分层)
+
+participant "GameCore" as GC
+participant "CardResolver" as CR
+participant "Player 1" as P1
+participant "Player 2" as P2
+
+== ① 收到双方卡牌 ==
+GC -> CR: resolve(p1_card, p2_card,\np1_statuses, p2_statuses,\np1_streak, p2_streak)
+note right CR: 将两张卡拆解为Effect列表\n如 FLEX → [grant_defense(11), damage(10)]
+
+== ② 优先级11 结算 (状态授予优先) ==
+loop 遍历所有 priority=11 的 Effect
+    CR -> P1: grant_defense → statuses += "defense"
+    CR -> P2: grant_defense → statuses += "defense"
+    note right: 防御/联防状态即时生效\n后续同优先级effect可见新状态
+end
+
+CR -> CR: grant_guard (已有defense时)
+note right: 联防状态也使重击伤害无效
+
+CR -> CR: reflect damage (反击弹伤)
+note right: 反击弹伤计入damage累加器
+
+== ③ 优先级10 结算 (伤害累加) ==
+loop 遍历所有 priority=10 的 Effect
+    alt attack (对方无defense)
+        CR -> P2: damage += min(连续攻击次+1, 3)
+    else attack (对方有defense) 
+        note right CR: 无伤害 (被防御阻挡)
+    else heavy (对方无联防)
+        CR -> P2: damage += 1
+    else heavy (对方有联防)
+        note right CR: 无伤害 (被联防阻挡)
+    else energy
+        CR -> P1: energy_delta += 1 (上限5)
+    else flex_damage (对方无defense)
+        CR -> P2: damage += 1
+    else build
+        note right CR: no-op (构建由GameCore处理)
+    end
+end
+
+== ④ 汇总返回 ==
+GC <- CR: ResolutionResult(damage_1, damage_2,\nenergy_delta_1, energy_delta_2,\nstatuses_granted_1, statuses_granted_2)
+
+GC -> P1: take_damage(damage_1); add_energy(energy_delta_1)
+GC -> P2: take_damage(damage_2); add_energy(energy_delta_2)
+
+note over GC: 构建效果在结算后由GameCore处理\n消耗能量 → 目标卡放入弃牌堆
+
+@enduml
