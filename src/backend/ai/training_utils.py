@@ -1,74 +1,13 @@
 """Utility functions for PPO training — artifact generation.
 
-Per design/8 D7: generates loss/grad PNG charts and CSV data files.
+Per design/9 D7: generates loss/grad CSV files and PNG charts for
+three-phase split PPO training with phase-aware columns.
 Separated from training_runner.py to stay under 500-line limit.
 """
 
 import csv
 import math
 import os
-
-
-def save_training_artifacts(
-    epoch_losses: list[float],
-    epoch_policy_losses: list[float],
-    epoch_value_losses: list[float],
-    epoch_entropies: list[float],
-    epoch_grad_norms: list[float],
-    output_dir: str | None = None,
-) -> None:
-    """Generate loss/grad PNG charts and CSV files (design/8 D7).
-
-    DEPRECATED: Use save_split_training_artifacts for split training.
-    Kept for backward compatibility during migration.
-    """
-    loss_dir = output_dir if output_dir is not None else os.path.join(os.getcwd(), "loss")
-    os.makedirs(loss_dir, exist_ok=True)
-
-    epochs = list(range(1, len(epoch_losses) + 1))
-
-    _write_csv(
-        os.path.join(loss_dir, "loss.csv"),
-        ["epoch", "avg_loss", "policy_loss", "value_loss", "entropy"],
-        zip(epochs, epoch_losses, epoch_policy_losses, epoch_value_losses, epoch_entropies),
-    )
-
-    _write_csv(
-        os.path.join(loss_dir, "grad.csv"),
-        ["epoch", "grad_norm"],
-        zip(epochs, epoch_grad_norms),
-    )
-
-    # Generate PNG charts (if matplotlib is available)
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.plot(epochs, epoch_losses, "b-", label="Total Loss")
-        ax.plot(epochs, epoch_policy_losses, "g--", label="Policy Loss")
-        ax.plot(epochs, epoch_value_losses, "r--", label="Value Loss")
-        ax.plot(epochs, epoch_entropies, "m--", label="Entropy")
-        ax.set_xlabel("Epoch")
-        ax.set_ylabel("Loss")
-        ax.set_title("Training Loss")
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        fig.savefig(os.path.join(loss_dir, "loss.png"), dpi=100)
-        plt.close(fig)
-
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.plot(epochs, epoch_grad_norms, "b-")
-        ax.set_xlabel("Epoch")
-        ax.set_ylabel("Gradient Norm")
-        ax.set_title("Gradient Norm")
-        ax.grid(True, alpha=0.3)
-        fig.savefig(os.path.join(loss_dir, "grad.png"), dpi=100)
-        plt.close(fig)
-
-    except ImportError:
-        pass
 
 
 def save_split_training_artifacts(

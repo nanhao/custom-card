@@ -5,12 +5,9 @@ Tests model instantiation, INITIAL_HIDDEN_STATE constant, forward pass
 with and without mask_fn, determinism, inference mode, and weight file
 loading.
 
-Temperature scaling tests (TC-M1–M7 from design/5) are in
-test_ai_model_temperature.py.
+Temperature scaling tests are covered in test_ai_model_split.py.
 
-Per design/3 architecture D1, model.py contains only GRUPolicyModel —
-all helper functions and game logic have moved to app/Converter and
-app/AppManager.
+Per design/9, GRUPolicyModel + GRUValueModel replace GRUCardModel.
 """
 
 import pytest

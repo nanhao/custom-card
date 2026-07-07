@@ -35,9 +35,9 @@ class SelfPlayRunner:
     game → perspective → steps hierarchy (design/7), and logs progress.
 
     Attributes:
-        _sample_action: Callable matching AppManager.ai_sample_action
-            signature: (state, hidden, ai_name, temp, player_key)
-            → (card_str, new_hidden, log_prob, value).
+        _sample_action: Callable with signature:
+            (state, h_pol, h_val, ai_name, temp, player_key)
+            → (card_str, new_h_pol, log_prob, value, new_h_val).
     """
 
     def __init__(self, sample_action_fn):

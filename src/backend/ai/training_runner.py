@@ -245,6 +245,14 @@ class TrainingRunner:
                             float(step["value"])
                             log_prob_raw = step.get("log_prob")
                             float(log_prob_raw) if log_prob_raw is not None else 0.0
+                            # Validate action is one of the known card types
+                            if step["action"] not in ACTION_TO_INDEX:
+                                raise RuntimeError(
+                                    f"Step {s_idx} in perspective {p_idx} "
+                                    f"of game {game.get('game_id', '?')} "
+                                    f"in {file_path!r}: unknown action {step['action']!r}. "
+                                    f"Must be one of: {', '.join(ACTION_TO_INDEX.keys())}"
+                                )
                         except (ValueError, TypeError) as exc:
                             raise RuntimeError(
                                 f"Step {s_idx} in perspective {p_idx} "

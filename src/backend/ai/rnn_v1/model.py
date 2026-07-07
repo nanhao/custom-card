@@ -1,18 +1,20 @@
-"""GRU-based card-selection AI model for the custom card game.
+"""Split policy/value GRU-based AI models for the custom card game.
 
-Per design/3 architecture D1, this module contains ONLY the GRUCardModel class.
-All game knowledge (card types, hand state, input semantics) lives in
-app/Converter. All orchestration (loading, inference, masking) lives in
-app/AppManager.
+Per design/9 architecture: independent GRUPolicyModel and GRUValueModel
+replace the old shared-backbone GRUCardModel, eliminating gradient
+interference between policy and value objectives.
 
 Architecture:
-    Input(14) → GRU(8) → ┬→ FC(8→4) → (optional mask_fn) → softmax   (policy head)
-                          └→ FC(8→1) → tanh                           (value head)
+    GRUPolicyModel: Input(14) -> GRU(8, 1 layer) -> Linear(8->4) -> softmax
+    GRUValueModel:  Input(14) -> GRU(8, 1 layer) -> Linear(8->1)，no tanh
 
-Public interface (per design/3 interfaces.md §1, updated per design/5):
-    GRUCardModel.INITIAL_HIDDEN_STATE: list[float]
-    model.forward(x, hidden, mask_fn=None, temperature=1.0) → tuple[Tensor, Tensor, Tensor, Tensor]
-        Returns (probs, log_probs, value, new_hidden)
+Public interface (per design/9 interfaces.md §1-§2):
+    GRUPolicyModel.INITIAL_HIDDEN_STATE: list[float]
+    GRUPolicyModel.forward(x, hidden, mask_fn=None, temperature=1.0)
+        -> (probs, log_probs, new_hidden)
+
+    GRUValueModel.INITIAL_HIDDEN_STATE: list[float]
+    GRUValueModel.forward(x, hidden) -> (value, new_hidden)
 """
 
 from collections.abc import Callable
@@ -27,7 +29,6 @@ import torch.nn as nn
 INPUT_SIZE = 14   # 4 card counts + 2 HP + 4 one-hot (AI last move) + 4 one-hot (human last move)
 HIDDEN_SIZE = 8   # GRU hidden state dimension
 NUM_CARD_TYPES = 4  # attack, defense, heavy, counter
-WEIGHT_PATH = "src/backend/ai/rnn_v1/gen1/rnn_v1.pth"
 
 
 # ---------------------------------------------------------------------------

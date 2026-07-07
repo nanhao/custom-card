@@ -158,6 +158,8 @@ python src/backend/scripts/train.py ^
     --model rnn_v2.1 ^
     --value-epochs 20 ^
     --epoch 10
+
+python src/backend/scripts/train.py --sample-path samples/v1 --policy-output-path src/backend/ai/rnn_v1/gen2/policy.pth --value-output-path src/backend/ai/rnn_v1/gen2/value.pth --model rnn_v1.1 --epoch 10 --value-epochs 10
 ```
 
 **Training Outputs:** After training, two weight files are saved

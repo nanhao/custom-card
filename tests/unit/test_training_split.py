@@ -452,6 +452,56 @@ class TestGradientIsolation:
 
 
 # ---------------------------------------------------------------------------
+# TC-GAE1 through TC-GAE4: GAE edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestGAEComputation:
+    """TC-GAE1-4: GAE advantage computation edge cases."""
+
+    def test_winning_perspective_advantages_positive(self):
+        """TC-GAE1: Winning perspective gets positive advantages."""
+        from src.backend.ai.training_runner import TrainingRunner
+        runner = TrainingRunner()
+        values = [-0.06, -0.10, -0.08]
+        rewards = [0.0, 0.0, 1.0]
+        advantages, _ = runner._compute_gae(values, rewards, 0.99, 0.95)
+        for adv in advantages:
+            assert adv > 0, f"Expected positive advantage, got {adv}"
+
+    def test_losing_perspective_advantages_negative(self):
+        """TC-GAE2: Losing perspective gets negative advantages."""
+        from src.backend.ai.training_runner import TrainingRunner
+        runner = TrainingRunner()
+        values = [-0.06, -0.11, -0.05]
+        rewards = [0.0, 0.0, -1.0]
+        advantages, _ = runner._compute_gae(values, rewards, 0.99, 0.95)
+        for adv in advantages:
+            assert adv < 0, f"Expected negative advantage, got {adv}"
+
+    def test_last_step_advantage_equals_td_error(self):
+        """TC-GAE3: Last step advantage = r_T - V_T (TD error)."""
+        from src.backend.ai.training_runner import TrainingRunner
+        runner = TrainingRunner()
+        values = [0.35, 0.42, 0.28]
+        rewards = [0.0, 0.0, 1.0]
+        advantages, _ = runner._compute_gae(values, rewards, 0.99, 0.95)
+        expected_last = 1.0 - 0.28
+        assert abs(advantages[-1] - expected_last) < 1e-10
+
+    def test_advantage_length_matches_steps(self):
+        """TC-GAE4: Advantage list length = step count."""
+        from src.backend.ai.training_runner import TrainingRunner
+        runner = TrainingRunner()
+        for n in [1, 3, 7]:
+            values = [0.0] * n
+            rewards = [0.0] * n
+            advantages, value_targets = runner._compute_gae(values, rewards, 0.99, 0.95)
+            assert len(advantages) == n
+            assert len(value_targets) == n
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

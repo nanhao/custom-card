@@ -14,7 +14,7 @@ The registry exposes:
 
 _REGISTRY: list[dict] = [
     {
-        "name": "rnn_v2.1",
+        "name": "rnn_v1.1",
         "description": "Split policy/value, random weights (gen1)",
         "policy": {
             "weight_path": "src/backend/ai/rnn_v1/gen1/policy.pth",
@@ -28,8 +28,8 @@ _REGISTRY: list[dict] = [
         },
     },
     {
-        "name": "rnn_v2.2",
-        "description": "Split policy/value, random weights (gen2)",
+        "name": "rnn_v1.2",
+        "description": "Split policy/value, random weights (gen1)",
         "policy": {
             "weight_path": "src/backend/ai/rnn_v1/gen2/policy.pth",
             "module": "src.backend.ai.rnn_v1.model",
@@ -42,8 +42,8 @@ _REGISTRY: list[dict] = [
         },
     },
     {
-        "name": "rnn_v2.3",
-        "description": "Split policy/value, random weights (gen3)",
+        "name": "rnn_v1.3",
+        "description": "Split policy/value, random weights (gen2)",
         "policy": {
             "weight_path": "src/backend/ai/rnn_v1/gen3/policy.pth",
             "module": "src.backend.ai.rnn_v1.model",
@@ -56,8 +56,8 @@ _REGISTRY: list[dict] = [
         },
     },
     {
-        "name": "rnn_v2.4",
-        "description": "Split policy/value, random weights (gen4)",
+        "name": "rnn_v1.4",
+        "description": "Split policy/value, random weights (gen3)",
         "policy": {
             "weight_path": "src/backend/ai/rnn_v1/gen4/policy.pth",
             "module": "src.backend.ai.rnn_v1.model",
@@ -68,7 +68,7 @@ _REGISTRY: list[dict] = [
             "module": "src.backend.ai.rnn_v1.model",
             "class": "GRUValueModel",
         },
-    },
+    }
 ]
 
 
