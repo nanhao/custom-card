@@ -46,3 +46,24 @@ def app_manager(tmp_path):
     config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
     store = SessionStore(config_path=str(config_path))
     return AppManager(store)
+
+
+# ---------------------------------------------------------------------------
+# Flask test client
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def api_client(tmp_path):
+    """Create a Flask test client with a temporary SessionStore.
+
+    Creates a fresh Flask app instance per test, with saves directory
+    isolated to tmp_path. No real files are affected.
+    """
+    from src.backend.controller.api import create_app
+    saves_dir = tmp_path / "saves"
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"save_dir": str(saves_dir)}))
+    app = create_app(config_path=str(config_path))
+    app.config["TESTING"] = True
+    return app.test_client()
