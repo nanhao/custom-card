@@ -1,0 +1,45 @@
+@startuml input_construction_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+
+title Input Vector Construction Flow (设计#13 新顺序)
+
+start
+
+:接收 state dict\n+ player_key;
+
+partition "提取元数据 (索引 0-3)" {
+    :索引 0 = state.players[player_key].hp;
+    :索引 1 = state.players[opponent_key].hp;
+    :索引 2 = state.round_in_cycle;
+    :索引 3 = state.cycle;
+}
+
+partition "提取卡牌计数 (索引 4-10)" {
+    :遍历 state.players[player_key].hand\n计数每种卡牌类型;
+    note right
+        4: attack
+        5: defense
+        6: heavy
+        7: counter
+        8: energy
+        9: build
+        10: flex
+    end note
+}
+
+partition "提取 one-hot 历史 (索引 11-24)" {
+    if (player 有出牌历史?) then (yes)
+        :索引 11-17 = this_player.history[-1] 的 one-hot;
+        :索引 18-24 = opp_player.history[-1] 的 one-hot;
+    else (no)
+        :索引 11-17 = [0.0]*7;
+        :索引 18-24 = [0.0]*7;
+    endif
+}
+
+:返回 list[float] 长度 25;
+
+stop
+
+@enduml

@@ -1,7 +1,7 @@
-"""Bidirectional conversion between card strings and model tensors for v2 (design/11).
+"""Bidirectional conversion between card strings and model tensors (design/13).
 
-Per design/11 D6, Converter handles 7 card types and builds 25-d input vectors
-with round_in_cycle and cycle metadata.
+Per design/13, Converter builds 25-d input vectors with metadata (HP, round, cycle)
+at the front and card-type-specific features at the tail for future extensibility.
 
 All methods are stateless. No PyTorch dependency — pure data transformation.
 """
@@ -9,6 +9,9 @@ All methods are stateless. No PyTorch dependency — pure data transformation.
 
 class Converter:
     """Bidirectional conversion between card strings and model tensors.
+
+    Per design/13: input vector metadata (HP, round, cycle) at front;
+    card-type-specific features (counts, one-hot) at tail.
 
     All methods are stateless. The class serves as a namespace for
     conversion logic bridging game domain types and AI model inputs.
@@ -99,13 +102,18 @@ class Converter:
     def build_input_vector(state: dict, player_key: str = "2") -> list[float]:
         """Build the 25-d input vector from a game state dict.
 
-        Per design/11 D6:
-            indices 0-6:   This player's hand card counts (7 types)
-            indices 7-8:   HP values (this player, opponent), NOT clamped/normalized
-            indices 9-15:  One-hot of this player's last move (7 types)
-            indices 16-22: One-hot of opponent's last move (7 types)
-            index 23:      Current round_in_cycle (1-5)
-            index 24:      Current cycle number
+        Per design/13:
+            index 0:     Own HP (this player), NOT clamped/normalized
+            index 1:     Opponent HP, NOT clamped/normalized
+            index 2:     Current round_in_cycle (1-5)
+            index 3:     Current cycle number
+            indices 4-10:   This player's hand card counts (7 types)
+            indices 11-17:  One-hot of this player's last move (7 types)
+            indices 18-24:  One-hot of opponent's last move (7 types)
+
+        Metadata (HP, round, cycle) is placed at the front so that
+        adding new card types in the future only extends the tail
+        of the vector without shifting metadata indices.
 
         Args:
             state: Game state dict from GameCore.get_state().
@@ -126,18 +134,18 @@ class Converter:
         opponent_key = "2" if player_key == "1" else "1"
         opp_player = state["players"][opponent_key]
 
-        # Card counts (indices 0-6)
+        # Card counts (indices 4-10)
         counts = [0.0] * Converter.NUM_CARD_TYPES
         for card_str in this_player["hand"]:
             idx = Converter._CARD_TO_INDEX.get(card_str)
             if idx is not None:
                 counts[idx] += 1.0
 
-        # HP values (indices 7-8), NOT normalized per design D8
+        # HP values (indices 0-1), NOT normalized per design D8
         this_hp = float(this_player["hp"])
         opp_hp = float(opp_player["hp"])
 
-        # One-hot of last moves (indices 9-22)
+        # One-hot of last moves (indices 11-24)
         this_last = [0.0] * Converter.NUM_CARD_TYPES
         opp_last = [0.0] * Converter.NUM_CARD_TYPES
 
@@ -153,8 +161,10 @@ class Converter:
             if onehot_idx is not None:
                 opp_last[onehot_idx] = 1.0
 
-        # Round metadata (indices 23-24)
+        # Round metadata (indices 2-3)
         round_in_cycle = float(state.get("round_in_cycle", 1))
         cycle = float(state.get("cycle", 1))
 
-        return counts + [this_hp, opp_hp] + this_last + opp_last + [round_in_cycle, cycle]
+        # Build new-order vector per design/13:
+        #   [HP_own, HP_opp, round, cycle] + card_counts + onehot_own + onehot_opp
+        return [this_hp, opp_hp, round_in_cycle, cycle] + counts + this_last + opp_last

@@ -1,12 +1,21 @@
-"""Split policy/value GRU-based AI models for the custom card game v2 (design/11).
+"""Split policy/value GRU-based AI models for the custom card game (design/13).
 
-Per design/11 D5: model dimensions upgraded to support 7 card types and
-dual policy heads (7 action + 7 build_target).
+Per design/13: input vector reordered — metadata (HP, round, cycle) at front,
+card-type-specific features at tail for future card type extensibility.
 
 Architecture:
     GRUPolicyModel: Input(25) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax
         Output 14-d: indices 0-6 for card action, indices 7-13 for build target.
     GRUValueModel:  Input(25) -> GRU(32, 1 layer) -> Linear(32->1)
+
+Input vector layout (0-based):
+    index 0:     Own HP
+    index 1:     Opponent HP
+    index 2:     round_in_cycle (1-5)
+    index 3:     cycle number
+    indices 4-10:   Card counts (attack..flex, 7 types)
+    indices 11-17:  One-hot of own last move
+    indices 18-24:  One-hot of opponent's last move
 
 mask_fn supports two-segment masking:
     - indices 0-6: block cards not in hand
@@ -22,7 +31,7 @@ import torch.nn as nn
 # Constants
 # ---------------------------------------------------------------------------
 
-INPUT_SIZE = 25    # 7 card counts + 2 HP + 7 one-hot (self) + 7 one-hot (opp) + round_in_cycle + cycle
+INPUT_SIZE = 25    # HP_own(1) + HP_opp(1) + round(1) + cycle(1) + 7 counts + 7 onehot(own) + 7 onehot(opp)
 HIDDEN_SIZE = 32   # GRU hidden state dimension
 NUM_CARD_TYPES = 7  # attack, defense, heavy, counter, energy, build, flex
 
@@ -36,6 +45,9 @@ class GRUPolicyModel(nn.Module):
     """GRU-based policy network with dual-output head (14-d).
 
     Architecture: Input(25) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax.
+
+    Input (25-d, per design/13):
+        [HP_own, HP_opp, round, cycle | card_counts(7) | onehot_own(7) | onehot_opp(7)]
 
     Output interpretation:
         indices 0-6:  card action probabilities (attack..flex)
@@ -109,6 +121,9 @@ class GRUValueModel(nn.Module):
 
     Architecture: Input(25) -> GRU(32, 1 layer) -> Linear(32->1).
     No tanh — value can exceed [-1, 1].
+
+    Input (25-d, per design/13):
+        [HP_own, HP_opp, round, cycle | card_counts(7) | onehot_own(7) | onehot_opp(7)]
     """
 
     INITIAL_HIDDEN_STATE: list[float] = [0.0] * HIDDEN_SIZE

@@ -1,0 +1,66 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam classFontName Microsoft YaHei
+
+title Input Reordering (intention #13) — 影响类图
+
+package "app" {
+    class Converter {
+        NUM_CARD_TYPES: int = 7
+        INPUT_SIZE: int = 25
+        ALL_CARD_TYPES: frozenset[str]
+        {static} +card_to_index(card_str: str): int
+        {static} +index_to_card(index: int): str
+        {static} +build_cost_for_index(index: int): int
+        {static} +build_input_vector(state: dict, player_key: str = "2"): list[float]
+        -_CARD_TO_INDEX: dict[str, int]
+        -_INDEX_TO_CARD: dict[int, str]
+        -_BUILD_COST: dict[int, int]
+    }
+
+    class AppManager {
+        +create_game(mode, ai_name): tuple[str, dict]
+        +ai_select_action(state, hidden_state, ai_name): tuple[str, str|None, list[float]]
+        +ai_sample_action(state, h_pol, h_val, ai_name, temp, player_key): tuple
+        +run_selfplay(config): SelfPlayResult
+        -_make_mask_fn(hand, energy): Callable
+        -_get_policy_model(ai_name): nn.Module
+        -_get_value_model(ai_name): nn.Module
+    }
+
+    class SelfPlayRunner {
+        +run(config): SelfPlayResult
+        -_play_one_game(config, game_idx, loaded_models): tuple
+        -_build_game_sample(game_samples, game_id, ...): dict
+    }
+}
+
+package "ai.rnn_v1" {
+    class GRUPolicyModel {
+        INITIAL_HIDDEN_STATE: list[float]
+        +forward(x, hidden, mask_fn, temperature): tuple[Tensor, Tensor, Tensor]
+        -gru: nn.GRU
+        -fc_policy: nn.Linear
+    }
+
+    class GRUValueModel {
+        INITIAL_HIDDEN_STATE: list[float]
+        +forward(x, hidden): tuple[Tensor, Tensor]
+        -gru: nn.GRU
+        -fc_value: nn.Linear
+    }
+}
+
+AppManager --> Converter : build_input_vector
+SelfPlayRunner --> Converter : build_input_vector
+AppManager --> GRUPolicyModel : forward
+AppManager --> GRUValueModel : forward
+
+note right of Converter
+  唯一变更点：
+  build_input_vector 返回值顺序
+  从设计#11 重排为设计#13 顺序
+end note
+
+@enduml
