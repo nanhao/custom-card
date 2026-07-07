@@ -166,3 +166,7 @@ The logs should meet the following critiria:
     25，当前轮数
 2，policy 网络的输出长度也要改成 7 + 7 = 14。其中前7维是要出的卡，后7维只在出了构建卡的时候用，用来表示要构建的卡。能量不够的卡要通过 mask_fn 屏蔽掉。训练的时候不用屏蔽。
 3，由于游戏变得复杂了很多，policy 网络和 value 网络的 hidden state 的长度也要增加到 32
+
+# intention_id=12
+修复 intention11 遗留的几个 bug
+
