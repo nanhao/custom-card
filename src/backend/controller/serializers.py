@@ -78,6 +78,8 @@ def round_result_to_dict(rr: RoundResult) -> dict:
         "is_game_over": rr.is_game_over,
         "winner": rr.winner,
         "cycle_ended": rr.cycle_ended,
+        "bleed_damage_1": rr.bleed_damage_1,
+        "bleed_damage_2": rr.bleed_damage_2,
     }
 
 

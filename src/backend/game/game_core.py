@@ -50,6 +50,8 @@ class RoundResult:
     is_game_over: bool
     winner: str | None
     cycle_ended: bool = False
+    bleed_damage_1: int = 0
+    bleed_damage_2: int = 0
 
 
 class GameCore:
@@ -138,6 +140,9 @@ class GameCore:
             ValueError: If game is over, cards not in hand, energy insufficient
                         for BUILD, or players are not initialized.
         """
+        # Step 1: Expire statuses from previous round
+        self._tick_status_lifetimes()
+
         # Step 1: Validate
         self._validate(cards_1, cards_2, build_target_1, build_target_2)
 
@@ -214,10 +219,12 @@ class GameCore:
         if self.round_in_cycle >= self.ROUNDS_PER_CYCLE:
             self.player_1.take_damage(1)
             self.player_2.take_damage(1)
-            # Update result HP to reflect cycle bleed
+            # Update result to reflect cycle-end processing
             result.hp_1_after = self.player_1.hp
             result.hp_2_after = self.player_2.hp
             result.cycle_ended = True
+            result.bleed_damage_1 = 1
+            result.bleed_damage_2 = 1
             # Check game end again after cycle bleed
             is_over, winner = self._check_game_end()
             if is_over:
@@ -233,9 +240,6 @@ class GameCore:
         # Step 12: Advance round
         self.round_number += 1
         self.round_in_cycle += 1
-
-        # Expire statuses now that the round is fully complete
-        self._tick_status_lifetimes()
 
         self.round_log.append(result)
         return result
@@ -307,6 +311,8 @@ class GameCore:
                     "is_game_over": rr.is_game_over,
                     "winner": rr.winner,
                     "cycle_ended": rr.cycle_ended,
+                    "bleed_damage_1": rr.bleed_damage_1,
+                    "bleed_damage_2": rr.bleed_damage_2,
                 }
                 for rr in self.round_log
             ],
