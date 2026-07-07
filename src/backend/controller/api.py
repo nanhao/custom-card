@@ -174,8 +174,12 @@ def _register_routes(app: Flask) -> None:
     def get_state(game_id: str):
         """Return the current game snapshot.
 
+        Query params:
+            perspective: "1" or "2" — if set, exposes that player's draw_pile
+                         and discard_pile contents (opponent sees counts only).
+                         If absent, both players see counts only.
+
         Success: 200 OK with {"game_id": "...", "state": {...}}
-        The state dict includes mode and ai fields per api_design.md §6.1.
         Errors:  404 if game not found
         """
         store: SessionStore = app.config["SESSION_STORE"]
@@ -185,8 +189,10 @@ def _register_routes(app: Flask) -> None:
                 f"Game not found: {game_id}", "GAME_NOT_FOUND", 404
             )), 404
 
-        # Build state with AI metadata injected from save file
-        state = gm.get_state()
+        # Optional player perspective for pile inspection
+        perspective = request.args.get("perspective")
+
+        state = gm.get_state(player_perspective=perspective)
         state["ai"] = metadata["ai"] if metadata else None
 
         return jsonify({

@@ -564,3 +564,61 @@ body {
   padding: 6px 18px;
   font-size: 0.8rem;
 }
+
+/* ---- Pile Viewer ---- */
+.status-piles {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 2px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.status-piles:hover {
+  color: var(--gold);
+}
+.pile-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.pile-modal {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 20px 24px;
+  max-width: 460px;
+  width: 90%;
+  border: 2px solid var(--gold);
+}
+.pile-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.pile-modal-header h3 {
+  color: var(--gold);
+  font-size: 1rem;
+}
+.pile-section {
+  margin-bottom: 12px;
+}
+.pile-section h4 {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.pile-cards {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pile-card-chip {
+  font-size: 1.2rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}

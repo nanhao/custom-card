@@ -48,6 +48,9 @@ export default function GameBoard({
   onSelectBuildTarget,
   buildPhase,
   pendingBuild,
+  pileViewer,
+  onViewPiles,
+  onClosePiles,
 }) {
   if (!state) return null;
 
@@ -119,7 +122,7 @@ export default function GameBoard({
               <div className="status-energy">{energyBar} {p.energy}/5</div>
               {statusTags.length > 0 && <div className="status-tags">{statusTags}</div>}
               {chips.length > 0 && <div className="status-history">{chips}</div>}
-              <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginTop: 2 }}>
+              <div className="status-piles" onClick={onViewPiles} title="Click to view draw & discard piles">
                 Hand: {p.hand.length} | Deck: {p.draw_pile_count ?? 0} | Disc: {p.discard_pile_count ?? 0}
               </div>
             </div>
@@ -419,6 +422,36 @@ export default function GameBoard({
       {renderHandArea()}
       {renderAction()}
       {renderLog()}
+      {pileViewer && (
+        <div className="pile-overlay" onClick={onClosePiles}>
+          <div className="pile-modal" onClick={e => e.stopPropagation()}>
+            <div className="pile-modal-header">
+              <h3>📦 Your Piles</h3>
+              <button className="btn btn-secondary btn-small" onClick={onClosePiles}>✕</button>
+            </div>
+            <div className="pile-section">
+              <h4>📥 Draw Pile ({pileViewer.draw_pile.length})</h4>
+              <div className="pile-cards">
+                {pileViewer.draw_pile.length === 0
+                  ? <span style={{ color: 'var(--muted)' }}>Empty</span>
+                  : pileViewer.draw_pile.map((c, i) => (
+                      <span key={i} className={`pile-card-chip chip-${c}`}>{CARD_ICONS[c]}</span>
+                    ))}
+              </div>
+            </div>
+            <div className="pile-section">
+              <h4>🗑️ Discard Pile ({pileViewer.discard_pile.length})</h4>
+              <div className="pile-cards">
+                {pileViewer.discard_pile.length === 0
+                  ? <span style={{ color: 'var(--muted)' }}>Empty</span>
+                  : pileViewer.discard_pile.map((c, i) => (
+                      <span key={i} className={`pile-card-chip chip-${c}`}>{CARD_ICONS[c]}</span>
+                    ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="btn-row" style={{ marginTop: 8 }}>
         <button className="btn btn-secondary btn-small" onClick={onBackToMenu}>
           🏠 Menu

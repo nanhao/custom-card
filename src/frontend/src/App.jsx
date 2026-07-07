@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createGame, getState, playRound, deleteGame, listAis } from './api.js';
+import { createGame, getState, playRound, deleteGame, listAis, getMyPiles } from './api.js';
 import GameBoard from './GameBoard.jsx';
 import './App.css';
 
@@ -32,6 +32,9 @@ export default function App() {
   // ---- BUILD card sub-state ----
   const [buildPhase, setBuildPhase] = useState(null);  // null | 'select_target'
   const [pendingBuild, setPendingBuild] = useState(null); // card string buffered for BUILD
+
+  // ---- Pile viewer state ----
+  const [pileViewer, setPileViewer] = useState(null); // null | { draw_pile: [...], discard_pile: [...] }
 
   // ---- Cleanup game on unmount ----
   useEffect(() => {
@@ -156,6 +159,9 @@ export default function App() {
         setState(data.state);
         setRoundLog(prev => [...prev, data.round_result]);
         setP1Card(null);
+        setBuildPhase(null);
+        setPendingBuild(null);
+        setPileViewer(null);
         setPhase(data.round_result.is_game_over ? 'gameover' : 'reveal');
       } catch (err) {
         setError(err.message);
@@ -197,6 +203,21 @@ export default function App() {
       setState(data.state);
       setP1Card(null);
       setPhase('select');
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // ---- Pile viewer ----
+  async function handleViewPiles() {
+    if (pileViewer) { setPileViewer(null); return; }
+    try {
+      const data = await getMyPiles(gameId);
+      const p = data.state.players['1'];
+      setPileViewer({
+        draw_pile: p.draw_pile || [],
+        discard_pile: p.discard_pile || [],
+      });
     } catch (err) {
       setError(err.message);
     }
@@ -305,9 +326,12 @@ export default function App() {
         roundLog={roundLog}
         buildPhase={buildPhase}
         pendingBuild={pendingBuild}
+        pileViewer={pileViewer}
         onSelectCard={handleSelectCard}
         onPlayer2Card={handlePlayer2Card}
         onSelectBuildTarget={handleSelectBuildTarget}
+        onViewPiles={handleViewPiles}
+        onClosePiles={() => setPileViewer(null)}
         onNextRound={handleNextRound}
         onNewGame={handleNewGame}
         onBackToMenu={handleBackToMenu}

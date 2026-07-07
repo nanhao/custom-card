@@ -34,6 +34,14 @@ export async function getState(gameId) {
   return data;
 }
 
+/** Get game state with pile inspection for a player. */
+export async function getMyPiles(gameId) {
+  const resp = await fetch(`${API_BASE}/games/${gameId}?perspective=1`);
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+  return data;
+}
+
 /**
  * Play a round.
  *
