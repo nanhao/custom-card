@@ -182,6 +182,7 @@ class GameCore:
     """
 
     ROUNDS_PER_CYCLE = 5
+    INITIAL_HP = 20
 
     def __init__(self, mode: str = "pvp") -> None:
         """Create an uninitialized GameCore. Call start_game() to begin.
@@ -429,7 +430,7 @@ class GameCore:
             """Build a PlayerState snapshot from a Player instance."""
             if p is None:
                 return PlayerState(
-                    hp=20, energy=0, statuses=[], hand=[], history=[],
+                    hp=GameCore.INITIAL_HP, energy=0, statuses=[], hand=[], history=[],
                 )
             # Deep-copy statuses and hand to prevent mutation of the snapshot.
             statuses = [

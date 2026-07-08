@@ -104,3 +104,68 @@ class TestCreateAndDelete:
         resp = api_client.post("/api/games", json={"mode": "pvp"})
         gid = resp.get_json()["game_id"]
         assert api_client.delete(f"/api/games/{gid}").status_code == 204
+
+
+class TestGameStateSerialization:
+    """TC-API-01~04: GameState JSON serialization format (design/19)."""
+
+    def test_state_hand_is_string_array(self, api_client):
+        """TC-API-01: state.players.1.hand is a string array."""
+        resp = api_client.post("/api/games", json={"mode": "pvp"})
+        state = resp.get_json()["state"]
+        hand = state["players"]["1"]["hand"]
+        assert isinstance(hand, list)
+        assert len(hand) == 7
+        for c in hand:
+            assert isinstance(c, str), f"{c!r} should be str"
+
+    def test_state_has_no_draw_pile_by_default(self, api_client):
+        """TC-API-01: Default perspective omits draw_pile key."""
+        resp = api_client.post("/api/games", json={"mode": "pvp"})
+        p1 = resp.get_json()["state"]["players"]["1"]
+        # By default (no perspective), draw_pile should NOT be present
+        assert "draw_pile" not in p1
+        assert isinstance(p1["draw_pile_count"], int)
+
+    def test_perspective_exposes_pile_contents(self, api_client):
+        """TC-API-02: perspective=1 exposes draw_pile and discard_pile."""
+        resp = api_client.post("/api/games", json={"mode": "pvp"})
+        gid = resp.get_json()["game_id"]
+        resp = api_client.get(f"/api/games/{gid}?perspective=1")
+        p1 = resp.get_json()["state"]["players"]["1"]
+        # P1 sees pile contents
+        assert "draw_pile" in p1
+        assert isinstance(p1["draw_pile"], list)
+        assert "discard_pile" in p1
+        assert isinstance(p1["discard_pile"], list)
+        # P2 should NOT see pile contents
+        p2 = resp.get_json()["state"]["players"]["2"]
+        assert "draw_pile" not in p2
+
+    def test_create_returns_state_dict(self, api_client):
+        """TC-API-03: POST /api/games returns state dict with expected structure."""
+        resp = api_client.post("/api/games", json={"mode": "pvp"})
+        data = resp.get_json()
+        assert "game_id" in data
+        assert isinstance(data["game_id"], str)
+        state = data["state"]
+        assert isinstance(state, dict)
+        assert "round" in state
+        assert "players" in state
+        assert "mode" in state
+
+    def test_play_round_returns_state_dict(self, api_client):
+        """TC-API-04: POST /play returns round_result and state dicts."""
+        resp = api_client.post("/api/games", json={"mode": "pvp"})
+        gid = resp.get_json()["game_id"]
+        resp = api_client.post(
+            f"/api/games/{gid}/play",
+            json={"cards_1": ["attack"], "cards_2": ["defense"]},
+        )
+        data = resp.get_json()
+        # round_result is a dict
+        assert isinstance(data["round_result"], dict)
+        # state is a dict
+        assert isinstance(data["state"], dict)
+        # state has expected fields
+        assert data["state"]["round"] == 2

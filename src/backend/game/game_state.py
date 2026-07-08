@@ -4,7 +4,7 @@ Provides GameState and PlayerState dataclasses that replace the dict returned
 by GameCore.get_state(). Per design/19 D1, these are pure data containers
 with typed fields — no strings for cards or statuses.
 
-Per architecture D9, this module is pure logic — no UI, no I/O.
+# Per architecture overview §2: game layer is pure logic — no UI, no I/O.
 """
 
 from __future__ import annotations

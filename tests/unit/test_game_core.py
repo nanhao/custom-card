@@ -8,6 +8,7 @@ import pytest
 
 from src.backend.game.card import CardType
 from src.backend.game.game_core import GameCore
+from src.backend.game.game_state import GameState
 from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 
@@ -230,6 +231,14 @@ class TestGameEnd:
 class TestGetState:
     """TC-GC-10: get_state returns GameState with typed fields."""
 
+    def test_get_state_returns_gamestate_not_dict(self):
+        """TC-GC-01: get_state() returns GameState, not dict."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gs = gm.get_state()
+        assert isinstance(gs, GameState)
+        assert not isinstance(gs, dict)
+
     def test_get_state_fields(self):
         """get_state returns round, cycle, round_in_cycle, energy, pile counts."""
         gm = GameCore(mode="pvp")
@@ -260,6 +269,31 @@ class TestGetState:
         # P2 only sees counts
         assert p2.draw_pile is None
         assert isinstance(p2.draw_pile_count, int)
+
+    def test_hand_elements_are_cardtype(self):
+        """TC-GC-04: get_state() hand elements are CardType, not str."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gs = gm.get_state()
+        for card in gs.players["1"].hand:
+            assert isinstance(card, CardType), f"{card!r} is not CardType"
+            assert not isinstance(card, str), f"{card!r} should not be str"
+        for card in gs.players["2"].hand:
+            assert isinstance(card, CardType), f"{card!r} is not CardType"
+            assert not isinstance(card, str), f"{card!r} should not be str"
+
+    def test_default_perspective_hides_both_piles(self):
+        """TC-GC-06: Default perspective hides both players' pile contents."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gs = gm.get_state()  # perspective=None
+        assert gs.players["1"].draw_pile is None
+        assert gs.players["2"].draw_pile is None
+        assert gs.players["1"].discard_pile is None
+        assert gs.players["2"].discard_pile is None
+        # Both players should have pile counts
+        assert isinstance(gs.players["1"].draw_pile_count, int)
+        assert isinstance(gs.players["2"].draw_pile_count, int)
 
 
 class TestBuildEnergyCheck:
