@@ -1,0 +1,69 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title get_state 数据流 — 重构前后对比 (intention #20)
+
+actor Client as "前端/API调用方"
+
+box "Controller Layer" #LightYellow
+    participant API as "api.py"
+    participant Serializer as "serializers.py"
+end box
+
+box "App Layer" #LightBlue
+    participant AppMgr as "AppManager"
+    participant Conv as "Converter"
+end box
+
+box "Game Layer" #LightGreen
+    participant GC as "GameCore"
+    participant GS as "GameState"
+    participant PS as "PlayerState"
+end box
+
+== 重构前 (dict) ==
+
+Client -> API: GET /api/games/{id}
+API -> GC: gm.get_state()
+note right of GC: 返回嵌套 dict\nhand: ["attack"...]\nstatuses: [{"type":"defense"...}]
+GC --> API: dict
+API -> API: state["ai"] = metadata["ai"]
+API --> Client: jsonify(state)
+
+Client -> AppMgr: create_game()
+AppMgr -> GC: gm.get_state()
+GC --> AppMgr: dict
+AppMgr -> AppMgr: state["ai"] = ai_name
+AppMgr --> Client: (game_id, dict)
+
+AppMgr -> Conv: build_input_vector(state_dict, "2")
+note right of Conv: 通过 dict 键访问\nstate["players"]["2"]["hand"]
+
+== 重构后 (GameState) ==
+
+Client -> API: GET /api/games/{id}
+API -> GC: gm.get_state()
+GC -> GS: **new** GameState(...)
+GC -> PS: **new** PlayerState(hp=..., hand=[CardType...], ...)
+note right of GC: 返回类型化 GameState\nhand: list[CardType]\nstatuses: list[PlayerStatus]
+GC --> API: GameState
+API -> Serializer: game_state_to_dict(gs)
+Serializer -> GS: GameState.to_dict(gs)
+note right of Serializer: CardType → str\nPlayerStatus → dict\nPlayerHistoryItem → dict
+Serializer --> API: dict
+API -> API: state_dict["ai"] = metadata["ai"]
+API --> Client: jsonify(state_dict)
+
+Client -> AppMgr: create_game()
+AppMgr -> GC: gm.get_state()
+GC --> AppMgr: GameState
+AppMgr --> Client: (game_id, GameState)
+
+AppMgr -> Conv: build_input_vector(GameState, "2")
+note right of Conv: 通过属性访问\nstate.players["2"].hand\n返回 list[CardType]
+
+@enduml

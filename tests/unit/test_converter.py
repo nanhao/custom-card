@@ -27,8 +27,8 @@ class TestBuildInputVector15D:
         """All 15 indices correct with attack/defense history."""
         state = make_game_state(
             hand_1=[],
-            hand_2=["attack", "defense", "heavy", "counter",
-                     "energy", "build", "flex"],
+            hand_2=[CardType.ATTACK, CardType.DEFENSE, CardType.HEAVY, CardType.COUNTER,
+                     CardType.ENERGY, CardType.BUILD, CardType.FLEX],
             hp_1=8, hp_2=15,
             energy_1=1, energy_2=3,
             round_in_cycle=3, cycle=2,
@@ -60,8 +60,8 @@ class TestBuildInputVector15D:
     def test_perspective_swap_player1(self):
         """HP, energy, and last-action indices swap for player 1."""
         state = make_game_state(
-            hand_1=["attack", "defense"],
-            hand_2=["heavy", "counter", "energy"],
+            hand_1=[CardType.ATTACK, CardType.DEFENSE],
+            hand_2=[CardType.HEAVY, CardType.COUNTER, CardType.ENERGY],
             hp_1=20, hp_2=10,
             energy_1=2, energy_2=4,
             round_in_cycle=1, cycle=1,
@@ -90,8 +90,8 @@ class TestBuildInputVector15D:
     def test_first_round_no_history(self):
         """Empty history → last_action indices = -1."""
         state = make_game_state(
-            hand_2=["attack"],
-            hand_1=["defense"],
+            hand_2=[CardType.ATTACK],
+            hand_1=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
         )
 
@@ -107,8 +107,8 @@ class TestBuildInputVector15D:
     def test_build_action_history(self):
         """Build+attack (index 2) and build+defense (index 4)."""
         state = make_game_state(
-            hand_2=["attack"],
-            hand_1=["defense"],
+            hand_2=[CardType.ATTACK],
+            hand_1=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
             history_2=[_phi(CardType.BUILD, CardType.ATTACK)],
             history_1=[_phi(CardType.BUILD, CardType.DEFENSE)],
@@ -154,7 +154,7 @@ class TestBuildInputVector15D:
         """HP=0 passes through without normalization."""
         state = make_game_state(
             hp_1=1, hp_2=0,
-            hand_2=["attack"],
+            hand_2=[CardType.ATTACK],
         )
 
         vec = Converter.build_input_vector(state, player_key="2")

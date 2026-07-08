@@ -1,0 +1,129 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam backgroundColor #FFFFFF
+skinparam classBorderColor #333333
+skinparam classFontColor #333333
+
+title GameState 重构 — 类图 (intention #20)
+
+' ===== 核心新增类 =====
+
+class GameState <<dataclass>> {
+    + round: int
+    + cycle: int
+    + round_in_cycle: int
+    + players: dict[str, PlayerState]
+    + is_over: bool
+    + winner: str | None
+    + mode: str
+    + round_log: list[RoundResult]
+    --
+    + {static} to_dict(gs: GameState): dict
+}
+
+class PlayerState <<dataclass>> {
+    + hp: int
+    + energy: int
+    + statuses: list[PlayerStatus]
+    + hand: list[CardType]
+    + history: list[PlayerHistoryItem]
+    + draw_pile: list[CardType] | None
+    + discard_pile: list[CardType] | None
+    + draw_pile_count: int
+    + discard_pile_count: int
+}
+
+' ===== 已有类（引用） =====
+
+class GameCore {
+    - player_1: Player | None
+    - player_2: Player | None
+    - round_number: int
+    - cycle_number: int
+    - round_in_cycle: int
+    - is_over: bool
+    - winner: str | None
+    - mode: str
+    - round_log: list[RoundResult]
+    --
+    + get_state(player_perspective: str | None): GameState
+}
+
+class CardType <<enum>> {
+    ATTACK
+    DEFENSE
+    HEAVY
+    COUNTER
+    ENERGY
+    BUILD
+    FLEX
+}
+
+class PlayerStatus <<dataclass>> {
+    + status_type: StatusType
+    + lifetime: int
+    --
+    + to_dict(): dict
+}
+
+class StatusType <<enum>> {
+    DEFENSE
+    GUARD
+}
+
+class PlayerHistoryItem <<dataclass>> {
+    + card: CardType
+    + build_target: CardType | None
+}
+
+class RoundResult <<dataclass>> {
+    + round: int
+    + cycle: int
+    + round_in_cycle: int
+    + cards_1: list[CardType]
+    + cards_2: list[CardType]
+    + before: BeforeResolve
+    + after_resolve: AfterResolve
+    + end_actions: EndActions
+    + after_end_actions: AfterEndActions
+    --
+    + {static} to_dict(rr: RoundResult): dict
+}
+
+' ===== 序列化与消费者 =====
+
+class "serializers.game_state_to_dict" as Serializer {
+    + game_state_to_dict(gs: GameState): dict
+}
+
+class Converter {
+    + {static} build_input_vector(state: GameState, player_key: str): list[float]
+}
+
+class AppManager {
+    + create_game(mode: str, ai_name: str | None): tuple[str, GameState]
+    + ai_select_action(state: GameState, ...): tuple
+    + ai_sample_action(state: GameState, ...): tuple
+    - _make_mask_fn(hand: list[CardType], energy: int): Callable
+}
+
+' ===== 关系 =====
+
+GameCore ..> GameState : creates
+GameState *-- "2" PlayerState
+PlayerState --> "0..*" CardType : hand / draw_pile / discard_pile
+PlayerState --> "0..*" PlayerStatus : statuses
+PlayerStatus --> StatusType
+PlayerState --> "0..*" PlayerHistoryItem : history
+PlayerHistoryItem --> CardType
+GameState --> "0..*" RoundResult : round_log
+RoundResult --> CardType : cards_1 / cards_2
+RoundResult --> PlayerStatus : statuses
+
+AppManager ..> GameState : consumes
+Converter ..> GameState : consumes
+Serializer ..> GameState : serializes
+
+@enduml

@@ -8,6 +8,7 @@ All methods are stateless. No PyTorch dependency — pure data transformation.
 """
 
 from src.backend.game.card import CardType
+from src.backend.game.game_state import GameState
 from src.backend.game.player import PlayerHistoryItem
 
 
@@ -82,22 +83,15 @@ class Converter:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def build_input_vector(state: dict, player_key: str = "2") -> list[float]:
-        """Build the 15-d input vector from a game state dict.
+    def build_input_vector(state: GameState, player_key: str = "2") -> list[float]:
+        """Build the 15-d input vector from a GameState.
 
-        Per design/14:
-            index 0:     Own HP
-            index 1:     Opponent HP
-            index 2:     Own energy (0-5)
-            index 3:     Opponent energy (0-5)
-            index 4:     Current round_in_cycle (1-5)
-            index 5:     Current cycle number
-            indices 6-12:   This player's hand card counts (7 types)
-            index 13:    Own last action policy index (-1 if no history)
-            index 14:    Opponent last action policy index (-1 if no history)
+        Per design/19 D6: accepts GameState directly instead of dict.
+        Internal lookups use card.value to convert CardType → string
+        for _CARD_TYPE_ORDER compatibility.
 
         Args:
-            state: Game state dict from GameCore.get_state().
+            state: GameState from GameCore.get_state().
             player_key: Which player's perspective — "1" or "2".
 
         Returns:
@@ -111,39 +105,38 @@ class Converter:
                 f"Invalid player_key: {player_key!r}. Must be '1' or '2'."
             )
 
-        this_player = state["players"][player_key]
+        this_player = state.players[player_key]
         opponent_key = "2" if player_key == "1" else "1"
-        opp_player = state["players"][opponent_key]
+        opp_player = state.players[opponent_key]
 
         # Metadata (indices 0-5): HP, energy, round, cycle
-        this_hp = float(this_player["hp"])
-        opp_hp = float(opp_player["hp"])
-        this_energy = float(this_player["energy"])
-        opp_energy = float(opp_player["energy"])
-        round_in_cycle = float(state.get("round_in_cycle", 1))
-        cycle = float(state.get("cycle", 1))
+        this_hp = float(this_player.hp)
+        opp_hp = float(opp_player.hp)
+        this_energy = float(this_player.energy)
+        opp_energy = float(opp_player.energy)
+        round_in_cycle = float(state.round_in_cycle)
+        cycle = float(state.cycle)
 
-        # Card counts (indices 6-12): count each type in hand
+        # Card counts (indices 6-12): count each type in hand (per design/19 D6,
+        # use card.value to get the string key for _CARD_TYPE_ORDER lookup).
         counts = [0.0] * Converter.NUM_CARD_TYPES
-        for card_str in this_player["hand"]:
-            idx = Converter._CARD_TYPE_ORDER.get(card_str)
+        for card in this_player.hand:
+            idx = Converter._CARD_TYPE_ORDER.get(card.value)
             if idx is not None:
                 counts[idx] += 1.0
 
-        # Last action indices (13-14): compute from PlayerHistoryItem in state
+        # Last action indices (13-14): compute from PlayerHistoryItem in state.
         this_last = -1.0
         opp_last = -1.0
 
-        this_history: list = this_player.get("history", [])
-        if this_history:
-            last_item = this_history[-1]
+        if this_player.history:
+            last_item = this_player.history[-1]
             this_last = float(
                 Converter._action_item_to_index(last_item)
             )
 
-        opp_history: list = opp_player.get("history", [])
-        if opp_history:
-            last_item = opp_history[-1]
+        if opp_player.history:
+            last_item = opp_player.history[-1]
             opp_last = float(
                 Converter._action_item_to_index(last_item)
             )

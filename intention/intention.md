@@ -316,3 +316,28 @@ PlayerState 还要维护一个生存期字段。
 
 # intention_id=18
 这是一个重构任务，intention\card_strings_report.md
+
+# intention_id=19
+这是一个重构任务。目前 get_state 返回了一个复杂 dict。这是不合理的，需要把它重构成一个 GameState 实例。
+GameState 类中，禁止使用卡片、状态的字符串表示，必须用对应的类。
+
+# intention_id=20
+这是一个重构任务。目前 converter 里面有
+_CARD_MAP: list[tuple[str, int | None, int, int]] = [
+        ("attack",  1, 1, 2),
+        ("defense", 3, 1, 4),
+        ("heavy",   5, 1, 6),
+        ("counter", 7, 2, 8),
+        ("energy",  9, 1, 10),
+        ("build",   None, 1, 0),
+        ("flex",   11, 2, 12),
+    ]
+这里有两个问题：
+1，使用了字符串字面值，而不是引用 CardType
+2，build cost 是在 CardDef 里面有定义的，不要在这里重复定义
+
+# intention_id=21
+这是一个重构任务。目前 _process_effect 里面有大量的 if-else，这是不合理的。
+应该为每一张卡封装一到多个 Resolver 子类，接收一个 GameCore 实例和一个 ResolveDetails 实例作为参数。每个 Resolver 子类在里面调用 GameCore 的 public 方法对游戏进行结算，并在 ResolveDetails 里面记录结算细节。
+同时，Resolver 应该暴露一个 get_priority() 方法，返回自身的优先级。
+还应该有一个 CardType -> list[Resolver] 的注册表，名字就叫 CardResolverRegistry 吧。

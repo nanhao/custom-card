@@ -230,7 +230,7 @@ class SelfPlayRunner:
         # c. Round loop
         while not gm.is_over:
             pre_state = gm.get_state()
-            round_num = pre_state["round"]
+            round_num = pre_state.round
 
             # Determine if this round should use temperature sampling
             should_sample = (

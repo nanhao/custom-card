@@ -228,35 +228,38 @@ class TestGameEnd:
 
 
 class TestGetState:
-    """TC-GC-10: get_state returns complete state with new fields."""
+    """TC-GC-10: get_state returns GameState with typed fields."""
 
     def test_get_state_fields(self):
-        """get_state returns cycle, round_in_cycle, energy, pile counts."""
+        """get_state returns round, cycle, round_in_cycle, energy, pile counts."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        state = gm.get_state()
-        assert state["round"] == 1
-        assert state["cycle"] == 1
-        assert state["round_in_cycle"] == 1
-        p1 = state["players"]["1"]
-        p2 = state["players"]["2"]
-        assert "energy" in p1
-        assert "statuses" in p1
-        assert "hand" in p1
-        assert "draw_pile_count" in p1
-        assert "discard_pile_count" in p1
+        gs = gm.get_state()
+        assert gs.round == 1
+        assert gs.cycle == 1
+        assert gs.round_in_cycle == 1
+        p1 = gs.players["1"]
+        p2 = gs.players["2"]
+        assert p1.hp == 20
+        assert p1.energy >= 0
+        assert isinstance(p1.statuses, list)
+        assert isinstance(p1.hand, list)
+        assert p1.draw_pile_count >= 0
+        assert p1.discard_pile_count >= 0
 
     def test_player_perspective_hides_opponent_piles(self):
         """With player_perspective='1', P1 sees own pile contents, P2 sees counts."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        state = gm.get_state(player_perspective="1")
-        p1 = state["players"]["1"]
-        p2 = state["players"]["2"]
+        gs = gm.get_state(player_perspective="1")
+        p1 = gs.players["1"]
+        p2 = gs.players["2"]
         # P1 sees his own pile details
-        assert isinstance(p1["draw_pile"], list)
+        assert p1.draw_pile is not None
+        assert isinstance(p1.draw_pile, list)
         # P2 only sees counts
-        assert isinstance(p2["draw_pile_count"], int)
+        assert p2.draw_pile is None
+        assert isinstance(p2.draw_pile_count, int)
 
 
 class TestBuildEnergyCheck:
@@ -377,9 +380,9 @@ class TestGetStateHistoryFormat:
         """TC-GS-01: No rounds played → history is empty list."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        state = gm.get_state()
-        assert state["players"]["1"]["history"] == []
-        assert state["players"]["2"]["history"] == []
+        gs = gm.get_state()
+        assert gs.players["1"].history == []
+        assert gs.players["2"].history == []
 
     def test_history_contains_player_history_items(self):
         """get_state history entries are PlayerHistoryItem instances."""
@@ -389,9 +392,9 @@ class TestGetStateHistoryFormat:
         gm.player_2.hand = [CardType.DEFENSE]
 
         gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
-        state = gm.get_state()
+        gs = gm.get_state()
 
-        p1_history = state["players"]["1"]["history"]
+        p1_history = gs.players["1"].history
         assert len(p1_history) == 1
         assert isinstance(p1_history[0], PlayerHistoryItem)
         assert p1_history[0] == PlayerHistoryItem(CardType.ATTACK, None)
@@ -408,9 +411,9 @@ class TestGetStateHistoryFormat:
             [CardType.BUILD], [CardType.ATTACK],
             build_target_1=CardType.ATTACK,
         )
-        state = gm.get_state()
+        gs = gm.get_state()
 
-        p1_last = state["players"]["1"]["history"][-1]
+        p1_last = gs.players["1"].history[-1]
         assert p1_last == PlayerHistoryItem(CardType.BUILD, CardType.ATTACK)
 
     def test_multi_round_history_accumulates(self):
@@ -425,8 +428,8 @@ class TestGetStateHistoryFormat:
         gm.play_round([CardType.BUILD], [CardType.ATTACK], build_target_1=CardType.ATTACK)
         gm.play_round([CardType.DEFENSE], [CardType.HEAVY])
 
-        state = gm.get_state()
-        p1_hist = state["players"]["1"]["history"]
+        gs = gm.get_state()
+        p1_hist = gs.players["1"].history
         assert len(p1_hist) == 3
         assert p1_hist[0] == PlayerHistoryItem(CardType.ATTACK, None)
         assert p1_hist[1] == PlayerHistoryItem(CardType.BUILD, CardType.ATTACK)

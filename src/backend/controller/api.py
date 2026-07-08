@@ -39,6 +39,7 @@ from src.backend.app.converter import Converter
 from src.backend.controller.serializers import (
     card_to_str,
     error_response,
+    game_state_to_dict,
     round_result_to_dict,
     str_to_card,
 )
@@ -60,20 +61,6 @@ def create_app(config_path: str = "config.json") -> Flask:
         A configured Flask app instance with all routes registered.
     """
     app = Flask(__name__)
-
-    # Custom JSON encoder: handle PlayerHistoryItem (design/14)
-    from src.backend.game.player import PlayerHistoryItem
-    _original_default = app.json.default
-
-    def _custom_default(o):
-        if isinstance(o, PlayerHistoryItem):
-            return {
-                "card": o.card.value,
-                "build_target": o.build_target.value if o.build_target else None,
-            }
-        return _original_default(o)
-
-    app.json.default = _custom_default
 
     # Enable CORS for the Vite dev server (different port during development).
     CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -154,7 +141,7 @@ def _register_routes(app: Flask) -> None:
         # Delegate to AppManager for game creation
         # AppManager handles validation (unknown AI, missing AI for PVE)
         try:
-            game_id, state = app_manager.create_game(mode=mode, ai_name=ai_name)
+            game_id, gs = app_manager.create_game(mode=mode, ai_name=ai_name)
         except ValueError as exc:
             error_msg = str(exc)
             if "unknown" in error_msg.lower():
@@ -163,9 +150,12 @@ def _register_routes(app: Flask) -> None:
                 return jsonify(error_response(error_msg, "MISSING_AI", 400)), 400
             return jsonify(error_response(error_msg, "BAD_REQUEST", 400)), 400
 
+        state_dict = game_state_to_dict(gs)
+        state_dict["ai"] = ai_name
+
         return jsonify({
             "game_id": game_id,
-            "state": state,
+            "state": state_dict,
         }), 201
 
     # ------------------------------------------------------------------
@@ -233,12 +223,13 @@ def _register_routes(app: Flask) -> None:
         # Optional player perspective for pile inspection
         perspective = request.args.get("perspective")
 
-        state = gm.get_state(player_perspective=perspective)
-        state["ai"] = metadata["ai"] if metadata else None
+        gs = gm.get_state(player_perspective=perspective)
+        state_dict = game_state_to_dict(gs)
+        state_dict["ai"] = metadata["ai"] if metadata else None
 
         return jsonify({
             "game_id": game_id,
-            "state": state,
+            "state": state_dict,
         }), 200
 
     # ------------------------------------------------------------------
@@ -372,12 +363,13 @@ def _register_routes(app: Flask) -> None:
             store.save(game_id, gm)
 
         # Build response state with AI metadata
-        state = gm.get_state()
-        state["ai"] = metadata["ai"] if metadata else None
+        gs = gm.get_state()
+        state_dict = game_state_to_dict(gs)
+        state_dict["ai"] = metadata["ai"] if metadata else None
 
         return jsonify({
             "round_result": round_result_to_dict(result),
-            "state": state,
+            "state": state_dict,
         }), 200
 
     # ------------------------------------------------------------------

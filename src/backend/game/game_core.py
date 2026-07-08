@@ -11,6 +11,7 @@ import random
 from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType, get_card_def, get_initial_draw_pile
+from src.backend.game.game_state import GameState, PlayerState
 from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.game.resolver import CardResolver
@@ -406,56 +407,66 @@ class GameCore:
         self.round_log.append(result)
         return result
 
-    def get_state(self, player_perspective: str | None = None) -> dict:
-        """Return a read-only snapshot of the current game state.
+    def get_state(self, player_perspective: str | None = None) -> GameState:
+        """Return a read-only typed snapshot of the current game state.
+
+        Per design/19 D2: returns a GameState dataclass instead of a dict.
+        PlayerState fields use typed objects (CardType, PlayerStatus) — no
+        string or dict representations.
 
         Args:
-            player_perspective: If "1" or "2", exposes that player's pile contents
-                                and only opponent's pile counts. If None, both
-                                players see only counts.
+            player_perspective: If "1" or "2", exposes that player's pile
+                                contents in draw_pile/discard_pile. If None,
+                                both players see only counts.
 
         Returns:
-            dict with keys: round, cycle, round_in_cycle, players, is_over,
-            winner, mode, round_log.
+            GameState dataclass with typed fields.
         """
-        def _player_dict(p: Player | None, show_piles: bool) -> dict:
-            if p is None:
-                return {
-                    "hp": 20, "energy": 0, "statuses": [],
-                    "hand": [], "history": [],
-                    "draw_pile_count": 0, "discard_pile_count": 0,
-                }
-            result = {
-                "hp": p.hp,
-                "energy": p.energy,
-                "statuses": [ps.to_dict() for ps in p.statuses],
-                "hand": [c.value for c in p.hand],
-                "history": p.history,
-            }
-            if show_piles:
-                result["draw_pile"] = [c.value for c in p.draw_pile]
-                result["discard_pile"] = [c.value for c in p.discard_pile]
-            else:
-                result["draw_pile_count"] = len(p.draw_pile)
-                result["discard_pile_count"] = len(p.discard_pile)
-            return result
-
         show_p1 = (player_perspective == "1")
         show_p2 = (player_perspective == "2")
 
-        return {
-            "round": self.round_number,
-            "cycle": self.cycle_number,
-            "round_in_cycle": self.round_in_cycle,
-            "players": {
-                "1": _player_dict(self.player_1, show_p1),
-                "2": _player_dict(self.player_2, show_p2),
+        def _build_player_state(p: Player | None, show_piles: bool) -> PlayerState:
+            """Build a PlayerState snapshot from a Player instance."""
+            if p is None:
+                return PlayerState(
+                    hp=20, energy=0, statuses=[], hand=[], history=[],
+                )
+            # Deep-copy statuses and hand to prevent mutation of the snapshot.
+            statuses = [
+                PlayerStatus(ps.status_type, ps.lifetime) for ps in p.statuses
+            ]
+            hand = list(p.hand)
+            history = list(p.history)
+            if show_piles:
+                return PlayerState(
+                    hp=p.hp, energy=p.energy,
+                    statuses=statuses, hand=hand, history=history,
+                    draw_pile=list(p.draw_pile),
+                    discard_pile=list(p.discard_pile),
+                    draw_pile_count=len(p.draw_pile),
+                    discard_pile_count=len(p.discard_pile),
+                )
+            return PlayerState(
+                hp=p.hp, energy=p.energy,
+                statuses=statuses, hand=hand, history=history,
+                draw_pile=None, discard_pile=None,
+                draw_pile_count=len(p.draw_pile),
+                discard_pile_count=len(p.discard_pile),
+            )
+
+        return GameState(
+            round=self.round_number,
+            cycle=self.cycle_number,
+            round_in_cycle=self.round_in_cycle,
+            players={
+                "1": _build_player_state(self.player_1, show_p1),
+                "2": _build_player_state(self.player_2, show_p2),
             },
-            "is_over": self.is_over,
-            "winner": self.winner,
-            "mode": self.mode,
-            "round_log": [RoundResult.to_dict(rr) for rr in self.round_log],
-        }
+            is_over=self.is_over,
+            winner=self.winner,
+            mode=self.mode,
+            round_log=list(self.round_log),
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers

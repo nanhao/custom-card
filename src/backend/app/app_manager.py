@@ -24,6 +24,7 @@ from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.app.selfplay_runner import SelfPlayRunner
 from src.backend.game.card import CardType
 from src.backend.game.game_core import GameCore
+from src.backend.game.game_state import GameState
 from src.backend.game.session_store import SessionStore
 
 
@@ -52,18 +53,21 @@ class AppManager:
 
     def create_game(
         self, mode: str, ai_name: str | None = None
-    ) -> tuple[str, dict]:
-        """Create a new game session and return its ID and state.
+    ) -> tuple[str, GameState]:
+        """Create a new game session and return its ID and typed GameState.
 
         For PVE mode: validates ai_name, initializes hidden states to zeros (32-d).
         For PVP mode: creates a standard game with no AI metadata.
+
+        Per design/19 D8: ai is not part of GameState — it is injected by
+        the controller after to_dict() serialization.
 
         Args:
             mode: Game mode — "pvp" or "pve".
             ai_name: AI name (required if mode=="pve").
 
         Returns:
-            (game_id, state) tuple with ai field injected.
+            (game_id, GameState) tuple.
 
         Raises:
             ValueError: If mode invalid or ai_name missing/unknown.
@@ -95,24 +99,25 @@ class AppManager:
             ai=ai_name,
         )
 
-        state = gm.get_state()
-        state["ai"] = ai_name
-        return game_id, state
+        gs = gm.get_state()
+        return game_id, gs
 
     # ------------------------------------------------------------------
     # AI Action Selection (greedy, PVE mode)
     # ------------------------------------------------------------------
 
     def ai_select_action(
-        self, state: dict, hidden_state: list[float], ai_name: str
+        self, state: GameState, hidden_state: list[float], ai_name: str
     ) -> tuple[str, str | None, list[float]]:
         """Select the AI's card greedily using policy network.
+
+        Per design/19 D7: state is a typed GameState, not a dict.
 
         Returns (card_str, build_target_str_or_None, new_hidden_state).
         build_target is non-None only when card_str == "build".
 
         Args:
-            state: Game state dict from GameCore.get_state().
+            state: GameState from GameCore.get_state().
             hidden_state: Current policy GRU hidden state (list of 32 floats).
             ai_name: AI name (e.g. "rnn_v2.1").
 
@@ -121,8 +126,8 @@ class AppManager:
         """
         model = self._get_policy_model(ai_name)
         input_vector = Converter.build_input_vector(state)
-        energy = state["players"]["2"]["energy"]
-        hand = state["players"]["2"]["hand"]
+        energy = state.players["2"].energy
+        hand = state.players["2"].hand
 
         x = torch.tensor(input_vector, dtype=torch.float32).view(1, 1, Converter.INPUT_SIZE)
         h = torch.tensor(hidden_state, dtype=torch.float32).view(1, 1, HIDDEN_SIZE)
@@ -144,7 +149,7 @@ class AppManager:
 
     def ai_sample_action(
         self,
-        state: dict,
+        state: GameState,
         hidden_state_policy: list[float],
         hidden_state_value: list[float],
         ai_name: str,
@@ -152,6 +157,8 @@ class AppManager:
         player_key: str = "2",
     ) -> tuple[str, str | None, list[float], float | None, float, list[float]]:
         """Select AI card with temperature-based sampling.
+
+        Per design/19 D7: state is a typed GameState.
 
         Uses policy and value networks independently.
 
@@ -163,8 +170,8 @@ class AppManager:
         value_model = self._get_value_model(ai_name)
 
         input_vector = Converter.build_input_vector(state, player_key=player_key)
-        energy = state["players"][player_key]["energy"]
-        hand = state["players"][player_key]["hand"]
+        energy = state.players[player_key].energy
+        hand = state.players[player_key].hand
 
         x = torch.tensor(input_vector, dtype=torch.float32).view(1, 1, Converter.INPUT_SIZE)
         h_pol = torch.tensor(hidden_state_policy, dtype=torch.float32).view(1, 1, HIDDEN_SIZE)
@@ -261,8 +268,12 @@ class AppManager:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _make_mask_fn(hand: list[str], energy: int):
+    def _make_mask_fn(hand: list[CardType], energy: int):
         """Create a 13-d interleaved mask function closure (design/14).
+
+        Per design/19 D7: hand is list[CardType], not list[str].
+        Internal lookups use card.value to get the string representation
+        for _PLAY_TO_INDEX and _CARD_MAP compatibility.
 
         Odd indices (1,3,5,7,9,11): pure card plays.
             - Block cards not in hand.
@@ -275,13 +286,14 @@ class AppManager:
         instead of maintaining a separate hardcoded copy.
 
         Args:
-            hand: List of card strings in the player's hand.
+            hand: List of CardType in the player's hand.
             energy: Current energy of the player.
 
         Returns:
             A callable mask_fn(logits: Tensor) -> Tensor.
         """
-        legal_cards = set(hand)
+        # Convert CardType list to string set for lookup compatibility.
+        legal_cards = {c.value for c in hand}
         can_build = CardType.BUILD.value in legal_cards and energy > 0
 
         def mask_fn(logits: torch.Tensor) -> torch.Tensor:
