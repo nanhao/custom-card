@@ -33,7 +33,7 @@ import torch.nn as nn
 # Constants
 # ---------------------------------------------------------------------------
 
-INPUT_SIZE = 15       # HP_own(1)+HP_opp(1)+energy_own(1)+energy_opp(1)+round(1)+cycle(1) + 7 counts + 2 last_action
+INPUT_SIZE = 15       # From Converter.INPUT_SIZE (design/14): HP×2+energy×2+round+cycle + 7 counts + 2 last_action
 HIDDEN_SIZE = 32      # GRU hidden state dimension
 NUM_CARD_TYPES = 7    # attack, defense, heavy, counter, energy, build, flex
 POLICY_OUTPUT_SIZE = 13  # 13-d interleaved (design/14)

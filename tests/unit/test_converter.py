@@ -336,3 +336,24 @@ class TestPolicyIndexToAction:
             idx = Converter.action_to_policy_index(card_str, bt)
             result = Converter.policy_index_to_action(idx)
             assert result == (card_str, bt), f"Failed for ({card_str}, {bt})"
+
+
+class TestBuildCost:
+    """Converter.build_cost() edge cases (C8)."""
+
+    @pytest.mark.parametrize("card_str,expected", [
+        ("attack", 1),
+        ("defense", 1),
+        ("heavy", 1),
+        ("counter", 2),
+        ("energy", 1),
+        ("build", 1),
+        ("flex", 2),
+    ])
+    def test_known_card_costs(self, card_str, expected):
+        """All known card types return correct build cost."""
+        assert Converter.build_cost(card_str) == expected
+
+    def test_unknown_card_returns_999(self):
+        """Unknown card string returns 999 as sentinel."""
+        assert Converter.build_cost("nonexistent") == 999

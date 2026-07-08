@@ -31,6 +31,10 @@ class TestMaskFn:
         """counter(cost=2) and flex(cost=2) available with energy=2."""
         mask_fn = AppManager._make_mask_fn(["build"], energy=2)
         masked = mask_fn(torch.zeros(1, 13))
+        # Cost-1 targets should NOT be masked (C7)
+        for idx in [0, 2, 4, 6, 10]:  # build, attack, defense, heavy, energy
+            assert masked[0, idx].item() == 0.0, f"cost-1 idx {idx} should not be masked"
+        # Cost-2 targets should NOT be masked with energy=2
         assert masked[0, 8].item() == 0.0   # build+counter (cost 2)
         assert masked[0, 12].item() == 0.0  # build+flex (cost 2)
 

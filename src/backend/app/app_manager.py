@@ -265,7 +265,6 @@ class AppManager:
 
         Odd indices (1,3,5,7,9,11): pure card plays.
             - Block cards not in hand.
-            - Block BUILD (index 0,2,4,6,8,10,12) if energy == 0.
 
         Even indices (0,2,4,6,8,10,12): build + build target.
             - Block all if BUILD not in hand or energy == 0.

@@ -77,8 +77,12 @@ def _deserialize_player(data: dict) -> Player:
     for key in required:
         if key not in data:
             raise ValueError(f"Missing required player key: {key!r}")
-    # build_history is optional (backward compat with pre-design/14 saves)
-    raw_build_history = data.get("build_history", [])
+    # build_history is optional (backward compat with pre-design/14 saves).
+    # If absent, fill with None entries matching history length so that
+    # get_state()'s zip() doesn't silently drop history entries.
+    raw_build_history = data.get("build_history")
+    if raw_build_history is None:
+        raw_build_history = [None] * len(data["history"])
     return Player(
         hp=data["hp"],
         energy=data["energy"],

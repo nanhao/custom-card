@@ -497,15 +497,15 @@ class GameCore:
         hp_1 = self.player_1.hp
         hp_2 = self.player_2.hp
 
-        if hp_1 == 0 and hp_2 == 0:
+        if hp_1 <= 0 and hp_2 <= 0:
             self.is_over = True
             self.winner = "draw"
             return True, "draw"
-        if hp_1 == 0:
+        if hp_1 <= 0:
             self.is_over = True
             self.winner = "2"
             return True, "2"
-        if hp_2 == 0:
+        if hp_2 <= 0:
             self.is_over = True
             self.winner = "1"
             return True, "1"

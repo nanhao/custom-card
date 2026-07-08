@@ -94,10 +94,14 @@ export default function GameBoard({
           if (state.is_over && state.winner === pid) cls += ' winner';
           if (state.is_over && state.winner !== 'draw' && state.winner !== pid) cls += ' loser';
 
-          // History chips
-          const chips = (p.history || []).map((c, i) => (
-            <span key={i} className={`hist-chip chip-${c}`}>{CARD_ICONS[c]}</span>
-          ));
+          // History chips — design/14: c is {card, build_target}
+          const chips = (p.history || []).map((c, i) => {
+            const cardStr = typeof c === 'string' ? c : c.card;
+            const label = c.build_target
+              ? `${CARD_ICONS[cardStr]}→${CARD_ICONS[c.build_target]}`
+              : CARD_ICONS[cardStr];
+            return <span key={i} className={`hist-chip chip-${cardStr}`} title={label}>{label}</span>;
+          });
 
           // Status tags
           const statusTags = (p.statuses || []).map((s, i) => {
