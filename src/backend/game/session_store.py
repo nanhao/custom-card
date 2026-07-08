@@ -71,18 +71,12 @@ def _deserialize_player(data: dict) -> Player:
     """Reconstruct a Player from a dict produced by _serialize_player().
 
     Raises ValueError if required keys are missing.
-    build_history is optional for backward compatibility with old saves.
     """
-    required = ("hp", "energy", "statuses", "hand", "draw_pile", "discard_pile", "history")
+    required = ("hp", "energy", "statuses", "hand", "draw_pile",
+                "discard_pile", "history", "build_history")
     for key in required:
         if key not in data:
             raise ValueError(f"Missing required player key: {key!r}")
-    # build_history is optional (backward compat with pre-design/14 saves).
-    # If absent, fill with None entries matching history length so that
-    # get_state()'s zip() doesn't silently drop history entries.
-    raw_build_history = data.get("build_history")
-    if raw_build_history is None:
-        raw_build_history = [None] * len(data["history"])
     return Player(
         hp=data["hp"],
         energy=data["energy"],
@@ -93,7 +87,7 @@ def _deserialize_player(data: dict) -> Player:
         history=[_str_to_card(s) for s in data["history"]],
         build_history=[
             _str_to_card(s) if s is not None else None
-            for s in raw_build_history
+            for s in data["build_history"]
         ],
     )
 

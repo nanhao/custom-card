@@ -7,12 +7,8 @@ actions at the tail. Policy output is 13-d interleaved (build/play pairs).
 All methods are stateless. No PyTorch dependency — pure data transformation.
 """
 
-import logging
-
 from src.backend.game.card import CardType
 from src.backend.game.player import PlayerHistoryItem
-
-logger = logging.getLogger(__name__)
 
 
 class Converter:
@@ -163,28 +159,16 @@ class Converter:
         this_history: list = this_player.get("history", [])
         if this_history:
             last_item = this_history[-1]
-            if isinstance(last_item, PlayerHistoryItem):
-                this_last = float(
-                    Converter._action_item_to_index(last_item)
-                )
-            else:
-                logger.warning(
-                    "history entry is not PlayerHistoryItem: %r; using -1",
-                    type(last_item).__name__,
-                )
+            this_last = float(
+                Converter._action_item_to_index(last_item)
+            )
 
         opp_history: list = opp_player.get("history", [])
         if opp_history:
             last_item = opp_history[-1]
-            if isinstance(last_item, PlayerHistoryItem):
-                opp_last = float(
-                    Converter._action_item_to_index(last_item)
-                )
-            else:
-                logger.warning(
-                    "history entry is not PlayerHistoryItem: %r; using -1",
-                    type(last_item).__name__,
-                )
+            opp_last = float(
+                Converter._action_item_to_index(last_item)
+            )
 
         # Build new-order vector per design/14:
         #   [HP_own, HP_opp, energy_own, energy_opp, round, cycle]
