@@ -50,7 +50,7 @@ def _serialize_player(player: Player) -> dict:
     """Serialize a Player to a plain dict for JSON encoding.
 
     Returns dict with keys: hp, energy, statuses, hand, draw_pile,
-    discard_pile, history.
+    discard_pile, history, build_history.
     """
     return {
         "hp": player.hp,
@@ -60,6 +60,10 @@ def _serialize_player(player: Player) -> dict:
         "draw_pile": [_card_to_str(c) for c in player.draw_pile],
         "discard_pile": [_card_to_str(c) for c in player.discard_pile],
         "history": [_card_to_str(c) for c in player.history],
+        "build_history": [
+            _card_to_str(bt) if bt is not None else None
+            for bt in player.build_history
+        ],
     }
 
 
@@ -67,11 +71,14 @@ def _deserialize_player(data: dict) -> Player:
     """Reconstruct a Player from a dict produced by _serialize_player().
 
     Raises ValueError if required keys are missing.
+    build_history is optional for backward compatibility with old saves.
     """
     required = ("hp", "energy", "statuses", "hand", "draw_pile", "discard_pile", "history")
     for key in required:
         if key not in data:
             raise ValueError(f"Missing required player key: {key!r}")
+    # build_history is optional (backward compat with pre-design/14 saves)
+    raw_build_history = data.get("build_history", [])
     return Player(
         hp=data["hp"],
         energy=data["energy"],
@@ -80,6 +87,10 @@ def _deserialize_player(data: dict) -> Player:
         draw_pile=[_str_to_card(s) for s in data["draw_pile"]],
         discard_pile=[_str_to_card(s) for s in data["discard_pile"]],
         history=[_str_to_card(s) for s in data["history"]],
+        build_history=[
+            _str_to_card(s) if s is not None else None
+            for s in raw_build_history
+        ],
     )
 
 

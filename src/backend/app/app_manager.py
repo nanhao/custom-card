@@ -1,7 +1,7 @@
-"""App bridge layer — orchestrates game creation and AI card selection (v2 design/11).
+"""App bridge layer — orchestrates game creation and AI card selection (design/14).
 
-Per design/11 D5: hidden state 32-d, policy output 14-d (7 action + 7 build_target),
-mask_fn uses two-segment masking (hand cards + build energy constraints).
+Per design/14: policy output 13-d interleaved (build/play pairs),
+mask_fn uses 13-d interleaved masking (hand cards + build energy constraints).
 
 Public interface:
     create_game(mode, ai_name=None) -> (game_id, state)
@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.ai.rnn_v1.model import HIDDEN_SIZE, NUM_CARD_TYPES
+from src.backend.ai.rnn_v1.model import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.app.converter import Converter
 from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.app.selfplay_runner import SelfPlayRunner
@@ -131,16 +131,8 @@ class AppManager:
             probs, _log_probs, new_hidden = model(x, h, mask_fn=mask_fn)
             action_idx = int(torch.argmax(probs, dim=-1).item())
 
-        if action_idx < NUM_CARD_TYPES:
-            # Action is a card play (indices 0-6)
-            card_str = Converter.index_to_card(action_idx)
-            build_target = None
-        else:
-            # Action is a build target selection (indices 7-13)
-            # But this shouldn't happen in greedy mode — we use mask_fn
-            # to prevent this. Fallback: treat as build target.
-            card_str = "build"
-            build_target = Converter.index_to_card(action_idx - NUM_CARD_TYPES)
+        # Decode 13-d interleaved output (design/14)
+        card_str, build_target = Converter.policy_index_to_action(action_idx)
 
         new_hidden_list = new_hidden.squeeze(1).squeeze(0).tolist()
         return card_str, build_target, new_hidden_list
@@ -191,13 +183,8 @@ class AppManager:
                 action_idx = int(torch.multinomial(probs, 1).item())
                 log_prob = float(log_probs[0, action_idx].item())
 
-        # Interpret 14-d output
-        if action_idx < NUM_CARD_TYPES:
-            card_str = Converter.index_to_card(action_idx)
-            build_target = None
-        else:
-            card_str = "build"
-            build_target = Converter.index_to_card(action_idx - NUM_CARD_TYPES)
+        # Decode 13-d interleaved output (design/14)
+        card_str, build_target = Converter.policy_index_to_action(action_idx)
 
         new_h_pol_list = new_h_pol.squeeze(1).squeeze(0).tolist()
         new_h_val_list = new_h_val.squeeze(1).squeeze(0).tolist()
@@ -269,18 +256,20 @@ class AppManager:
         return model
 
     # ------------------------------------------------------------------
-    # Mask function factory (two-segment: hand cards + build targets)
+    # Mask function factory (13-d interleaved, design/14)
     # ------------------------------------------------------------------
 
     @staticmethod
     def _make_mask_fn(hand: list[str], energy: int):
-        """Create a two-segment mask function closure.
+        """Create a 13-d interleaved mask function closure (design/14).
 
-        Front segment (indices 0-6): block cards not in hand, and block BUILD
-        if energy == 0.
+        Odd indices (1,3,5,7,9,11): pure card plays.
+            - Block cards not in hand.
+            - Block BUILD (index 0,2,4,6,8,10,12) if energy == 0.
 
-        Back segment (indices 7-13): block build targets whose cost exceeds
-        available energy. Only meaningful when card==BUILD.
+        Even indices (0,2,4,6,8,10,12): build + build target.
+            - Block all if BUILD not in hand or energy == 0.
+            - Otherwise, block targets exceeding available energy.
 
         Args:
             hand: List of card strings in the player's hand.
@@ -290,27 +279,33 @@ class AppManager:
             A callable mask_fn(logits: Tensor) -> Tensor.
         """
         legal_cards = set(hand)
+        can_build = "build" in legal_cards and energy > 0
 
         def mask_fn(logits: torch.Tensor) -> torch.Tensor:
             masked = logits.clone()
-            # Front segment: mask illegal card actions
-            for card_str in Converter.ALL_CARD_TYPES:
-                idx = Converter.card_to_index(card_str)
+            # Odd indices (1,3,5,7,9,11): pure card plays
+            pure_play_cards = [
+                (1, "attack"), (3, "defense"), (5, "heavy"),
+                (7, "counter"), (9, "energy"), (11, "flex"),
+            ]
+            for idx, card_str in pure_play_cards:
                 if card_str not in legal_cards:
                     masked[0, idx] = float("-inf")
-                # Block BUILD if energy is 0
-                if card_str == "build" and energy == 0:
+
+            # Even indices (0,2,4,6,8,10,12): build + target
+            # Block all build actions if can't build
+            build_indices = [0, 2, 4, 6, 8, 10, 12]
+            build_targets = ["build", "attack", "defense", "heavy",
+                             "counter", "energy", "flex"]
+            if not can_build:
+                for idx in build_indices:
                     masked[0, idx] = float("-inf")
-            # Back segment: mask build targets exceeding energy budget.
-            # Also mask ALL build targets if BUILD is not in hand.
-            can_build = "build" in legal_cards and energy > 0
-            for i in range(NUM_CARD_TYPES):
-                if not can_build:
-                    masked[0, NUM_CARD_TYPES + i] = float("-inf")
-                else:
-                    cost = Converter.build_cost_for_index(i)
+            else:
+                for idx, target_str in zip(build_indices, build_targets):
+                    cost = Converter.build_cost(target_str)
                     if cost > energy:
-                        masked[0, NUM_CARD_TYPES + i] = float("-inf")
+                        masked[0, idx] = float("-inf")
+
             return masked
 
         return mask_fn

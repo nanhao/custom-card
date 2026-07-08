@@ -1,25 +1,27 @@
-"""Split policy/value GRU-based AI models for the custom card game (design/13).
+"""Split policy/value GRU-based AI models for the custom card game (design/14).
 
-Per design/13: input vector reordered — metadata (HP, round, cycle) at front,
-card-type-specific features at tail for future card type extensibility.
+Per design/14: input vector redesigned — metadata (HP, energy, round, cycle) at
+front, card counts in middle, policy-index last actions at tail. 15-d total.
 
 Architecture:
-    GRUPolicyModel: Input(25) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax
-        Output 14-d: indices 0-6 for card action, indices 7-13 for build target.
-    GRUValueModel:  Input(25) -> GRU(32, 1 layer) -> Linear(32->1)
+    GRUPolicyModel: Input(15) -> GRU(32, 1 layer) -> Linear(32->13) -> softmax
+        Output 13-d interleaved: even indices = build+target, odd = pure play.
+    GRUValueModel:  Input(15) -> GRU(32, 1 layer) -> Linear(32->1)
 
-Input vector layout (0-based):
+Input vector layout (0-based, design/14):
     index 0:     Own HP
     index 1:     Opponent HP
-    index 2:     round_in_cycle (1-5)
-    index 3:     cycle number
-    indices 4-10:   Card counts (attack..flex, 7 types)
-    indices 11-17:  One-hot of own last move
-    indices 18-24:  One-hot of opponent's last move
+    index 2:     Own energy (0-5)
+    index 3:     Opponent energy (0-5)
+    index 4:     round_in_cycle (1-5)
+    index 5:     cycle number
+    indices 6-12:   Card counts (attack..flex, 7 types)
+    index 13:    Own last action policy index (-1 if first round)
+    index 14:    Opponent last action policy index (-1 if first round)
 
-mask_fn supports two-segment masking:
-    - indices 0-6: block cards not in hand
-    - indices 7-13: block build targets exceeding available energy
+mask_fn supports 13-d interleaved masking:
+    - Odd indices (1,3,5,7,9,11): block cards not in hand
+    - Even indices (0,2,4,6,8,10,12): block when build not available or insufficient energy
 """
 
 from collections.abc import Callable
@@ -31,9 +33,10 @@ import torch.nn as nn
 # Constants
 # ---------------------------------------------------------------------------
 
-INPUT_SIZE = 25    # HP_own(1) + HP_opp(1) + round(1) + cycle(1) + 7 counts + 7 onehot(own) + 7 onehot(opp)
-HIDDEN_SIZE = 32   # GRU hidden state dimension
-NUM_CARD_TYPES = 7  # attack, defense, heavy, counter, energy, build, flex
+INPUT_SIZE = 15       # HP_own(1)+HP_opp(1)+energy_own(1)+energy_opp(1)+round(1)+cycle(1) + 7 counts + 2 last_action
+HIDDEN_SIZE = 32      # GRU hidden state dimension
+NUM_CARD_TYPES = 7    # attack, defense, heavy, counter, energy, build, flex
+POLICY_OUTPUT_SIZE = 13  # 13-d interleaved (design/14)
 
 
 # ---------------------------------------------------------------------------
@@ -42,17 +45,17 @@ NUM_CARD_TYPES = 7  # attack, defense, heavy, counter, energy, build, flex
 
 
 class GRUPolicyModel(nn.Module):
-    """GRU-based policy network with dual-output head (14-d).
+    """GRU-based policy network with 13-d interleaved output (design/14).
 
-    Architecture: Input(25) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax.
+    Architecture: Input(15) -> GRU(32, 1 layer) -> Linear(32->13) -> softmax.
 
-    Input (25-d, per design/13):
-        [HP_own, HP_opp, round, cycle | card_counts(7) | onehot_own(7) | onehot_opp(7)]
+    Input (15-d, per design/14):
+        [HP_own, HP_opp, energy_own, energy_opp, round, cycle |
+         card_counts(7) | last_own, last_opp]
 
-    Output interpretation:
-        indices 0-6:  card action probabilities (attack..flex)
-        indices 7-13: build target probabilities (attack..flex),
-                       only meaningful when action == BUILD
+    Output (13-d, interleaved):
+        even indices (0,2,4,6,8,10,12): build + build target
+        odd indices  (1,3,5,7,9,11):    pure card play
     """
 
     INITIAL_HIDDEN_STATE: list[float] = [0.0] * HIDDEN_SIZE
@@ -66,7 +69,7 @@ class GRUPolicyModel(nn.Module):
             num_layers=1,
             batch_first=False,
         )
-        self.fc_policy = nn.Linear(HIDDEN_SIZE, NUM_CARD_TYPES * 2)  # 14 outputs
+        self.fc_policy = nn.Linear(HIDDEN_SIZE, POLICY_OUTPUT_SIZE)  # 13 outputs
 
     def forward(
         self,
@@ -119,11 +122,12 @@ class GRUPolicyModel(nn.Module):
 class GRUValueModel(nn.Module):
     """GRU-based value network for state evaluation.
 
-    Architecture: Input(25) -> GRU(32, 1 layer) -> Linear(32->1).
+    Architecture: Input(15) -> GRU(32, 1 layer) -> Linear(32->1).
     No tanh — value can exceed [-1, 1].
 
-    Input (25-d, per design/13):
-        [HP_own, HP_opp, round, cycle | card_counts(7) | onehot_own(7) | onehot_opp(7)]
+    Input (15-d, per design/14):
+        [HP_own, HP_opp, energy_own, energy_opp, round, cycle |
+         card_counts(7) | last_own, last_opp]
     """
 
     INITIAL_HIDDEN_STATE: list[float] = [0.0] * HIDDEN_SIZE

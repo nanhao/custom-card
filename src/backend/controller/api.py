@@ -60,6 +60,20 @@ def create_app(config_path: str = "config.json") -> Flask:
     """
     app = Flask(__name__)
 
+    # Custom JSON encoder: handle PlayerHistoryItem (design/14)
+    from src.backend.game.player import PlayerHistoryItem
+    _original_default = app.json.default
+
+    def _custom_default(o):
+        if isinstance(o, PlayerHistoryItem):
+            return {
+                "card": o.card.value,
+                "build_target": o.build_target.value if o.build_target else None,
+            }
+        return _original_default(o)
+
+    app.json.default = _custom_default
+
     # Enable CORS for the Vite dev server (different port during development).
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 

@@ -1,4 +1,4 @@
-"""Unit tests for AppManager mask_fn — two-segment hand + build target masking."""
+"""Unit tests for AppManager mask_fn - 13-d interleaved masking (design/14)."""
 
 import torch
 
@@ -6,42 +6,46 @@ from src.backend.app.app_manager import AppManager
 
 
 class TestMaskFn:
-    def test_no_build_in_hand_blocks_all_build_targets(self):
-        """TC-AM-03b: hand=['attack','energy'] energy=2 — all back segment masked."""
-        mask_fn = AppManager._make_mask_fn(["attack", "energy"], energy=2)
-        masked = mask_fn(torch.zeros(1, 14))
-        for i in range(7, 14):
-            assert masked[0, i].item() == float("-inf"), f"idx {i} not masked"
+    """TC-AM tests adapted for 13-d interleaved output (design/14).
 
-    def test_energy_zero_blocks_build_and_back_segment(self):
-        """TC-AM-03b: energy=0 blocks BUILD(idx=5) and ALL build targets (7-13)."""
+    Policy output layout (13-d):
+        even (0,2,4,6,8,10,12): build + build target
+        odd  (1,3,5,7,9,11):    pure card play
+    """
+
+    def test_no_build_in_hand_blocks_all_even_indices(self):
+        """hand=['attack','energy'] -- all even indices (build) masked."""
+        mask_fn = AppManager._make_mask_fn(["attack", "energy"], energy=2)
+        masked = mask_fn(torch.zeros(1, 13))
+        for i in [0, 2, 4, 6, 8, 10, 12]:
+            assert masked[0, i].item() == float("-inf"), f"even idx {i} not masked"
+
+    def test_energy_zero_blocks_all_even_indices(self):
+        """energy=0 blocks ALL even indices (build actions)."""
         mask_fn = AppManager._make_mask_fn(["attack", "build"], energy=0)
-        masked = mask_fn(torch.zeros(1, 14))
-        assert masked[0, 5].item() == float("-inf"), "BUILD(idx=5) not masked"
-        for i in range(7, 14):
-            assert masked[0, i].item() == float("-inf"), f"idx {i} not masked"
+        masked = mask_fn(torch.zeros(1, 13))
+        for i in [0, 2, 4, 6, 8, 10, 12]:
+            assert masked[0, i].item() == float("-inf"), f"even idx {i} not masked"
 
     def test_build_targets_filtered_by_energy(self):
         """counter(cost=2) and flex(cost=2) available with energy=2."""
         mask_fn = AppManager._make_mask_fn(["build"], energy=2)
-        masked = mask_fn(torch.zeros(1, 14))
-        assert masked[0, 10].item() == 0.0  # counter build target
-        assert masked[0, 13].item() == 0.0   # flex build target
+        masked = mask_fn(torch.zeros(1, 13))
+        assert masked[0, 8].item() == 0.0   # build+counter (cost 2)
+        assert masked[0, 12].item() == 0.0  # build+flex (cost 2)
 
     def test_energy_1_blocks_cost_2_targets(self):
         """counter(cost=2) and flex(cost=2) blocked with energy=1."""
         mask_fn = AppManager._make_mask_fn(["build"], energy=1)
-        masked = mask_fn(torch.zeros(1, 14))
-        assert masked[0, 10].item() == float("-inf")  # counter
-        assert masked[0, 13].item() == float("-inf")  # flex
+        masked = mask_fn(torch.zeros(1, 13))
+        assert masked[0, 8].item() == float("-inf")   # counter (cost 2)
+        assert masked[0, 12].item() == float("-inf")  # flex (cost 2)
 
-    def test_hand_cards_masked_in_front_segment(self):
-        """Cards not in hand are masked in indices 0-6."""
+    def test_hand_cards_masked_at_odd_indices(self):
+        """Cards not in hand are masked at odd indices."""
         mask_fn = AppManager._make_mask_fn(["attack", "defense"], energy=2)
-        masked = mask_fn(torch.zeros(1, 14))
-        # attack(0) and defense(1) should be 0
-        assert masked[0, 0].item() == 0.0
-        assert masked[0, 1].item() == 0.0
-        # heavy(2), counter(3), energy(4), build(5), flex(6) masked
-        for i in [2, 3, 4, 5, 6]:
-            assert masked[0, i].item() == float("-inf"), f"idx {i} not masked"
+        masked = mask_fn(torch.zeros(1, 13))
+        assert masked[0, 1].item() == 0.0  # attack in hand
+        assert masked[0, 3].item() == 0.0  # defense in hand
+        for i in [5, 7, 9, 11]:  # heavy, counter, energy, flex not in hand
+            assert masked[0, i].item() == float("-inf"), f"odd idx {i} not masked"

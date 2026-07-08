@@ -1,0 +1,59 @@
+@startuml
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+title Input Construction Flow - 15-d Vector (design/14)
+
+actor Caller
+participant "Converter\nbuild_input_vector" as C
+database "state dict" as State
+
+Caller -> C: build_input_vector(state, player_key)
+
+C -> State: read players[player_key].hp
+C -> State: read players[opponent_key].hp
+C -> State: read players[player_key].energy
+C -> State: read players[opponent_key].energy
+C -> State: read round_in_cycle
+C -> State: read cycle
+
+note right of C
+  indices 0-5: metadata
+  [hp_own, hp_opp, energy_own, energy_opp, round, cycle]
+end note
+
+C -> State: read players[player_key].hand
+C -> C: count each card type (attack..flex)
+
+note right of C
+  indices 6-12: card counts
+  [attack, defense, heavy, counter, energy, build, flex]
+end note
+
+C -> State: read players[player_key].history
+note right of C
+  history format: list[dict]
+  e.g. {"card":"build","build_target":"attack"}
+end note
+alt history not empty
+    C -> C: get last entry: history[-1]["card"] + ["build_target"]
+    C -> C: action_to_policy_index(card, bt) -> int
+    note right of C
+      index 13: own last action (policy index)
+      首回合 history 为空 → -1
+    end note
+else history empty
+    C -> C: index 13 = -1.0
+end
+
+C -> State: read players[opponent_key].history
+alt history not empty
+    C -> C: action_to_policy_index(card, bt) -> int
+    note right of C
+      index 14: opponent last action (policy index)
+    end note
+else history empty
+    C -> C: index 14 = -1.0
+end
+
+C --> Caller: list[float] (len=15)
+
+@enduml

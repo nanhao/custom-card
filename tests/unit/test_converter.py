@@ -1,129 +1,130 @@
-"""Unit tests for Converter.build_input_vector — design/13 input reordering.
+"""Unit tests for Converter — 15-d input + action encoding (design/14).
 
-Per design/13 §2, the 25-d input vector follows the new order:
-    index 0:    Own HP
-    index 1:    Opponent HP
-    index 2:    round_in_cycle (1-5)
-    index 3:    cycle number
-    indices 4-10:   Card counts (attack..flex)
-    indices 11-17:  One-hot of own last move
-    indices 18-24:  One-hot of opponent's last move
+Test cases per design/14 test_cases.md §1 (TC-IV), §2 (TC-AP), §3 (TC-PI).
 """
 
 import pytest
 
 from src.backend.app.converter import Converter
+from src.backend.game.card import CardType
+from src.backend.game.player import PlayerHistoryItem
 from tests.helpers import make_game_state
 
 
-class TestBuildInputVectorNewOrder:
-    """Verify the new index ordering defined by design/13."""
+def _phi(card: CardType, bt: CardType | None = None) -> PlayerHistoryItem:
+    """Shorthand for creating PlayerHistoryItem in tests."""
+    return PlayerHistoryItem(card=card, build_target=bt)
+
+
+class TestBuildInputVector15D:
+    """TC-IV-01~09: build_input_vector with 15-d format."""
 
     # ------------------------------------------------------------------
-    # TC-IV-01: Full ordering correctness (player_key="2")
+    # TC-IV-01: Full ordering (player_key="2", with history)
     # ------------------------------------------------------------------
 
-    def test_full_ordering_player2(self):
-        """All 25 indices in correct positions when viewing from player 2."""
-        # Given: P1 HP=8, P2 HP=15, round_in_cycle=3, cycle=2,
-        #        P2 has all 7 card types, no history
+    def test_full_ordering_player2_with_history(self):
+        """All 15 indices correct with attack/defense history."""
         state = make_game_state(
             hand_1=[],
-            hand_2=["attack", "defense", "heavy", "counter", "energy", "build", "flex"],
+            hand_2=["attack", "defense", "heavy", "counter",
+                     "energy", "build", "flex"],
             hp_1=8, hp_2=15,
+            energy_1=1, energy_2=3,
             round_in_cycle=3, cycle=2,
+            history_1=[_phi(CardType.DEFENSE)],
+            history_2=[_phi(CardType.ATTACK)],
         )
 
-        # When
         vec = Converter.build_input_vector(state, player_key="2")
 
-        # Then: indices 0-3 (metadata)
-        assert len(vec) == Converter.INPUT_SIZE
-        assert vec[0] == 15.0  # own HP (P2)
-        assert vec[1] == 8.0   # opponent HP (P1)
-        assert vec[2] == 3.0   # round_in_cycle
-        assert vec[3] == 2.0   # cycle
-
-        # indices 4-10: card counts — one of each type
+        assert len(vec) == Converter.INPUT_SIZE  # 15
+        # Metadata (indices 0-5)
+        assert vec[0] == 15.0   # own HP (P2)
+        assert vec[1] == 8.0    # opponent HP (P1)
+        assert vec[2] == 3.0    # own energy (P2)
+        assert vec[3] == 1.0    # opponent energy (P1)
+        assert vec[4] == 3.0    # round_in_cycle
+        assert vec[5] == 2.0    # cycle
+        # Card counts (indices 6-12) — one of each type
         for i in range(7):
-            assert vec[4 + i] == 1.0, f"index {4 + i}: expected 1.0"
-
-        # indices 11-24: one-hot — all zeros (no history)
-        for i in range(11, 25):
-            assert vec[i] == 0.0, f"index {i}: expected 0.0"
+            assert vec[6 + i] == 1.0, f"index {6 + i}: expected 1.0"
+        # Last action (indices 13-14)
+        assert vec[13] == 1.0   # P2 last: attack → policy index 1
+        assert vec[14] == 3.0   # P1 last: defense → policy index 3
 
     # ------------------------------------------------------------------
     # TC-IV-02: Perspective swap (player_key="1")
     # ------------------------------------------------------------------
 
     def test_perspective_swap_player1(self):
-        """HP and counts swap when viewing from player 1's perspective."""
+        """HP, energy, and last-action indices swap for player 1."""
         state = make_game_state(
             hand_1=["attack", "defense"],
             hand_2=["heavy", "counter", "energy"],
             hp_1=20, hp_2=10,
+            energy_1=2, energy_2=4,
             round_in_cycle=1, cycle=1,
+            history_1=[_phi(CardType.ATTACK)],
+            history_2=[_phi(CardType.DEFENSE)],
         )
 
         vec = Converter.build_input_vector(state, player_key="1")
 
-        # metadata swapped
-        assert vec[0] == 20.0  # own HP = P1
-        assert vec[1] == 10.0  # opponent HP = P2
-
-        # card counts from P1's hand
-        assert vec[4] == 1.0   # attack
-        assert vec[5] == 1.0   # defense
-        assert vec[6] == 0.0   # heavy (not in P1 hand)
-        assert vec[7] == 0.0   # counter
-        assert vec[8] == 0.0   # energy
+        assert vec[0] == 20.0   # own HP = P1
+        assert vec[1] == 10.0   # opponent HP = P2
+        assert vec[2] == 2.0    # own energy = P1
+        assert vec[3] == 4.0    # opponent energy = P2
+        # Card counts from P1's hand
+        assert vec[6] == 1.0    # attack
+        assert vec[7] == 1.0    # defense
+        assert vec[8] == 0.0    # heavy (not in P1 hand)
+        # Last action swapped
+        assert vec[13] == 1.0   # P1 last: attack → 1
+        assert vec[14] == 3.0   # P2 last: defense → 3
 
     # ------------------------------------------------------------------
-    # TC-IV-03: One-hot history encoding
+    # TC-IV-03: No history (first round)
     # ------------------------------------------------------------------
 
-    def test_onehot_history(self):
-        """Last played cards are encoded in indices 11-24."""
+    def test_first_round_no_history(self):
+        """Empty history → last_action indices = -1."""
         state = make_game_state(
-            hand_1=["attack"],
-            hand_2=["defense"],
-            hp_1=20, hp_2=20,
-            history_1=["attack"],
-            history_2=["defense"],
-        )
-
-        vec = Converter.build_input_vector(state, player_key="2")
-
-        # Own last move (P2) = defense -> index 12 = 1.0
-        assert vec[11] == 0.0   # attack
-        assert vec[12] == 1.0   # defense
-        for i in range(13, 18):
-            assert vec[i] == 0.0, f"index {i}: expected 0.0"
-
-        # Opponent last move (P1) = attack -> index 18 = 1.0
-        assert vec[18] == 1.0   # attack
-        for i in range(19, 25):
-            assert vec[i] == 0.0, f"index {i}: expected 0.0"
-
-    # ------------------------------------------------------------------
-    # TC-IV-04: Partial / empty hand
-    # ------------------------------------------------------------------
-
-    def test_partial_hand(self):
-        """Only present cards are counted; missing types are 0.0."""
-        state = make_game_state(
-            hand_2=["attack", "attack"],
+            hand_2=["attack"],
+            hand_1=["defense"],
             hp_1=20, hp_2=20,
         )
 
         vec = Converter.build_input_vector(state, player_key="2")
 
-        assert vec[4] == 2.0   # attack x2
-        for i in range(5, 11):
-            assert vec[i] == 0.0, f"index {i}: expected 0.0"
+        assert vec[13] == -1.0
+        assert vec[14] == -1.0
 
-    def test_empty_hand(self):
-        """Empty hand produces all-zero card counts."""
+    # ------------------------------------------------------------------
+    # TC-IV-04: Build actions in history
+    # ------------------------------------------------------------------
+
+    def test_build_action_history(self):
+        """Build+attack (index 2) and build+defense (index 4)."""
+        state = make_game_state(
+            hand_2=["attack"],
+            hand_1=["defense"],
+            hp_1=20, hp_2=20,
+            history_2=[_phi(CardType.BUILD, CardType.ATTACK)],
+            history_1=[_phi(CardType.BUILD, CardType.DEFENSE)],
+        )
+
+        vec = Converter.build_input_vector(state, player_key="2")
+
+        assert vec[13] == 2.0   # build+attack
+        assert vec[14] == 4.0   # build+defense
+
+    # ------------------------------------------------------------------
+    # TC-IV-05: Empty hand
+    # ------------------------------------------------------------------
+
+    def test_empty_hand_all_zero_counts(self):
+        """Empty hand → indices 6-12 all 0.0."""
         state = make_game_state(
             hand_2=[],
             hp_1=20, hp_2=20,
@@ -131,29 +132,26 @@ class TestBuildInputVectorNewOrder:
 
         vec = Converter.build_input_vector(state, player_key="2")
 
-        for i in range(4, 11):
+        for i in range(6, 13):
             assert vec[i] == 0.0, f"index {i}: expected 0.0"
 
     # ------------------------------------------------------------------
-    # TC-IV-05: Invalid player_key
+    # TC-IV-06: Invalid player_key
     # ------------------------------------------------------------------
 
     def test_invalid_player_key_raises(self):
-        """ValueError raised for player_key not '1' or '2'."""
+        """ValueError for non-'1'/'2' player_key."""
         state = make_game_state()
-        with pytest.raises(ValueError):
-            Converter.build_input_vector(state, player_key="3")
-        with pytest.raises(ValueError):
-            Converter.build_input_vector(state, player_key="0")
-        with pytest.raises(ValueError):
-            Converter.build_input_vector(state, player_key="")
+        for bad_key in ("3", "0", ""):
+            with pytest.raises(ValueError):
+                Converter.build_input_vector(state, player_key=bad_key)
 
     # ------------------------------------------------------------------
-    # TC-IV-06: HP boundary (zero)
+    # TC-IV-07: HP=0 boundary
     # ------------------------------------------------------------------
 
     def test_hp_zero_boundary(self):
-        """HP=0 is passed through without normalization."""
+        """HP=0 passes through without normalization."""
         state = make_game_state(
             hp_1=1, hp_2=0,
             hand_2=["attack"],
@@ -161,22 +159,180 @@ class TestBuildInputVectorNewOrder:
 
         vec = Converter.build_input_vector(state, player_key="2")
 
-        assert vec[0] == 0.0   # own HP
-        assert vec[1] == 1.0   # opponent HP
+        assert vec[0] == 0.0    # own HP
+        assert vec[1] == 1.0    # opponent HP
 
     # ------------------------------------------------------------------
-    # TC-IV-07: Default player_key
+    # TC-IV-08: Energy boundary
     # ------------------------------------------------------------------
 
-    def test_default_player_key_is_2(self):
-        """When player_key is omitted, defaults to player 2's perspective."""
+    def test_energy_boundaries(self):
+        """Energy 0 and 5 pass through correctly."""
         state = make_game_state(
-            hand_2=["attack"], hand_1=["defense"],
-            hp_1=10, hp_2=20,
+            hp_1=20, hp_2=20,
+            energy_1=0, energy_2=5,
         )
 
-        vec_default = Converter.build_input_vector(state)
-        vec_explicit = Converter.build_input_vector(state, player_key="2")
+        vec = Converter.build_input_vector(state, player_key="2")
 
-        assert vec_default == vec_explicit
-        assert vec_default[0] == 20.0  # P2 HP
+        assert vec[2] == 5.0    # own energy (P2)
+        assert vec[3] == 0.0    # opponent energy (P1)
+
+    # ------------------------------------------------------------------
+    # TC-IV-09: Large cycle/round
+    # ------------------------------------------------------------------
+
+    def test_large_cycle_and_round(self):
+        """Large cycle and round values pass through."""
+        state = make_game_state(
+            hp_1=20, hp_2=20,
+            cycle=100, round_in_cycle=5,
+        )
+
+        vec = Converter.build_input_vector(state, player_key="2")
+
+        assert vec[4] == 5.0
+        assert vec[5] == 100.0
+
+
+class TestActionToPolicyIndex:
+    """TC-AP-01~05: action_to_policy_index."""
+
+    # ------------------------------------------------------------------
+    # TC-AP-01: Pure play actions (odd indices)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("card_str,expected", [
+        ("attack", 1),
+        ("defense", 3),
+        ("heavy", 5),
+        ("counter", 7),
+        ("energy", 9),
+        ("flex", 11),
+    ])
+    def test_pure_play_actions(self, card_str, expected):
+        """Pure card plays map to odd indices."""
+        assert Converter.action_to_policy_index(card_str, None) == expected
+
+    # ------------------------------------------------------------------
+    # TC-AP-02: Build actions (even indices)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("build_target,expected", [
+        ("build", 0),
+        ("attack", 2),
+        ("defense", 4),
+        ("heavy", 6),
+        ("counter", 8),
+        ("energy", 10),
+        ("flex", 12),
+    ])
+    def test_build_actions(self, build_target, expected):
+        """Build + target map to even indices."""
+        assert Converter.action_to_policy_index("build", build_target) == expected
+
+    # ------------------------------------------------------------------
+    # TC-AP-03: Invalid card_str
+    # ------------------------------------------------------------------
+
+    def test_invalid_card_str_raises(self):
+        """Unknown card string raises ValueError."""
+        with pytest.raises(ValueError):
+            Converter.action_to_policy_index("invalid", None)
+
+    # ------------------------------------------------------------------
+    # TC-AP-04: Non-build with build_target
+    # ------------------------------------------------------------------
+
+    def test_non_build_with_target_raises(self):
+        """attack with build_target='defense' is illegal."""
+        with pytest.raises(ValueError):
+            Converter.action_to_policy_index("attack", "defense")
+
+    # ------------------------------------------------------------------
+    # TC-AP-05: Build without build_target
+    # ------------------------------------------------------------------
+
+    def test_build_without_target_raises(self):
+        """build with build_target=None is illegal."""
+        with pytest.raises(ValueError):
+            Converter.action_to_policy_index("build", None)
+
+
+class TestPolicyIndexToAction:
+    """TC-PI-01~04: policy_index_to_action."""
+
+    # ------------------------------------------------------------------
+    # TC-PI-01: Odd indices → pure play
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("index,card_str", [
+        (1, "attack"),
+        (3, "defense"),
+        (5, "heavy"),
+        (7, "counter"),
+        (9, "energy"),
+        (11, "flex"),
+    ])
+    def test_odd_indices_pure_play(self, index, card_str):
+        """Odd indices decode to (card_str, None)."""
+        result = Converter.policy_index_to_action(index)
+        assert result == (card_str, None)
+
+    # ------------------------------------------------------------------
+    # TC-PI-02: Even indices → build + target
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("index,build_target", [
+        (0, "build"),
+        (2, "attack"),
+        (4, "defense"),
+        (6, "heavy"),
+        (8, "counter"),
+        (10, "energy"),
+        (12, "flex"),
+    ])
+    def test_even_indices_build_action(self, index, build_target):
+        """Even indices decode to ('build', target)."""
+        result = Converter.policy_index_to_action(index)
+        assert result == ("build", build_target)
+
+    # ------------------------------------------------------------------
+    # TC-PI-03: Out-of-range indices
+    # ------------------------------------------------------------------
+
+    def test_negative_index_raises(self):
+        """Index -1 raises IndexError."""
+        with pytest.raises(IndexError):
+            Converter.policy_index_to_action(-1)
+
+    def test_index_13_raises(self):
+        """Index 13 (beyond max) raises IndexError."""
+        with pytest.raises(IndexError):
+            Converter.policy_index_to_action(13)
+
+    # ------------------------------------------------------------------
+    # TC-PI-04: Round-trip consistency
+    # ------------------------------------------------------------------
+
+    def test_roundtrip_consistency(self):
+        """action_to_policy_index → policy_index_to_action is identity."""
+        test_cases = [
+            ("attack", None),
+            ("defense", None),
+            ("heavy", None),
+            ("counter", None),
+            ("energy", None),
+            ("flex", None),
+            ("build", "build"),
+            ("build", "attack"),
+            ("build", "defense"),
+            ("build", "heavy"),
+            ("build", "counter"),
+            ("build", "energy"),
+            ("build", "flex"),
+        ]
+        for card_str, bt in test_cases:
+            idx = Converter.action_to_policy_index(card_str, bt)
+            result = Converter.policy_index_to_action(idx)
+            assert result == (card_str, bt), f"Failed for ({card_str}, {bt})"

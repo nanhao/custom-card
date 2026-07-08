@@ -1,8 +1,8 @@
-"""Player state container for the custom card game v2 (design/11).
+"""Player state container for the custom card game v2 (design/11, design/14).
 
 Per architecture D2, Player is a data container (dataclass) with minimal
 behavior. It holds hp (default 20), energy (0-5), statuses, hand, draw_pile,
-discard_pile, and history.
+discard_pile, history, and build_history (design/14 D8).
 
 Per architecture D9, this module is pure logic — no UI, no I/O.
 """
@@ -13,6 +13,23 @@ from src.backend.game.card import CardType
 
 # Energy cap per design/11 intention §1
 MAX_ENERGY = 5
+
+
+@dataclass
+class PlayerHistoryItem:
+    """Single entry in a player's action history (design/14 D8).
+
+    Records both the card played and the build target (if any)
+    for a single round. Used by GameCore.get_state() to provide
+    complete action history so Converter can derive policy indices.
+
+    Attributes:
+        card: The card played this round.
+        build_target: The card built via BUILD, or None if no build occurred.
+    """
+
+    card: CardType
+    build_target: CardType | None = None
 
 
 @dataclass
@@ -28,6 +45,8 @@ class Player:
         discard_pile: Cards in the discard pile.
         history: Cards played in previous rounds, chronologically.
                  Used for consecutive attack counting.
+        build_history: Build targets for each round, parallel to history
+                       (design/14 D8). None entries for non-build rounds.
     """
 
     hp: int = 20
@@ -37,6 +56,7 @@ class Player:
     draw_pile: list[CardType] = field(default_factory=list)
     discard_pile: list[CardType] = field(default_factory=list)
     history: list[CardType] = field(default_factory=list)
+    build_history: list[CardType | None] = field(default_factory=list)
 
     # ------------------------------------------------------------------
     # Card manipulation

@@ -1,0 +1,92 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam defaultFontName Arial
+
+package "app" {
+    class Converter <<static>> {
+        + INPUT_SIZE: int = 15
+        + NUM_CARD_TYPES: int = 7
+        + ALL_CARD_TYPES: frozenset[str]
+        --
+        + build_input_vector(state, player_key): list[float]
+        + action_to_policy_index(card_str, build_target): int
+        + policy_index_to_action(index): tuple[str, str|None]
+    }
+
+    class AppManager {
+        - _session_store: SessionStore
+        - _policy_models: dict[str, nn.Module]
+        - _value_models: dict[str, nn.Module]
+        --
+        + ai_select_action(state, hidden_state, ai_name): tuple
+        + ai_sample_action(state, h_pol, h_val, ai_name, temp, player_key): tuple
+        - _make_mask_fn(hand, energy): Callable
+        - _get_policy_model(ai_name): nn.Module
+        - _get_value_model(ai_name): nn.Module
+    }
+
+    class SelfPlayRunner {
+        - _sample_action: Callable
+        --
+        + run(config): SelfPlayResult
+        - _play_one_game(config, idx, loaded_models): tuple
+        - _build_game_sample(samples, ...): dict
+    }
+}
+
+package "game" {
+    class PlayerHistoryItem <<dataclass>> {
+        + card: CardType
+        + build_target: CardType | None
+    }
+
+    class Player {
+        + history: list[CardType]
+        + build_history: list[CardType | None]
+    }
+
+    class GameCore {
+        + get_state(): dict
+        - play_round(cards_1, cards_2, build_target_1, build_target_2): RoundResult
+    }
+}
+
+package "ai.rnn_v1" {
+    class GRUPolicyModel <<nn.Module>> {
+        + INITIAL_HIDDEN_STATE: list[float]
+        - gru: nn.GRU(15, 32)
+        - fc_policy: nn.Linear(32, 13)
+        --
+        + forward(x, hidden, mask_fn, temperature): tuple
+    }
+
+    class GRUValueModel <<nn.Module>> {
+        + INITIAL_HIDDEN_STATE: list[float]
+        - gru: nn.GRU(15, 32)
+        - fc_value: nn.Linear(32, 1)
+        --
+        + forward(x, hidden): tuple
+    }
+
+    class TrainingRunner {
+        --
+        + run(config): None
+        - _build_models(model_name): tuple
+        - _load_samples(sample_path): list
+        - _train_value_epoch(...): dict
+        - _train_policy_epoch(...): dict
+    }
+}
+
+AppManager ..> Converter : uses
+AppManager --> GRUPolicyModel : manages
+AppManager --> GRUValueModel : manages
+SelfPlayRunner ..> Converter : uses
+SelfPlayRunner ..> AppManager : calls ai_sample_action
+TrainingRunner --> GRUPolicyModel : creates
+TrainingRunner --> GRUValueModel : creates
+GameCore --> PlayerHistoryItem : produces
+GameCore --> Player : owns
+Player *-- PlayerHistoryItem : history
+
+@enduml

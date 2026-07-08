@@ -330,22 +330,28 @@ class SelfPlayRunner:
                     pre_state, player_key="2"
                 )
                 if config.perspective in ("ai1", "both"):
+                    # Compute policy index for P1's action (design/14)
+                    p1_action_idx = Converter.action_to_policy_index(
+                        card1, bt1,
+                    )
                     game_samples.append({
                         "player": "1",
                         "input": state_vec_p1,
-                        "action": card1,
+                        "action": p1_action_idx,
                         "value": val1,
                         "log_prob": lp1,
-                        "build_target": bt1,
                     })
                 if config.perspective in ("ai2", "both"):
+                    # Compute policy index for P2's action (design/14)
+                    p2_action_idx = Converter.action_to_policy_index(
+                        card2, bt2,
+                    )
                     game_samples.append({
                         "player": "2",
                         "input": state_vec_p2,
-                        "action": card2,
+                        "action": p2_action_idx,
                         "value": val2,
                         "log_prob": lp2,
-                        "build_target": bt2,
                     })
 
         # d. Determine winner and rewards
@@ -464,9 +470,6 @@ class SelfPlayRunner:
                 "value": entry["value"],
                 "log_prob": entry["log_prob"],
             }
-            # Include build_target if present
-            if entry.get("build_target") is not None:
-                step["build_target"] = entry["build_target"]
             if entry["player"] == "1":
                 p1_steps.append(step)
             else:

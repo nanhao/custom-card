@@ -28,29 +28,13 @@ from src.backend.ai.rnn_v1.model import (
     GRUValueModel,
     HIDDEN_SIZE,
     INPUT_SIZE,
-    NUM_CARD_TYPES,
+    POLICY_OUTPUT_SIZE,
 )
 from src.backend.ai.training_config import TrainingConfig
 from src.backend.ai.training_utils import (
     compute_grad_norm,
     save_split_training_artifacts,
 )
-
-
-# ---------------------------------------------------------------------------
-# Action-to-index mapping
-# Must match Converter.card_to_index() in app/.
-# ---------------------------------------------------------------------------
-
-ACTION_TO_INDEX: dict[str, int] = {
-    "attack": 0,
-    "defense": 1,
-    "heavy": 2,
-    "counter": 3,
-    "energy": 4,
-    "build": 5,
-    "flex": 6,
-}
 
 
 # ---------------------------------------------------------------------------
@@ -252,13 +236,14 @@ class TrainingRunner:
                             float(step["value"])
                             log_prob_raw = step.get("log_prob")
                             float(log_prob_raw) if log_prob_raw is not None else 0.0
-                            # Validate action is one of the known card types
-                            if step["action"] not in ACTION_TO_INDEX:
+                            # Validate action is an integer policy index (design/14)
+                            action = step["action"]
+                            if not isinstance(action, int) or action < 0 or action >= POLICY_OUTPUT_SIZE:
                                 raise RuntimeError(
                                     f"Step {s_idx} in perspective {p_idx} "
                                     f"of game {game.get('game_id', '?')} "
-                                    f"in {file_path!r}: unknown action {step['action']!r}. "
-                                    f"Must be one of: {', '.join(ACTION_TO_INDEX.keys())}"
+                                    f"in {file_path!r}: action must be int in [0, {POLICY_OUTPUT_SIZE - 1}], "
+                                    f"got {action!r}"
                                 )
                         except (ValueError, TypeError) as exc:
                             raise RuntimeError(
@@ -385,10 +370,10 @@ class TrainingRunner:
 
         old_values: list[float] = []
         rewards: list[float] = []
-        states_25d: list[list[float]] = []
+        states_15d: list[list[float]] = []
 
         for step in steps:
-            states_25d.append(step["input"])
+            states_15d.append(step["input"])
             old_values.append(step["value"])
             rewards.append(step["reward"])
 
@@ -406,7 +391,7 @@ class TrainingRunner:
 
         for t in range(T):
             x = torch.tensor(
-                states_14d[t], dtype=torch.float32, device=device,
+                states_15d[t], dtype=torch.float32, device=device,
             ).view(1, 1, INPUT_SIZE)
             val, h = value_model(x, h)
             new_vals.append(val.squeeze())  # (1,) tensor with grad
@@ -562,12 +547,12 @@ class TrainingRunner:
 
         # Load old data from sample
         old_log_probs: list[float] = []
-        states_14d: list[list[float]] = []
-        actions: list[str] = []
+        states_15d: list[list[float]] = []
+        actions: list[int] = []
 
         for step in steps:
-            states_25d.append(step["input"])
-            actions.append(step["action"])
+            states_15d.append(step["input"])
+            actions.append(step["action"])  # already an integer (design/14)
             old_log_probs.append(step["log_prob"])
 
         # Policy forward pass — keep tensors on computation graph
@@ -581,10 +566,10 @@ class TrainingRunner:
 
         for t in range(T):
             x = torch.tensor(
-                states_25d[t], dtype=torch.float32, device=device,
+                states_15d[t], dtype=torch.float32, device=device,
             ).view(1, 1, INPUT_SIZE)
             probs, log_probs, h = policy_model(x, h, mask_fn=None, temperature=1.0)
-            action_idx = ACTION_TO_INDEX[actions[t]]
+            action_idx = actions[t]  # already an integer policy index (design/14)
             # Extract single scalar with grad preserved
             new_log_probs_tensors.append(log_probs[0, action_idx])
             all_probs.append(probs)

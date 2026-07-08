@@ -11,7 +11,7 @@ import random
 from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType, get_card_def, get_initial_draw_pile
-from src.backend.game.player import Player
+from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.resolver import CardResolver
 
 
@@ -189,9 +189,11 @@ class GameCore:
         self.player_1.discard_pile.extend(cards_1)
         self.player_2.discard_pile.extend(cards_2)
 
-        # Step 8: Record history
+        # Step 8: Record history (design/14 D8: also record build targets)
         self.player_1.history.extend(cards_1)
         self.player_2.history.extend(cards_2)
+        self.player_1.build_history.append(build_target_1)
+        self.player_2.build_history.append(build_target_2)
 
         # Step 9: Phase 1 — snapshot after card resolution, before round-end processing.
         # HP does NOT include bleed; statuses are still active.
@@ -284,7 +286,10 @@ class GameCore:
                 "energy": p.energy,
                 "statuses": list(p.statuses),
                 "hand": [c.value for c in p.hand],
-                "history": [c.value for c in p.history],
+                "history": [
+                    PlayerHistoryItem(card=c, build_target=bt)
+                    for c, bt in zip(p.history, p.build_history)
+                ],
             }
             if show_piles:
                 result["draw_pile"] = [c.value for c in p.draw_pile]

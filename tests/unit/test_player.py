@@ -1,12 +1,13 @@
 """Unit tests for src/backend/game/player.py — Player dataclass.
 
-Test cases per design/11 test_cases.md §2 (TC-PL-01 ~ TC-PL-09).
+Test cases per design/11 test_cases.md §2 (TC-PL-01 ~ TC-PL-09)
+and design/14 test_cases.md §4 (TC-BH-01 ~ TC-BH-04).
 """
 
 import pytest
 
 from src.backend.game.card import CardType
-from src.backend.game.player import Player
+from src.backend.game.player import Player, PlayerHistoryItem
 
 
 class TestPlayerDefaults:
@@ -107,3 +108,47 @@ class TestPlayCards:
         hand_before = list(p.hand)
         p.play_cards([])
         assert p.hand == hand_before
+
+
+class TestBuildHistory:
+    """TC-BH-01, TC-BH-02, TC-BH-03, TC-BH-04: Player.build_history."""
+
+    def test_default_build_history_empty(self):
+        """TC-BH-01: New Player has empty build_history."""
+        p = Player()
+        assert p.build_history == []
+
+    def test_build_history_holds_cardtype(self):
+        """build_history can store CardType values."""
+        p = Player(build_history=[CardType.ATTACK, None, CardType.DEFENSE])
+        assert p.build_history[0] == CardType.ATTACK
+        assert p.build_history[1] is None
+        assert p.build_history[2] == CardType.DEFENSE
+
+
+class TestPlayerHistoryItem:
+    """PlayerHistoryItem dataclass."""
+
+    def test_create_with_card_only(self):
+        """PlayerHistoryItem with build_target=None."""
+        item = PlayerHistoryItem(card=CardType.ATTACK, build_target=None)
+        assert item.card == CardType.ATTACK
+        assert item.build_target is None
+
+    def test_create_with_build_target(self):
+        """PlayerHistoryItem with build_target set."""
+        item = PlayerHistoryItem(card=CardType.BUILD, build_target=CardType.ATTACK)
+        assert item.card == CardType.BUILD
+        assert item.build_target == CardType.ATTACK
+
+    def test_equality(self):
+        """Two PlayerHistoryItem with same values are equal."""
+        a = PlayerHistoryItem(CardType.ATTACK, None)
+        b = PlayerHistoryItem(CardType.ATTACK, None)
+        assert a == b
+
+    def test_inequality(self):
+        """Different cards or build_targets produce inequality."""
+        a = PlayerHistoryItem(CardType.ATTACK, None)
+        b = PlayerHistoryItem(CardType.DEFENSE, None)
+        assert a != b

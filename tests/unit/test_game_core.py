@@ -1,12 +1,14 @@
 """Unit tests for src/backend/game/game_core.py — cycle mechanics.
 
-Test cases per design/11 test_cases.md §4 (TC-GC-01 ~ TC-GC-11).
+Test cases per design/11 test_cases.md §4 (TC-GC-01 ~ TC-GC-11)
+and design/14 test_cases.md §4-5 (TC-BH-02~04, TC-GS-01~04).
 """
 
 import pytest
 
 from src.backend.game.card import CardType
 from src.backend.game.game_core import GameCore
+from src.backend.game.player import PlayerHistoryItem
 
 
 class TestStartGame:
@@ -279,3 +281,128 @@ class TestBuildEnergyCheck:
         # BUILD succeeded
         assert gm.player_1.energy == 1  # consumed 1 energy (ATTACK build_cost=1)
         assert CardType.ATTACK in gm.player_1.discard_pile
+
+
+class TestBuildHistoryRecording:
+    """TC-BH-02, TC-BH-03, TC-BH-04: build_history recording in play_round."""
+
+    def test_build_history_same_length_as_history(self):
+        """TC-BH-02: After play_round, build_history length equals history length."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.ATTACK]
+        gm.player_2.hand = [CardType.DEFENSE]
+
+        gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
+
+        assert len(gm.player_1.build_history) == len(gm.player_1.history) == 1
+        assert len(gm.player_2.build_history) == len(gm.player_2.history) == 1
+
+    def test_non_build_action_records_none(self):
+        """TC-BH-03: Non-build card records None in build_history."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.ATTACK]
+        gm.player_2.hand = [CardType.DEFENSE]
+
+        gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
+
+        assert gm.player_1.build_history[0] is None
+        assert gm.player_2.build_history[0] is None
+
+    def test_build_action_records_target(self):
+        """TC-BH-04: BUILD card records build target in build_history."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 1
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.ATTACK]
+
+        gm.play_round(
+            [CardType.BUILD], [CardType.ATTACK],
+            build_target_1=CardType.ATTACK,
+        )
+
+        assert gm.player_1.build_history[0] == CardType.ATTACK
+        assert gm.player_2.build_history[0] is None
+
+    def test_mixed_rounds_build_history(self):
+        """Multiple rounds: build_history tracks each correctly."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.ATTACK, CardType.BUILD, CardType.DEFENSE]
+        gm.player_1.energy = 5
+        gm.player_2.hand = [CardType.DEFENSE, CardType.ATTACK, CardType.HEAVY]
+        gm.player_2.energy = 5
+        # Round 1: attack vs defense
+        gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
+        # Round 2: build(attack) vs attack
+        gm.play_round([CardType.BUILD], [CardType.ATTACK], build_target_1=CardType.ATTACK)
+        # Round 3: defense vs heavy
+        gm.play_round([CardType.DEFENSE], [CardType.HEAVY])
+
+        assert gm.player_1.build_history == [None, CardType.ATTACK, None]
+        assert gm.player_2.build_history == [None, None, None]
+
+
+class TestGetStateHistoryFormat:
+    """TC-GS-01, TC-GS-02, TC-GS-03, TC-GS-04: get_state PlayerHistoryItem format."""
+
+    def test_empty_history_returns_empty_list(self):
+        """TC-GS-01: No rounds played → history is empty list."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        state = gm.get_state()
+        assert state["players"]["1"]["history"] == []
+        assert state["players"]["2"]["history"] == []
+
+    def test_history_contains_player_history_items(self):
+        """get_state history entries are PlayerHistoryItem instances."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.ATTACK]
+        gm.player_2.hand = [CardType.DEFENSE]
+
+        gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
+        state = gm.get_state()
+
+        p1_history = state["players"]["1"]["history"]
+        assert len(p1_history) == 1
+        assert isinstance(p1_history[0], PlayerHistoryItem)
+        assert p1_history[0] == PlayerHistoryItem(CardType.ATTACK, None)
+
+    def test_build_action_in_history(self):
+        """TC-GS-03: BUILD with target → history contains build_target."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 1
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.ATTACK]
+
+        gm.play_round(
+            [CardType.BUILD], [CardType.ATTACK],
+            build_target_1=CardType.ATTACK,
+        )
+        state = gm.get_state()
+
+        p1_last = state["players"]["1"]["history"][-1]
+        assert p1_last == PlayerHistoryItem(CardType.BUILD, CardType.ATTACK)
+
+    def test_multi_round_history_accumulates(self):
+        """TC-GS-04: Multiple rounds accumulate correctly."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 5
+        gm.player_1.hand = [CardType.ATTACK, CardType.BUILD, CardType.DEFENSE]
+        gm.player_2.hand = [CardType.DEFENSE, CardType.ATTACK, CardType.HEAVY]
+
+        gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
+        gm.play_round([CardType.BUILD], [CardType.ATTACK], build_target_1=CardType.ATTACK)
+        gm.play_round([CardType.DEFENSE], [CardType.HEAVY])
+
+        state = gm.get_state()
+        p1_hist = state["players"]["1"]["history"]
+        assert len(p1_hist) == 3
+        assert p1_hist[0] == PlayerHistoryItem(CardType.ATTACK, None)
+        assert p1_hist[1] == PlayerHistoryItem(CardType.BUILD, CardType.ATTACK)
+        assert p1_hist[2] == PlayerHistoryItem(CardType.DEFENSE, None)
