@@ -1,0 +1,97 @@
+@startuml
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+hide circle
+
+title RoundResult 嵌套 dataclass 类图 (intention #17)
+
+package "game/game_core.py" {
+
+    class RoundResult {
+        + round: int
+        + cycle: int
+        + round_in_cycle: int
+        + cards_1: list[CardType]
+        + cards_2: list[CardType]
+        + before: BeforeResolve
+        + after_resolve: AfterResolve
+        + end_actions: EndActions
+        + after_end_actions: AfterEndActions
+    }
+
+    class BeforeResolve {
+        + statuses_1: list[PlayerStatus]
+        + statuses_2: list[PlayerStatus]
+        + energy_1: int
+        + energy_2: int
+        + hp_1: int
+        + hp_2: int
+    }
+
+    class AfterResolve {
+        + statuses_1: list[PlayerStatus]
+        + statuses_2: list[PlayerStatus]
+        + energy_1: int
+        + energy_2: int
+        + hp_1: int
+        + hp_2: int
+        + details: list[str]
+        + is_game_over: bool
+        + winner: str | None
+    }
+
+    class EndActions {
+        + cycle_ended: bool
+        + bleed_damage_1: int
+        + bleed_damage_2: int
+    }
+
+    class AfterEndActions {
+        + is_game_over: bool
+        + winner: str | None
+        + round: int
+        + cycle: int
+        + round_in_cycle: int
+        + hand_cards_1: list[CardType]
+        + hand_cards_2: list[CardType]
+        + statuses_1: list[PlayerStatus]
+        + statuses_2: list[PlayerStatus]
+        + energy_1: int
+        + energy_2: int
+        + hp_1: int
+        + hp_2: int
+    }
+}
+
+package "game/card.py" {
+    enum CardType {
+        ATTACK
+        DEFENSE
+        HEAVY_STRIKE
+        COUNTER
+        ENERGY
+        BUILD
+        FLEX
+    }
+}
+
+package "game/player_state.py" {
+    class PlayerStatus {
+        + status_type: StatusType
+        + lifetime: int
+    }
+}
+
+RoundResult *-- BeforeResolve
+RoundResult *-- AfterResolve
+RoundResult *-- EndActions
+RoundResult *-- AfterEndActions
+RoundResult --> CardType : uses
+BeforeResolve --> PlayerStatus : uses
+AfterResolve --> PlayerStatus : uses
+AfterEndActions --> CardType : uses
+AfterEndActions --> PlayerStatus : uses
+
+@enduml

@@ -47,16 +47,16 @@ class TestPlayRound:
         resp = api_client.post(f"/api/games/{gid}/play",
                                json={"cards_1": ["energy"], "cards_2": ["defense"]})
         rr = resp.get_json()["round_result"]
-        assert rr["energy_1_after"] == 1
+        assert rr["after_resolve"]["energy_1"] == 1
         # Statuses now in design/15 dict format: [{"type": "defense", "lifetime": 1}]
-        assert any(s["type"] == "defense" for s in rr["statuses_2"])
+        assert any(s["type"] == "defense" for s in rr["after_resolve"]["statuses_2"])
 
     def test_round_result_has_cycle_ended(self, api_client):
         resp = api_client.post("/api/games", json={"mode": "pvp"})
         gid = resp.get_json()["game_id"]
         resp = api_client.post(f"/api/games/{gid}/play",
                                json={"cards_1": ["attack"], "cards_2": ["defense"]})
-        assert resp.get_json()["round_result"]["cycle_ended"] is False
+        assert resp.get_json()["round_result"]["end_actions"]["cycle_ended"] is False
 
     def test_missing_cards_2_returns_400(self, api_client):
         resp = api_client.post("/api/games", json={"mode": "pvp"})
@@ -76,11 +76,8 @@ class TestRoundResultSerialization:
                                json={"cards_1": ["attack"], "cards_2": ["attack"]})
         rr = resp.get_json()["round_result"]
         for key in ("round", "cycle", "round_in_cycle",
-                    "damage_1", "damage_2",
-                    "hp_1_after", "hp_2_after",
-                    "energy_1_after", "energy_2_after",
-                    "statuses_1", "statuses_2",
-                    "is_game_over", "winner", "cycle_ended"):
+                    "cards_1", "cards_2",
+                    "before", "after_resolve", "end_actions", "after_end_actions"):
             assert key in rr, f"Missing {key}"
 
     def test_hp_reflects_damage(self, api_client):
@@ -89,8 +86,8 @@ class TestRoundResultSerialization:
         resp = api_client.post(f"/api/games/{gid}/play",
                                json={"cards_1": ["attack"], "cards_2": ["attack"]})
         rr = resp.get_json()["round_result"]
-        assert rr["hp_1_after"] == 19
-        assert rr["hp_2_after"] == 19
+        assert rr["after_resolve"]["hp_1"] == 19
+        assert rr["after_resolve"]["hp_2"] == 19
 
 
 class TestCreateAndDelete:

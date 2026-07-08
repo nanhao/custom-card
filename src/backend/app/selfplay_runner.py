@@ -314,10 +314,10 @@ class SelfPlayRunner:
                 logger.log(
                     "DEBUG", "selfplay.round_result",
                     round=last_rr.round,
-                    dmg1=last_rr.damage_1,
-                    dmg2=last_rr.damage_2,
-                    hp1=last_rr.hp_1_after,
-                    hp2=last_rr.hp_2_after,
+                    hp1_before=last_rr.before.hp_1,
+                    hp2_before=last_rr.before.hp_2,
+                    hp1_after=last_rr.after_resolve.hp_1,
+                    hp2_after=last_rr.after_resolve.hp_2,
                 )
 
             # Record PPO samples (if sample output is configured)

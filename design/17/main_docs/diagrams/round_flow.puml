@@ -1,0 +1,72 @@
+@startuml
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 200
+hide footbox
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,sans-serif
+
+title play_round() 流程 — RoundResult 各阶段填充时序 (intention #17)
+
+actor Caller as C
+participant "GameCore" as GC
+participant "CardResolver" as CR
+participant "Player" as P
+
+== Step 1-2: 验证 ==
+C -> GC: play_round(cards_1, cards_2, bt1, bt2)
+GC -> GC: _validate()
+
+== 采集 before 快照 ==
+GC -> P: p1.hp, p1.energy, p1.statuses
+GC -> P: p2.hp, p2.energy, p2.statuses
+GC -> GC: before = BeforeResolve(hp, energy, statuses)\n(captured as defensive copies)
+
+== Step 3-8: 卡牌结算 ==
+GC -> CR: resolve(cards_1, cards_2, statuses, ...)
+CR --> GC: ResolutionResult(damage, energy, statuses, details)
+GC -> P: take_damage(), add_energy()
+GC -> P: play_cards(), history.append()
+
+== Step 9: after_resolve ==
+GC -> P: p1.hp, p1.energy, p1.statuses
+GC -> P: p2.hp, p2.energy, p2.statuses
+GC -> GC: after_resolve = AfterResolve(hp, energy, statuses, details)
+
+== Step 10: 结算后游戏结束检查 ==
+GC -> GC: _check_game_end()
+alt HP=0 after card damage
+    GC -> GC: after_resolve.is_game_over = True
+    GC -> GC: after_end_actions = copy from after_resolve
+    GC --> C: return result (game ended early)
+else game continues
+    note right: 进入 Step 11
+end
+
+== Step 11a: 状态生命周期 tick ==
+GC -> GC: _tick_status_lifetimes()
+note right: Status lifetime--\n过期状态移除
+
+== Step 11b: 周期结束处理 ==
+GC -> GC: end_actions = EndActions(False, 0, 0)
+alt round_in_cycle == 5
+    GC -> GC: end_actions.cycle_ended = True
+    GC -> GC: end_actions.bleed_damage = 1
+    GC -> P: take_damage(1)
+    GC -> GC: _check_game_end()
+    alt 流血致死
+        GC -> GC: after_end_actions.is_game_over = True
+    end
+    GC -> GC: cycle_number++\n_start_cycle()
+end
+
+== Step 12-13: 推进 + after_end_actions ==
+GC -> GC: round_number++\nround_in_cycle++
+GC -> P: p1.hand, p1.hp, p1.energy, p1.statuses
+GC -> P: p2.hand, p2.hp, p2.energy, p2.statuses
+GC -> GC: after_end_actions = AfterEndActions()\n(round, cycle, hp, energy, hand_cards, statuses)
+
+== 返回 ==
+GC --> C: round_log.append(result)\nreturn result
+
+@enduml

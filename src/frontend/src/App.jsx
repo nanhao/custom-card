@@ -161,8 +161,8 @@ export default function App() {
           ...data.state,
           players: {
             ...data.state.players,
-            '1': { ...data.state.players['1'], statuses: data.round_result.statuses_1 },
-            '2': { ...data.state.players['2'], statuses: data.round_result.statuses_2 },
+            '1': { ...data.state.players['1'], statuses: data.round_result.after_resolve.statuses_1 },
+            '2': { ...data.state.players['2'], statuses: data.round_result.after_resolve.statuses_2 },
           },
         });
         setRoundLog(prev => [...prev, data.round_result]);
@@ -170,7 +170,7 @@ export default function App() {
         setBuildPhase(null);
         setPendingBuild(null);
         setPileViewer(null);
-        setPhase(data.round_result.is_game_over ? 'gameover' : 'reveal');
+        setPhase(data.round_result.after_resolve.is_game_over ? 'gameover' : 'reveal');
       } catch (err) {
         setError(err.message);
         setPhase('select');
@@ -195,13 +195,13 @@ export default function App() {
         ...data.state,
         players: {
           ...data.state.players,
-          '1': { ...data.state.players['1'], statuses: data.round_result.statuses_1 },
-          '2': { ...data.state.players['2'], statuses: data.round_result.statuses_2 },
+          '1': { ...data.state.players['1'], statuses: data.round_result.after_resolve.statuses_1 },
+          '2': { ...data.state.players['2'], statuses: data.round_result.after_resolve.statuses_2 },
         },
       });
       setRoundLog(prev => [...prev, data.round_result]);
       setP1Card(null);
-      setPhase(data.round_result.is_game_over ? 'gameover' : 'reveal');
+      setPhase(data.round_result.after_resolve.is_game_over ? 'gameover' : 'reveal');
     } catch (err) {
       setError(err.message);
       setPhase('pvp_pass');

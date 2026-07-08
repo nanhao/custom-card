@@ -17,52 +17,156 @@ from src.backend.game.resolver import CardResolver
 
 
 @dataclass
+class BeforeResolve:
+    """State snapshot taken BEFORE card resolution.
+
+    Captures HP, energy and statuses as they were at the start of the round,
+    before any card effects are applied.
+    """
+    statuses_1: list["PlayerStatus"]
+    statuses_2: list["PlayerStatus"]
+    energy_1: int
+    energy_2: int
+    hp_1: int
+    hp_2: int
+
+
+@dataclass
+class AfterResolve:
+    """State immediately AFTER card resolution (Phase 1).
+
+    Includes resolution details and game-over check triggered by
+    HP reaching 0 during card resolution.
+    """
+    statuses_1: list["PlayerStatus"]
+    statuses_2: list["PlayerStatus"]
+    energy_1: int
+    energy_2: int
+    hp_1: int
+    hp_2: int
+    details: list[str]
+    is_game_over: bool = False
+    winner: str | None = None
+
+
+@dataclass
+class EndActions:
+    """Round-end actions applied after card resolution (Phase 2).
+
+    cycle_ended is True only when round_in_cycle reaches ROUNDS_PER_CYCLE.
+    bleed_damage values are 0 when cycle_ended is False.
+    """
+    cycle_ended: bool = False
+    bleed_damage_1: int = 0
+    bleed_damage_2: int = 0
+
+
+@dataclass
+class AfterEndActions:
+    """Final state snapshot after all round-end processing (Phase 3).
+
+    Includes round/counter advancement, deck reshuffling (if cycle ended),
+    and a second game-over check for bleed damage.
+    hand_cards_1/hand_cards_2 reflect the NEW hand after cycle processing.
+    """
+    is_game_over: bool = False
+    winner: str | None = None
+    round: int = 0
+    cycle: int = 0
+    round_in_cycle: int = 0
+    hand_cards_1: list["CardType"] = field(default_factory=list)
+    hand_cards_2: list["CardType"] = field(default_factory=list)
+    statuses_1: list["PlayerStatus"] = field(default_factory=list)
+    statuses_2: list["PlayerStatus"] = field(default_factory=list)
+    energy_1: int = 0
+    energy_2: int = 0
+    hp_1: int = 0
+    hp_2: int = 0
+
+
+@dataclass
 class RoundResult:
     """Value object returned by GameCore.play_round().
 
-    Phase 1 — After card resolution, before cycle-end processing:
-        round, cycle, round_in_cycle, cards, damage, hp, energy, statuses, details.
-        Statuses are still active; HP does NOT include cycle bleed.
-
-    Phase 2 — Round-end actions (status lifetime tick + cycle-end if applicable):
-        Statuses are ticked (expired ones removed) every round.
-        On cycle end (round 5): cycle_ended, bleed_damage_1, bleed_damage_2.
-
-    Phase 3 — Final state after all round-end processing and round advancement:
-        after_cycle, after_round_in_cycle, after_hp, after_statuses.
+    Top-level: round identifiers and cards played.
+    before: snapshot before card resolution.
+    after_resolve: resolution outcome and immediate post-resolve state.
+    end_actions: round-end actions (status tick, cycle bleed).
+    after_end_actions: final state after all processing (next round start).
     """
-
-    # Phase 1: After card resolution
     round: int
     cycle: int
     round_in_cycle: int
     cards_1: list[CardType]
     cards_2: list[CardType]
-    damage_1: int
-    damage_2: int
-    hp_1_after: int
-    hp_2_after: int
-    energy_1_after: int
-    energy_2_after: int
-    statuses_1: list[PlayerStatus]
-    statuses_2: list[PlayerStatus]
-    details: list[str]
+    before: BeforeResolve
+    after_resolve: AfterResolve
+    end_actions: EndActions
+    after_end_actions: AfterEndActions
 
-    # Phase 2: Cycle-end actions
-    cycle_ended: bool = False
-    bleed_damage_1: int = 0
-    bleed_damage_2: int = 0
+    # ------------------------------------------------------------------
+    # Serialization
+    # ------------------------------------------------------------------
 
-    # Phase 3: Final state after all processing
-    after_cycle: int = 0
-    after_round_in_cycle: int = 0
-    after_hp_1: int = 0
-    after_hp_2: int = 0
-    after_statuses_1: list[PlayerStatus] = field(default_factory=list)
-    after_statuses_2: list[PlayerStatus] = field(default_factory=list)
+    @staticmethod
+    def to_dict(rr: "RoundResult") -> dict:
+        """Serialize a RoundResult to a JSON-safe dict.
 
-    is_game_over: bool = False
-    winner: str | None = None
+        Converts all CardType lists to strings via .value and
+        PlayerStatus to dict via .to_dict().
+
+        Args:
+            rr: The RoundResult value object to serialize.
+
+        Returns:
+            dict with nested before/after_resolve/end_actions/after_end_actions.
+        """
+        return {
+            "round": rr.round,
+            "cycle": rr.cycle,
+            "round_in_cycle": rr.round_in_cycle,
+            "cards_1": [c.value for c in rr.cards_1],
+            "cards_2": [c.value for c in rr.cards_2],
+            "before": {
+                "statuses_1": [ps.to_dict() for ps in rr.before.statuses_1],
+                "statuses_2": [ps.to_dict() for ps in rr.before.statuses_2],
+                "energy_1": rr.before.energy_1,
+                "energy_2": rr.before.energy_2,
+                "hp_1": rr.before.hp_1,
+                "hp_2": rr.before.hp_2,
+            },
+            "after_resolve": {
+                "statuses_1": [ps.to_dict() for ps in rr.after_resolve.statuses_1],
+                "statuses_2": [ps.to_dict() for ps in rr.after_resolve.statuses_2],
+                "energy_1": rr.after_resolve.energy_1,
+                "energy_2": rr.after_resolve.energy_2,
+                "hp_1": rr.after_resolve.hp_1,
+                "hp_2": rr.after_resolve.hp_2,
+                "details": rr.after_resolve.details,
+                "is_game_over": rr.after_resolve.is_game_over,
+                "winner": rr.after_resolve.winner,
+            },
+            "end_actions": {
+                "cycle_ended": rr.end_actions.cycle_ended,
+                "bleed_damage_1": rr.end_actions.bleed_damage_1,
+                "bleed_damage_2": rr.end_actions.bleed_damage_2,
+            },
+            "after_end_actions": {
+                "is_game_over": rr.after_end_actions.is_game_over,
+                "winner": rr.after_end_actions.winner,
+                "round": rr.after_end_actions.round,
+                "cycle": rr.after_end_actions.cycle,
+                "round_in_cycle": rr.after_end_actions.round_in_cycle,
+                "hand_cards_1": [c.value for c in rr.after_end_actions.hand_cards_1],
+                "hand_cards_2": [c.value for c in rr.after_end_actions.hand_cards_2],
+                "statuses_1": [ps.to_dict() for ps in rr.after_end_actions.statuses_1],
+                "statuses_2": [ps.to_dict() for ps in rr.after_end_actions.statuses_2],
+                "energy_1": rr.after_end_actions.energy_1,
+                "energy_2": rr.after_end_actions.energy_2,
+                "hp_1": rr.after_end_actions.hp_1,
+                "hp_2": rr.after_end_actions.hp_2,
+            },
+        }
 
 
 class GameCore:
@@ -151,6 +255,17 @@ class GameCore:
         # Step 1: Validate
         self._validate(cards_1, cards_2, build_target_1, build_target_2)
 
+        # Step 1.5: Capture before-resolve snapshot.
+        # Record HP, energy, and statuses BEFORE any card effects are applied.
+        before = BeforeResolve(
+            statuses_1=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_1.statuses],
+            statuses_2=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_2.statuses],
+            energy_1=self.player_1.energy,
+            energy_2=self.player_2.energy,
+            hp_1=self.player_1.hp,
+            hp_2=self.player_2.hp,
+        )
+
         # Step 2: Compute attack streaks from history
         p1_streak = CardResolver.get_consecutive_attack(self.player_1.history)
         p2_streak = CardResolver.get_consecutive_attack(self.player_2.history)
@@ -189,42 +304,49 @@ class GameCore:
         self.player_1.discard_pile.extend(cards_1)
         self.player_2.discard_pile.extend(cards_2)
 
-        # Step 8: Record history as PlayerHistoryItem (design/16 D3 — merged history + build_history)
+        # Step 8: Record history as PlayerHistoryItem (design/16 D3)
         self.player_1.history.append(PlayerHistoryItem(cards_1[0], build_target_1))
         self.player_2.history.append(PlayerHistoryItem(cards_2[0], build_target_2))
 
-        # Step 9: Phase 1 — snapshot after card resolution, before round-end processing.
-        # HP does NOT include bleed; statuses are still active.
-        result = RoundResult(
-            round=self.round_number,
-            cycle=self.cycle_number,
-            round_in_cycle=self.round_in_cycle,
-            cards_1=cards_1,
-            cards_2=cards_2,
-            damage_1=resolution.damage_1,
-            damage_2=resolution.damage_2,
-            hp_1_after=self.player_1.hp,
-            hp_2_after=self.player_2.hp,
-            energy_1_after=self.player_1.energy,
-            energy_2_after=self.player_2.energy,
-            # Phase 1 snapshot — defensive copy to prevent _tick_status_lifetimes
-            # from mutating PlayerStatus.lifetime in the RoundResult (design/15 D4).
+        # Step 9: after_resolve — snapshot after card resolution, before round-end.
+        after_resolve = AfterResolve(
             statuses_1=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_1.statuses],
             statuses_2=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_2.statuses],
+            energy_1=self.player_1.energy,
+            energy_2=self.player_2.energy,
+            hp_1=self.player_1.hp,
+            hp_2=self.player_2.hp,
             details=resolution.details,
         )
 
         # Step 10: Check game end from damage
         is_over, winner = self._check_game_end()
         if is_over:
-            result.is_game_over = True
-            result.winner = winner
-            result.after_cycle = result.cycle
-            result.after_round_in_cycle = result.round_in_cycle
-            result.after_hp_1 = result.hp_1_after
-            result.after_hp_2 = result.hp_2_after
-            result.after_statuses_1 = list(result.statuses_1)
-            result.after_statuses_2 = list(result.statuses_2)
+            # Game ended during card resolution — after_end_actions copies after_resolve state.
+            after_resolve.is_game_over = True
+            after_resolve.winner = winner
+            after_end_actions = AfterEndActions(
+                is_game_over=True,
+                winner=winner,
+                round=self.round_number,
+                cycle=self.cycle_number,
+                round_in_cycle=self.round_in_cycle,
+                hp_1=after_resolve.hp_1,
+                hp_2=after_resolve.hp_2,
+                statuses_1=list(after_resolve.statuses_1),
+                statuses_2=list(after_resolve.statuses_2),
+            )
+            result = RoundResult(
+                round=self.round_number,
+                cycle=self.cycle_number,
+                round_in_cycle=self.round_in_cycle,
+                cards_1=cards_1,
+                cards_2=cards_2,
+                before=before,
+                after_resolve=after_resolve,
+                end_actions=EndActions(),
+                after_end_actions=after_end_actions,
+            )
             self.round_log.append(result)
             return result
 
@@ -233,31 +355,53 @@ class GameCore:
         self._tick_status_lifetimes()
 
         # b) Cycle-end processing (round 5)
+        end_actions = EndActions()
         if self.round_in_cycle >= self.ROUNDS_PER_CYCLE:
-            result.cycle_ended = True
-            result.bleed_damage_1 = 1
-            result.bleed_damage_2 = 1
+            end_actions.cycle_ended = True
+            end_actions.bleed_damage_1 = 1
+            end_actions.bleed_damage_2 = 1
             self.player_1.take_damage(1)
             self.player_2.take_damage(1)
-            is_over, winner = self._check_game_end()
-            if is_over:
-                result.is_game_over = True
-                result.winner = winner
+            bleed_over, bleed_winner = self._check_game_end()
             self.cycle_number += 1
             self.round_in_cycle = 0
             self._start_cycle()
+        else:
+            bleed_over = False
+            bleed_winner = None
 
         # Step 12: Advance round
         self.round_number += 1
         self.round_in_cycle += 1
 
-        # Step 13: Phase 3 — Final state after all round-end processing and round advancement
-        result.after_cycle = self.cycle_number
-        result.after_round_in_cycle = self.round_in_cycle
-        result.after_hp_1 = self.player_1.hp
-        result.after_hp_2 = self.player_2.hp
-        result.after_statuses_1 = [PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_1.statuses]
-        result.after_statuses_2 = [PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_2.statuses]
+        # Step 13: after_end_actions — final state after all processing.
+        after_end_actions = AfterEndActions(
+            is_game_over=bleed_over,
+            winner=bleed_winner,
+            round=self.round_number,
+            cycle=self.cycle_number,
+            round_in_cycle=self.round_in_cycle,
+            hand_cards_1=list(self.player_1.hand) if self.player_1 else [],
+            hand_cards_2=list(self.player_2.hand) if self.player_2 else [],
+            statuses_1=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_1.statuses],
+            statuses_2=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_2.statuses],
+            energy_1=self.player_1.energy,
+            energy_2=self.player_2.energy,
+            hp_1=self.player_1.hp,
+            hp_2=self.player_2.hp,
+        )
+
+        result = RoundResult(
+            round=self.round_number - 1,  # pre-advancement round number
+            cycle=self.cycle_number if not end_actions.cycle_ended else self.cycle_number - 1,
+            round_in_cycle=self.round_in_cycle - 1 if not end_actions.cycle_ended else self.ROUNDS_PER_CYCLE,
+            cards_1=cards_1,
+            cards_2=cards_2,
+            before=before,
+            after_resolve=after_resolve,
+            end_actions=end_actions,
+            after_end_actions=after_end_actions,
+        )
 
         self.round_log.append(result)
         return result
@@ -310,36 +454,7 @@ class GameCore:
             "is_over": self.is_over,
             "winner": self.winner,
             "mode": self.mode,
-            "round_log": [
-                {
-                    "round": rr.round,
-                    "cycle": rr.cycle,
-                    "round_in_cycle": rr.round_in_cycle,
-                    "cards_1": [c.value for c in rr.cards_1],
-                    "cards_2": [c.value for c in rr.cards_2],
-                    "damage_1": rr.damage_1,
-                    "damage_2": rr.damage_2,
-                    "hp_1_after": rr.hp_1_after,
-                    "hp_2_after": rr.hp_2_after,
-                    "energy_1_after": rr.energy_1_after,
-                    "energy_2_after": rr.energy_2_after,
-                    "statuses_1": [ps.to_dict() for ps in rr.statuses_1],
-                    "statuses_2": [ps.to_dict() for ps in rr.statuses_2],
-                    "details": rr.details,
-                    "is_game_over": rr.is_game_over,
-                    "winner": rr.winner,
-                    "cycle_ended": rr.cycle_ended,
-                    "bleed_damage_1": rr.bleed_damage_1,
-                    "bleed_damage_2": rr.bleed_damage_2,
-                    "after_cycle": rr.after_cycle,
-                    "after_round_in_cycle": rr.after_round_in_cycle,
-                    "after_hp_1": rr.after_hp_1,
-                    "after_hp_2": rr.after_hp_2,
-                    "after_statuses_1": [ps.to_dict() for ps in rr.after_statuses_1],
-                    "after_statuses_2": [ps.to_dict() for ps in rr.after_statuses_2],
-                }
-                for rr in self.round_log
-            ],
+            "round_log": [RoundResult.to_dict(rr) for rr in self.round_log],
         }
 
     # ------------------------------------------------------------------

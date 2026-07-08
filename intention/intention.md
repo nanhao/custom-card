@@ -230,7 +230,6 @@ PlayerState 还要维护一个生存期字段。
 这是个代码重构任务。Player.history 的类型应该改为 list[PlayerHistoryItem]，而 build_history不需要了
 
 # intention_id=17
-```
 这是个优化任务。目前，RoundResult 的字段非常散：
     # Phase 1: After card resolution
     round: int
@@ -270,39 +269,46 @@ PlayerState 还要维护一个生存期字段。
     "round": 23,
     "cycle": 2,
     "round_in_cycle": 3,
-    "cards_1": [Card],
-    "cards_2": [Card],
-    "statuses_1": [...],
-    "statuses_2": [...],
-    "energy_1": 2,
-    "energy_2": 0,
-    "resolve": {
+    "cards_1": [CardType],
+    "cards_2": [CardType],
+    "before": {
+        "statuses_1": [...],
+        "statuses_2": [...],
+        "energy_1": 2,
+        "energy_2": 0,
+        "hp_1": 1,
+        "hp_2": 2
+    },
+    "after_resolve": {
+        "statuses_1": [...],
+        "statuses_2": [...],
+        "energy_1": 1,
+        "energy_2": 0,
+        "hp_1": 12,
+        "hp_2": 11,
+        "details": [...],
         "is_game_over": false,
-        "winner": None,
-        "damage_1": 1,
-        "damage_2": 2,
-        "hp_1_after": 12,
-        "hp_2_after": 11,
-        "energy_1_after": 1,
-        "energy_2_after": 0,
-        "details": [...]
+        "winner": None
     },
     "end_actions": {
         "cycle_ended": false,
         "bleed_damage_1": 0,
         "bleed_damage_2": 0
     },
-    "after": {
+    "after_end_actions": {
+        "is_game_over": false,
+        "winner": None,
         "round": 23,
         "cycle": 2,
         "round_in_cycle": 3,
-        "cards": [Card],
+        "hand_cards_1": [CardType],
+        "hand_cards_2": [CardType],
         "statuses_1": [...],
         "statuses_2": [...],
-        "hp_1": 12,
-        "hp_2": 11,
         "energy_1": 2,
         "energy_2": 0,
+        "hp_1": 12,
+        "hp_2": 11
     }
 }
 ```

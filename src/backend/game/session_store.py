@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 from src.backend.game.card import CardType, get_initial_draw_pile
-from src.backend.game.game_core import GameCore, RoundResult
+from src.backend.game.game_core import GameCore, RoundResult, BeforeResolve, AfterResolve, EndActions, AfterEndActions
 from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.ai.rnn_v1.model import HIDDEN_SIZE
@@ -138,65 +138,62 @@ def _deserialize_player(data: dict) -> Player:
 
 
 def _serialize_round_result(rr: RoundResult) -> dict:
-    """Serialize a RoundResult to a plain dict."""
-    return {
-        "round": rr.round,
-        "cycle": rr.cycle,
-        "round_in_cycle": rr.round_in_cycle,
-        "cards_1": [_card_to_str(c) for c in rr.cards_1],
-        "cards_2": [_card_to_str(c) for c in rr.cards_2],
-        "damage_1": rr.damage_1,
-        "damage_2": rr.damage_2,
-        "hp_1_after": rr.hp_1_after,
-        "hp_2_after": rr.hp_2_after,
-        "energy_1_after": rr.energy_1_after,
-        "energy_2_after": rr.energy_2_after,
-        "statuses_1": [ps.to_dict() for ps in rr.statuses_1],
-        "statuses_2": [ps.to_dict() for ps in rr.statuses_2],
-        "details": rr.details,
-        "is_game_over": rr.is_game_over,
-        "winner": rr.winner,
-        "cycle_ended": rr.cycle_ended,
-        "bleed_damage_1": rr.bleed_damage_1,
-        "bleed_damage_2": rr.bleed_damage_2,
-        "after_cycle": rr.after_cycle,
-        "after_round_in_cycle": rr.after_round_in_cycle,
-        "after_hp_1": rr.after_hp_1,
-        "after_hp_2": rr.after_hp_2,
-        "after_statuses_1": [ps.to_dict() for ps in rr.after_statuses_1],
-        "after_statuses_2": [ps.to_dict() for ps in rr.after_statuses_2],
-    }
+    """Serialize a RoundResult to a plain dict using RoundResult.to_dict()."""
+    return RoundResult.to_dict(rr)
 
 
 def _deserialize_round_result(data: dict) -> RoundResult:
-    """Reconstruct a RoundResult from a dict."""
-    # Handle old format (no cycle/round_in_cycle) for backward compat
+    """Reconstruct a RoundResult from a dict (new nested format)."""
+    before_data = data.get("before", {})
+    after_data = data.get("after_resolve", {})
+    end_data = data.get("end_actions", {})
+    after_end_data = data.get("after_end_actions", {})
+
     return RoundResult(
         round=data["round"],
-        cycle=data.get("cycle", 1),
-        round_in_cycle=data.get("round_in_cycle", 1),
+        cycle=data["cycle"],
+        round_in_cycle=data["round_in_cycle"],
         cards_1=[_str_to_card(s) for s in data["cards_1"]],
         cards_2=[_str_to_card(s) for s in data["cards_2"]],
-        damage_1=data["damage_1"],
-        damage_2=data["damage_2"],
-        hp_1_after=data["hp_1_after"],
-        hp_2_after=data["hp_2_after"],
-        energy_1_after=data.get("energy_1_after", 0),
-        energy_2_after=data.get("energy_2_after", 0),
-        statuses_1=_deserialize_status_list(data, "statuses_1"),
-        statuses_2=_deserialize_status_list(data, "statuses_2"),
-        details=data["details"],
-        is_game_over=data["is_game_over"],
-        winner=data["winner"],
-        cycle_ended=data.get("cycle_ended", False),
-        bleed_damage_1=data.get("bleed_damage_1", 0),
-        bleed_damage_2=data.get("bleed_damage_2", 0),
-        after_cycle=data.get("after_cycle", data.get("cycle", 1)),
-        after_round_in_cycle=data.get("after_round_in_cycle", data.get("round_in_cycle", 1)),
-        after_hp_1=data.get("after_hp_1", data.get("hp_1_after", 20)),
-        after_hp_2=data.get("after_hp_2", data.get("hp_2_after", 20)),
-        after_statuses_1=_deserialize_status_list(data, "after_statuses_1"),
-        after_statuses_2=_deserialize_status_list(data, "after_statuses_2"),
+        before=BeforeResolve(
+            statuses_1=_deserialize_status_list(before_data, "statuses_1"),
+            statuses_2=_deserialize_status_list(before_data, "statuses_2"),
+            energy_1=before_data.get("energy_1", 0),
+            energy_2=before_data.get("energy_2", 0),
+            hp_1=before_data.get("hp_1", 20),
+            hp_2=before_data.get("hp_2", 20),
+        ),
+        after_resolve=AfterResolve(
+            statuses_1=_deserialize_status_list(after_data, "statuses_1"),
+            statuses_2=_deserialize_status_list(after_data, "statuses_2"),
+            energy_1=after_data.get("energy_1", 0),
+            energy_2=after_data.get("energy_2", 0),
+            hp_1=after_data.get("hp_1", 20),
+            hp_2=after_data.get("hp_2", 20),
+            details=after_data.get("details", []),
+            is_game_over=after_data.get("is_game_over", False),
+            winner=after_data.get("winner"),
+        ),
+        end_actions=EndActions(
+            cycle_ended=end_data.get("cycle_ended", False),
+            bleed_damage_1=end_data.get("bleed_damage_1", 0),
+            bleed_damage_2=end_data.get("bleed_damage_2", 0),
+        ),
+        after_end_actions=AfterEndActions(
+            is_game_over=after_end_data.get("is_game_over", False),
+            winner=after_end_data.get("winner"),
+            round=after_end_data.get("round", 0),
+            cycle=after_end_data.get("cycle", 0),
+            round_in_cycle=after_end_data.get("round_in_cycle", 0),
+            hand_cards_1=[_str_to_card(s) for s in after_end_data.get("hand_cards_1", [])],
+            hand_cards_2=[_str_to_card(s) for s in after_end_data.get("hand_cards_2", [])],
+            statuses_1=_deserialize_status_list(after_end_data, "statuses_1"),
+            statuses_2=_deserialize_status_list(after_end_data, "statuses_2"),
+            energy_1=after_end_data.get("energy_1", 0),
+            energy_2=after_end_data.get("energy_2", 0),
+            hp_1=after_end_data.get("hp_1", 20),
+            hp_2=after_end_data.get("hp_2", 20),
+        ),
     )
 
 

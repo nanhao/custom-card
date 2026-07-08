@@ -51,42 +51,16 @@ def str_to_card(value: str) -> CardType:
 def round_result_to_dict(rr: RoundResult) -> dict:
     """Serialize a RoundResult to a JSON-safe dict.
 
-    Converts all CardType lists to string lists via card_to_str().
-    The resulting dict matches the round_result schema in controller_api.md §4.2.
+    Delegates to RoundResult.to_dict() which produces the nested
+    before/after_resolve/end_actions/after_end_actions structure.
 
     Args:
         rr: The RoundResult value object to serialize.
 
     Returns:
-        dict with all RoundResult fields, with cards as string arrays.
+        dict with nested structure matching the round_result API schema.
     """
-    return {
-        "round": rr.round,
-        "cycle": rr.cycle,
-        "round_in_cycle": rr.round_in_cycle,
-        "cards_1": [card_to_str(c) for c in rr.cards_1],
-        "cards_2": [card_to_str(c) for c in rr.cards_2],
-        "damage_1": rr.damage_1,
-        "damage_2": rr.damage_2,
-        "hp_1_after": rr.hp_1_after,
-        "hp_2_after": rr.hp_2_after,
-        "energy_1_after": rr.energy_1_after,
-        "energy_2_after": rr.energy_2_after,
-        "statuses_1": [ps.to_dict() for ps in rr.statuses_1],
-        "statuses_2": [ps.to_dict() for ps in rr.statuses_2],
-        "details": rr.details,
-        "is_game_over": rr.is_game_over,
-        "winner": rr.winner,
-        "cycle_ended": rr.cycle_ended,
-        "bleed_damage_1": rr.bleed_damage_1,
-        "bleed_damage_2": rr.bleed_damage_2,
-        "after_cycle": rr.after_cycle,
-        "after_round_in_cycle": rr.after_round_in_cycle,
-        "after_hp_1": rr.after_hp_1,
-        "after_hp_2": rr.after_hp_2,
-        "after_statuses_1": [ps.to_dict() for ps in rr.after_statuses_1],
-        "after_statuses_2": [ps.to_dict() for ps in rr.after_statuses_2],
-    }
+    return RoundResult.to_dict(rr)
 
 
 # ---------------------------------------------------------------------------

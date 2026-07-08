@@ -83,14 +83,14 @@ class TestCycleMechanics:
         # Then cycle bleed 1 → hp 9→8 (Phase 3, after_)
         assert gm.player_1.hp == 8
         assert gm.player_2.hp == 8
-        assert result.hp_1_after == 9  # Phase 1: before bleed
-        assert result.hp_2_after == 9
-        assert result.cycle_ended is True
-        assert result.bleed_damage_1 == 1
-        assert result.after_hp_1 == 8  # Phase 3: after bleed
-        assert result.after_hp_2 == 8
-        assert result.after_cycle == 2
-        assert result.after_round_in_cycle == 1
+        assert result.after_resolve.hp_1 == 9  # Phase 1: before bleed
+        assert result.after_resolve.hp_2 == 9
+        assert result.end_actions.cycle_ended is True
+        assert result.end_actions.bleed_damage_1 == 1
+        assert result.after_end_actions.hp_1 == 8  # Phase 3: after bleed
+        assert result.after_end_actions.hp_2 == 8
+        assert result.after_end_actions.cycle == 2
+        assert result.after_end_actions.round_in_cycle == 1
 
     def test_mid_cycle_no_bleed(self):
         """Round 3 of a cycle: no cycle_ended, no HP bleed."""
@@ -104,7 +104,7 @@ class TestCycleMechanics:
         gm.player_2.hp = 10
 
         result = gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
-        assert result.cycle_ended is False
+        assert result.end_actions.cycle_ended is False
         assert gm.player_1.hp == 10  # No bleed
 
     def test_cycle_bleed_causes_game_end(self):
@@ -455,13 +455,13 @@ class TestStatusLifecycle:
         result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
 
         # RoundResult captures pre-tick state
-        assert len(result.statuses_1) == 1
-        assert isinstance(result.statuses_1[0], PlayerStatus)
-        assert result.statuses_1[0].status_type == StatusType.DEFENSE
-        assert result.statuses_1[0].lifetime == 1
+        assert len(result.after_resolve.statuses_1) == 1
+        assert isinstance(result.after_resolve.statuses_1[0], PlayerStatus)
+        assert result.after_resolve.statuses_1[0].status_type == StatusType.DEFENSE
+        assert result.after_resolve.statuses_1[0].lifetime == 1
         # Post-tick: both players have empty statuses
         assert gm.player_1.statuses == []
-        assert result.statuses_2 == []
+        assert result.after_resolve.statuses_2 == []
 
     def test_tick_reduces_lifetime_and_removes_expired(self):
         """TC-GS-02: _tick_status_lifetimes reduces lifetime, removes expired."""
@@ -500,8 +500,8 @@ class TestStatusLifecycle:
         gm.player_2.hand = [CardType.DEFENSE]
         result1 = gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
         # RoundResult.statuses_2 captured before tick
-        assert len(result1.statuses_2) == 1
-        assert result1.statuses_2[0].status_type == StatusType.DEFENSE
+        assert len(result1.after_resolve.statuses_2) == 1
+        assert result1.after_resolve.statuses_2[0].status_type == StatusType.DEFENSE
         # After tick, player2 has no active statuses
         assert gm.player_2.statuses == []
 
@@ -509,7 +509,7 @@ class TestStatusLifecycle:
         gm.player_1.hand = [CardType.ATTACK]
         gm.player_2.hand = [CardType.ATTACK]
         result2 = gm.play_round([CardType.ATTACK], [CardType.ATTACK])
-        assert result2.statuses_2 == []
+        assert result2.after_resolve.statuses_2 == []
 
     def test_status_lifetimes_fields_removed(self):
         """TC-GS-05: GameCore no longer has _status_lifetimes_1/_status_lifetimes_2."""
@@ -529,8 +529,8 @@ class TestStatusLifecycle:
 
         result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
 
-        assert len(result.statuses_1) == 1
-        ps = result.statuses_1[0]
+        assert len(result.after_resolve.statuses_1) == 1
+        ps = result.after_resolve.statuses_1[0]
         assert isinstance(ps, PlayerStatus)
         assert ps.status_type == StatusType.DEFENSE
         assert ps.lifetime == 1
@@ -553,7 +553,7 @@ class TestStatusLifecycle:
         gm.player_2.hand = [CardType.ATTACK]
         result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
 
-        types = [ps.status_type for ps in result.statuses_1]
+        types = [ps.status_type for ps in result.after_resolve.statuses_1]
         assert StatusType.DEFENSE in types
         assert StatusType.GUARD not in types
 
@@ -565,6 +565,6 @@ class TestStatusLifecycle:
         gm.player_2.hand = [CardType.ATTACK]
         result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
 
-        types = [ps.status_type for ps in result.statuses_1]
+        types = [ps.status_type for ps in result.after_resolve.statuses_1]
         assert StatusType.DEFENSE in types
         assert StatusType.GUARD not in types

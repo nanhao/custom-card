@@ -263,7 +263,7 @@ export default function GameBoard({
       const rr = roundLog[roundLog.length - 1];
       if (!rr) return null;
 
-      const details = rr.details.map((line, i) => {
+      const details = rr.after_resolve.details.map((line, i) => {
         const cls = line.includes('takes 0') ? 'res-safe' : 'res-dmg';
         return <div key={i} className={cls}>{line}</div>;
       });
@@ -271,7 +271,7 @@ export default function GameBoard({
       const p2Label = mode === 'pve' ? 'AI' : 'P2';
 
       // Cycle ended indicator
-      const cycleBleedNote = rr.cycle_ended ? (
+      const cycleBleedNote = rr.end_actions.cycle_ended ? (
         <div className="cycle-bleed" style={{ marginTop: 8 }}>
           ⚠️ Cycle {rr.cycle} ended — both players lose 1 HP. New cycle started.
         </div>
@@ -296,8 +296,8 @@ export default function GameBoard({
           <div className="result-details">{details}</div>
           {cycleBleedNote}
           <div className="res-hp">
-            After: P1 <strong>{rr.hp_1_after} HP</strong>⚡{rr.energy_1_after}{' '}
-            | {p2Label} <strong>{rr.hp_2_after} HP</strong>\u26A1{rr.energy_2_after}
+            After: P1 <strong>{rr.after_resolve.hp_1} HP</strong>⚡{rr.after_resolve.energy_1}{' '}
+            | {p2Label} <strong>{rr.after_resolve.hp_2} HP</strong>\u26A1{rr.after_resolve.energy_2}
           </div>
           <div className="btn-row" style={{ marginTop: 12 }}>
             {phase === 'reveal' ? (
@@ -341,14 +341,14 @@ export default function GameBoard({
       <div className="log-area">
         <h3>📜 Round Log</h3>
         {entries.map(e => {
-          const lines = e.details.map((l, i) => {
+          const lines = e.after_resolve.details.map((l, i) => {
             const cls = l.includes('takes 0') ? 'log-safe' : 'log-dmg';
             return <span key={i} className={cls}>{l}</span>;
           });
           const interleaved = lines.length === 0
             ? null
             : lines.reduce((a, b) => [a, <br key="br" />, '  ', b]);
-          const bleedTag = e.cycle_ended ? <span className="cycle-bleed"> [Cycle End]</span> : null;
+          const bleedTag = e.end_actions.cycle_ended ? <span className="cycle-bleed"> [Cycle End]</span> : null;
           return (
             <div key={e.round} className="log-entry">
               <strong>C{e.cycle}R{e.round_in_cycle}</strong> (R{e.round}):{' '}
@@ -357,8 +357,8 @@ export default function GameBoard({
               {bleedTag}
               {interleaved && <><br />&nbsp;&nbsp;{interleaved}</>}
               <br /><span style={{ color: 'var(--muted)' }}>
-                → P1 {e.hp_1_after}HP |{' '}
-                {mode === 'pve' ? 'AI' : 'P2'} {e.hp_2_after}HP
+                → P1 {e.after_resolve.hp_1}HP |{' '}
+                {mode === 'pve' ? 'AI' : 'P2'} {e.after_resolve.hp_2}HP
               </span>
             </div>
           );
@@ -373,7 +373,7 @@ export default function GameBoard({
       {renderBanner()}
       <div className="cycle-info">
         Cycle {state.cycle}, Round {state.round_in_cycle}/5{' '}
-        {state.round_log?.length > 0 && state.round_log[state.round_log.length - 1]?.cycle_ended
+        {state.round_log?.length > 0 && state.round_log[state.round_log.length - 1]?.end_actions.cycle_ended
           ? <span className="cycle-bleed">[Cycle ended — HP bleed applied]</span>
           : null}
       </div>
