@@ -36,7 +36,7 @@ class SelfPlayRunner:
     Attributes:
         _sample_action: Callable with signature:
             (state, h_pol, h_val, ai_name, temp, player_key)
-            → (card_str, new_h_pol, log_prob, value, new_h_val).
+            → (card_type, build_target, new_h_pol, log_prob, value, new_h_val).
     """
 
     def __init__(self, sample_action_fn):
@@ -275,12 +275,13 @@ class SelfPlayRunner:
                 )
                 loaded_models.add(config.ai2)
 
-            # Log round_action after both AIs have selected cards
+            # Log round_action after both AIs have selected cards.
+            # Use .value for CardType serialization compatibility.
             logger.log(
                 "DEBUG", "selfplay.round_action",
                 round=round_num,
-                card1=card1,
-                card2=card2,
+                card1=card1.value,
+                card2=card2.value,
                 temp1=temp_p1,
                 temp2=temp_p2,
             )

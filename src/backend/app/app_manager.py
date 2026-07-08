@@ -5,9 +5,9 @@ mask_fn uses 13-d interleaved masking (hand cards + build energy constraints).
 
 Public interface:
     create_game(mode, ai_name=None) -> (game_id, state)
-    ai_select_action(state, hidden_state, ai_name) -> (card_str, build_target, new_hidden)
+    ai_select_action(state, hidden_state, ai_name) -> (card_type, build_target, new_hidden)
     ai_sample_action(state, h_pol, h_val, ai_name, temp, player_key)
-        -> (card_str, build_target, new_h_pol, log_prob, value, new_h_val)
+        -> (card_type, build_target, new_h_pol, log_prob, value, new_h_val)
     run_selfplay(config) -> SelfPlayResult
 """
 
@@ -108,13 +108,14 @@ class AppManager:
 
     def ai_select_action(
         self, state: GameState, hidden_state: list[float], ai_name: str
-    ) -> tuple[str, str | None, list[float]]:
+    ) -> tuple[CardType, CardType | None, list[float]]:
         """Select the AI's card greedily using policy network.
 
         Per design/19 D7: state is a typed GameState, not a dict.
+        Per design/20: returns CardType enums instead of strings.
 
-        Returns (card_str, build_target_str_or_None, new_hidden_state).
-        build_target is non-None only when card_str == "build".
+        Returns (card_type, build_target, new_hidden_state).
+        build_target is non-None only when card_type == CardType.BUILD.
 
         Args:
             state: GameState from GameCore.get_state().
@@ -122,7 +123,7 @@ class AppManager:
             ai_name: AI name (e.g. "rnn_v2.1").
 
         Returns:
-            (card_str, build_target, new_hidden_state).
+            (card_type, build_target, new_hidden_state).
         """
         model = self._get_policy_model(ai_name)
         input_vector = Converter.build_input_vector(state)
@@ -138,10 +139,10 @@ class AppManager:
             action_idx = int(torch.argmax(probs, dim=-1).item())
 
         # Decode 13-d interleaved output (design/14)
-        card_str, build_target = Converter.policy_index_to_action(action_idx)
+        card_type, build_target = Converter.policy_index_to_action(action_idx)
 
         new_hidden_list = new_hidden.squeeze(1).squeeze(0).tolist()
-        return card_str, build_target, new_hidden_list
+        return card_type, build_target, new_hidden_list
 
     # ------------------------------------------------------------------
     # AI Temperature-Based Action Sampling (self-play mode)
@@ -155,15 +156,16 @@ class AppManager:
         ai_name: str,
         temperature: float,
         player_key: str = "2",
-    ) -> tuple[str, str | None, list[float], float | None, float, list[float]]:
+    ) -> tuple[CardType, CardType | None, list[float], float | None, float, list[float]]:
         """Select AI card with temperature-based sampling.
 
         Per design/19 D7: state is a typed GameState.
+        Per design/20: returns CardType enums instead of strings.
 
         Uses policy and value networks independently.
 
-        Returns (card_str, build_target, new_h_pol, log_prob, value, new_h_val).
-        build_target is non-None only when card_str == "build".
+        Returns (card_type, build_target, new_h_pol, log_prob, value, new_h_val).
+        build_target is non-None only when card_type == CardType.BUILD.
         log_prob is None when temperature == 0.
         """
         policy_model = self._get_policy_model(ai_name)
@@ -192,7 +194,7 @@ class AppManager:
                 log_prob = float(log_probs[0, action_idx].item())
 
         # Decode 13-d interleaved output (design/14)
-        card_str, build_target = Converter.policy_index_to_action(action_idx)
+        card_type, build_target = Converter.policy_index_to_action(action_idx)
 
         new_h_pol_list = new_h_pol.squeeze(1).squeeze(0).tolist()
         new_h_val_list = new_h_val.squeeze(1).squeeze(0).tolist()

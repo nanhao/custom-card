@@ -233,14 +233,13 @@ class TestActionToPolicyIndex:
         assert Converter.action_to_policy_index(CardType.BUILD, build_target) == expected
 
     # ------------------------------------------------------------------
-    # TC-AP-03: Invalid card — CardType not in _PLAY_TO_INDEX
-    # (BUILD has None play_index, so passing it as a pure play should fail)
+    # TC-AP-03: str input → ValueError (keys are CardType, not str)
     # ------------------------------------------------------------------
 
-    def test_invalid_card_type_raises(self):
-        """CardType.BUILD without build_target raises ValueError (not in _PLAY_TO_INDEX)."""
+    def test_string_input_raises_valueerror(self):
+        """String input 'attack' raises ValueError (keys are CardType)."""
         with pytest.raises(ValueError):
-            Converter.action_to_policy_index(CardType.BUILD, None)
+            Converter.action_to_policy_index("attack", None)  # type: ignore[arg-type]
 
     # ------------------------------------------------------------------
     # TC-AP-04: Non-build with build_target
@@ -357,11 +356,17 @@ class TestBuildCost:
         assert Converter.build_cost(card_type) == expected
 
     def test_unknown_card_returns_999(self):
-        """CardType not in _BUILD_COST returns 999 as sentinel."""
-        # _BUILD_COST contains all 7 CardType values, so we test with
-        # an arbitrary CardType that we know won't be in the dict.
-        # Since all CardType members ARE in _BUILD_COST, this tests
-        # the .get() fallback by using a key not in the dict.
-        # Create a synthetic scenario: pass a CardType that was not
-        # added to _BUILD_COST during class init.
-        assert Converter._BUILD_COST.get(None, 999) == 999
+        """Calling build_cost with str returns 999 sentinel (keys are CardType)."""
+        assert Converter.build_cost("nonexistent") == 999  # type: ignore[arg-type]
+
+
+class TestConstantsRemoved:
+    """TC-CT-01/02: INPUT_SIZE / POLICY_OUTPUT_SIZE removed from Converter."""
+
+    def test_input_size_removed_from_converter(self):
+        """Converter.INPUT_SIZE no longer exists — imported from model."""
+        assert not hasattr(Converter, "INPUT_SIZE")
+
+    def test_policy_output_size_removed_from_converter(self):
+        """Converter.POLICY_OUTPUT_SIZE no longer exists — imported from model."""
+        assert not hasattr(Converter, "POLICY_OUTPUT_SIZE")
