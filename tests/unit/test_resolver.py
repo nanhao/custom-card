@@ -4,6 +4,7 @@ Test cases per design/11 test_cases.md §3 (TC-RS-01 ~ TC-RS-11).
 """
 
 from src.backend.game.card import CardType
+from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.game.resolver import CardResolver
 
@@ -272,23 +273,59 @@ class TestHeavyStrike:
 
 
 class TestGetConsecutiveAttack:
-    """Static get_consecutive_attack helper."""
+    """TC-CA-H01~H07: get_consecutive_attack with list[PlayerHistoryItem] (design/16)."""
+
+    def test_empty_history(self):
+        """TC-CA-H01: Empty history → 0."""
+        assert CardResolver.get_consecutive_attack([]) == 0
+
+    def test_single_attack(self):
+        """TC-CA-H02: Single ATTACK → 1."""
+        history = [PlayerHistoryItem(CardType.ATTACK, None)]
+        assert CardResolver.get_consecutive_attack(history) == 1
+
+    def test_two_consecutive_attacks(self):
+        """TC-CA-H03: Two consecutive ATTACK → 2."""
+        history = [PlayerHistoryItem(CardType.ATTACK, None),
+                    PlayerHistoryItem(CardType.ATTACK, None)]
+        assert CardResolver.get_consecutive_attack(history) == 2
+
+    def test_defense_breaks_streak(self):
+        """TC-CA-H04: DEFENSE at end breaks streak → 0."""
+        history = [PlayerHistoryItem(CardType.ATTACK, None),
+                    PlayerHistoryItem(CardType.DEFENSE, None)]
+        assert CardResolver.get_consecutive_attack(history) == 0
+
+    def test_attack_after_defense_restarts(self):
+        """TC-CA-H05: DEFENSE then ATTACK → streak restarts at ATTACK."""
+        history = [PlayerHistoryItem(CardType.DEFENSE, None),
+                    PlayerHistoryItem(CardType.ATTACK, None),
+                    PlayerHistoryItem(CardType.ATTACK, None)]
+        assert CardResolver.get_consecutive_attack(history) == 2
+
+    def test_build_breaks_streak(self):
+        """TC-CA-H06: BUILD at end breaks streak → 0."""
+        history = [PlayerHistoryItem(CardType.ATTACK, None),
+                    PlayerHistoryItem(CardType.BUILD, CardType.ATTACK)]
+        assert CardResolver.get_consecutive_attack(history) == 0
+
+    def test_three_consecutive_attacks(self):
+        """TC-CA-H07: Three consecutive ATTACK → 3."""
+        history = [PlayerHistoryItem(CardType.ATTACK, None),
+                    PlayerHistoryItem(CardType.ATTACK, None),
+                    PlayerHistoryItem(CardType.ATTACK, None)]
+        assert CardResolver.get_consecutive_attack(history) == 3
 
     def test_continuous_attack_count(self):
-        """Count consecutive ATTACK from end of history."""
-        history = [CardType.ATTACK, CardType.ATTACK, CardType.DEFENSE, CardType.ATTACK]
+        """Legacy: ATTACK,ATTACK,DEFENSE,ATTACK → streak=1."""
+        history = [PlayerHistoryItem(CardType.ATTACK, None),
+                    PlayerHistoryItem(CardType.ATTACK, None),
+                    PlayerHistoryItem(CardType.DEFENSE, None),
+                    PlayerHistoryItem(CardType.ATTACK, None)]
         assert CardResolver.get_consecutive_attack(history) == 1
 
     def test_counter_breaks_streak(self):
-        """TC-RS-09d: COUNTER breaks attack streak."""
-        history = [CardType.ATTACK, CardType.COUNTER]
-        assert CardResolver.get_consecutive_attack(history) == 0
-
-    def test_empty_history(self):
-        """Empty history → streak = 0."""
-        assert CardResolver.get_consecutive_attack([]) == 0
-
-    def test_defense_breaks_streak(self):
-        """DEFENSE breaks attack streak."""
-        history = [CardType.ATTACK, CardType.ATTACK, CardType.DEFENSE]
+        """COUNTER breaks attack streak → 0."""
+        history = [PlayerHistoryItem(CardType.ATTACK, None),
+                    PlayerHistoryItem(CardType.COUNTER, None)]
         assert CardResolver.get_consecutive_attack(history) == 0

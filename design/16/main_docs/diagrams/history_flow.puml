@@ -1,0 +1,73 @@
+@startuml history_flow
+skinparam backgroundColor white
+skinparam nodesep 30
+skinparam ranksep 40
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+
+title History Recording & Consumption Flow (intention #16)
+
+actor "GameCore.play_round()" as GC
+participant "Player\nhistory:\nlist[PlayerHistoryItem]" as Player
+participant "CardResolver\n.get_consecutive_attack()" as Resolver
+participant "GameCore\n.get_state()" as GS
+participant "Converter\n.build_input_vector()" as Conv
+participant "SessionStore\n_save/_load" as SS
+participant "API / Frontend" as API
+
+== Round Execution (Recording) ==
+
+GC -> GC : 1. Validate cards
+GC -> Resolver : 2. get_consecutive_attack(player.history)
+Resolver -> Player : read .card from each item
+Resolver --> GC : streak count
+GC -> GC : 3. resolve(..., streak)
+GC -> GC : 4-6. Apply damage, statuses, BUILD
+GC -> Player : 7. history.append(\n  PlayerHistoryItem(card, build_target))
+note right
+  OLD: history.extend(cards)
+       build_history.append(build_target)
+  NEW: Single append with both fields
+end note
+
+== State Query (Consumption) ==
+
+GC -> GS : get_state()
+GS -> Player : Read history directly
+note right
+  OLD: zip(p.history, p.build_history)
+       → construct PlayerHistoryItem
+  NEW: p.history already list[PlayerHistoryItem]
+end note
+GS --> GC : state dict with history
+
+GC -> Conv : build_input_vector(state)
+Conv -> Conv : Read history[-1] → last action index
+Conv --> GC : 15-d input vector
+
+== Persistence ==
+
+SS -> SS : _serialize_player(player)
+note right
+  OLD: {"history": ["attack", ...],
+         "build_history": [null, ...]}
+  NEW: {"history": [
+         {"card": "attack",
+          "build_target": null}, ...]}
+  Removed: "build_history" key
+end note
+
+SS -> SS : _deserialize_player(data)
+note right
+  Deserialize history back to
+  list[PlayerHistoryItem]
+end note
+
+== API Response ==
+
+API -> API : Flask JSON encoding
+note right
+  PlayerHistoryItem → {"card": ..., "build_target": ...}
+  Already handled by _custom_default encoder
+end note
+
+@enduml

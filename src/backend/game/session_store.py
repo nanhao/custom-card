@@ -16,7 +16,7 @@ from pathlib import Path
 
 from src.backend.game.card import CardType, get_initial_draw_pile
 from src.backend.game.game_core import GameCore, RoundResult
-from src.backend.game.player import Player
+from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.ai.rnn_v1.model import HIDDEN_SIZE
 
@@ -86,8 +86,9 @@ def _serialize_player(player: Player) -> dict:
     """Serialize a Player to a plain dict for JSON encoding.
 
     Returns dict with keys: hp, energy, statuses, hand, draw_pile,
-    discard_pile, history, build_history.
+    discard_pile, history.
     Statuses serialized as [{"type": ..., "lifetime": ...}] per design/15 D6.
+    History serialized as [{"card": ..., "build_target": ...}] per design/16 D6.
     """
     return {
         "hp": player.hp,
@@ -96,10 +97,12 @@ def _serialize_player(player: Player) -> dict:
         "hand": [_card_to_str(c) for c in player.hand],
         "draw_pile": [_card_to_str(c) for c in player.draw_pile],
         "discard_pile": [_card_to_str(c) for c in player.discard_pile],
-        "history": [_card_to_str(c) for c in player.history],
-        "build_history": [
-            _card_to_str(bt) if bt is not None else None
-            for bt in player.build_history
+        "history": [
+            {
+                "card": _card_to_str(item.card),
+                "build_target": _card_to_str(item.build_target) if item.build_target else None,
+            }
+            for item in player.history
         ],
     }
 
@@ -110,7 +113,7 @@ def _deserialize_player(data: dict) -> Player:
     Raises ValueError if required keys are missing.
     """
     required = ("hp", "energy", "statuses", "hand", "draw_pile",
-                "discard_pile", "history", "build_history")
+                "discard_pile", "history")
     for key in required:
         if key not in data:
             raise ValueError(f"Missing required player key: {key!r}")
@@ -124,10 +127,12 @@ def _deserialize_player(data: dict) -> Player:
         hand=[_str_to_card(s) for s in data["hand"]],
         draw_pile=[_str_to_card(s) for s in data["draw_pile"]],
         discard_pile=[_str_to_card(s) for s in data["discard_pile"]],
-        history=[_str_to_card(s) for s in data["history"]],
-        build_history=[
-            _str_to_card(s) if s is not None else None
-            for s in data["build_history"]
+        history=[
+            PlayerHistoryItem(
+                card=_str_to_card(d["card"]),
+                build_target=_str_to_card(d["build_target"]) if d.get("build_target") else None,
+            )
+            for d in data["history"]
         ],
     )
 

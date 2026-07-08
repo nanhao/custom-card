@@ -189,11 +189,9 @@ class GameCore:
         self.player_1.discard_pile.extend(cards_1)
         self.player_2.discard_pile.extend(cards_2)
 
-        # Step 8: Record history (design/14 D8: also record build targets)
-        self.player_1.history.extend(cards_1)
-        self.player_2.history.extend(cards_2)
-        self.player_1.build_history.append(build_target_1)
-        self.player_2.build_history.append(build_target_2)
+        # Step 8: Record history as PlayerHistoryItem (design/16 D3 — merged history + build_history)
+        self.player_1.history.append(PlayerHistoryItem(cards_1[0], build_target_1))
+        self.player_2.history.append(PlayerHistoryItem(cards_2[0], build_target_2))
 
         # Step 9: Phase 1 — snapshot after card resolution, before round-end processing.
         # HP does NOT include bleed; statuses are still active.
@@ -288,10 +286,7 @@ class GameCore:
                 "energy": p.energy,
                 "statuses": [ps.to_dict() for ps in p.statuses],
                 "hand": [c.value for c in p.hand],
-                "history": [
-                    PlayerHistoryItem(card=c, build_target=bt)
-                    for c, bt in zip(p.history, p.build_history)
-                ],
+                "history": p.history,
             }
             if show_piles:
                 result["draw_pile"] = [c.value for c in p.draw_pile]

@@ -130,20 +130,27 @@ class TestPlayCards:
         assert p.hand == hand_before
 
 
-class TestBuildHistory:
-    """TC-BH-01, TC-BH-02, TC-BH-03, TC-BH-04: Player.build_history."""
+class TestPlayerHistoryNewType:
+    """TC-PL-H01, TC-PL-H02, TC-PL-H03: Player.history type change (design/16)."""
 
-    def test_default_build_history_empty(self):
-        """TC-BH-01: New Player has empty build_history."""
+    def test_default_history_empty(self):
+        """TC-PL-H01: New Player has empty history."""
         p = Player()
-        assert p.build_history == []
+        assert p.history == []
 
-    def test_build_history_holds_cardtype(self):
-        """build_history can store CardType values."""
-        p = Player(build_history=[CardType.ATTACK, None, CardType.DEFENSE])
-        assert p.build_history[0] == CardType.ATTACK
-        assert p.build_history[1] is None
-        assert p.build_history[2] == CardType.DEFENSE
+    def test_history_element_type(self):
+        """TC-PL-H02: history elements are PlayerHistoryItem."""
+        p = Player(history=[PlayerHistoryItem(CardType.ATTACK, None)])
+        assert len(p.history) == 1
+        assert isinstance(p.history[0], PlayerHistoryItem)
+        assert p.history[0].card == CardType.ATTACK
+        assert p.history[0].build_target is None
+
+    def test_no_build_history_attribute(self):
+        """TC-PL-H03: Player has no build_history attribute."""
+        p = Player()
+        with pytest.raises(AttributeError):
+            _ = p.build_history
 
 
 class TestPlayerHistoryItem:

@@ -1,8 +1,8 @@
-"""Player state container for the custom card game v2 (design/11, design/14).
+"""Player state container for the custom card game v2 (design/11, design/16).
 
 Per architecture D2, Player is a data container (dataclass) with minimal
 behavior. It holds hp (default 20), energy (0-5), statuses, hand, draw_pile,
-discard_pile, history, and build_history (design/14 D8).
+discard_pile, and history (list[PlayerHistoryItem] — design/16 D1).
 
 Per architecture D9, this module is pure logic — no UI, no I/O.
 """
@@ -37,17 +37,15 @@ class PlayerHistoryItem:
 class Player:
     """Represents one player's state in the v2 game.
 
-    Attributes:
+    Attribute:
         hp: Current HP, default 20, clamped to >= 0.
         energy: Current energy, default 0, clamped to [0, 5].
         statuses: List of active PlayerStatus instances (design/15).
         hand: Cards currently in hand.
         draw_pile: Cards remaining in the draw pile.
         discard_pile: Cards in the discard pile.
-        history: Cards played in previous rounds, chronologically.
-                 Used for consecutive attack counting.
-        build_history: Build targets for each round, parallel to history
-                       (design/14 D8). None entries for non-build rounds.
+        history: Action history as list[PlayerHistoryItem] (design/16).
+                 Each entry records both the card played and build_target.
     """
 
     hp: int = 20
@@ -56,8 +54,7 @@ class Player:
     hand: list[CardType] = field(default_factory=list)
     draw_pile: list[CardType] = field(default_factory=list)
     discard_pile: list[CardType] = field(default_factory=list)
-    history: list[CardType] = field(default_factory=list)
-    build_history: list[CardType | None] = field(default_factory=list)
+    history: list[PlayerHistoryItem] = field(default_factory=list)
 
     # ------------------------------------------------------------------
     # Card manipulation

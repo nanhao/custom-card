@@ -1,0 +1,111 @@
+@startuml class_diagram
+skinparam backgroundColor white
+skinparam nodesep 40
+skinparam ranksep 50
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+
+title Class Diagram — Player History Merge (intention #16)
+
+package "game/player.py" as PlayerPkg {
+    class PlayerHistoryItem <<dataclass>> {
+        +card: CardType
+        +build_target: CardType | None
+    }
+
+    class Player <<dataclass>> {
+        +hp: int
+        +energy: int
+        +statuses: list~PlayerStatus~
+        +hand: list~CardType~
+        +draw_pile: list~CardType~
+        +discard_pile: list~CardType~
+        +history: list~PlayerHistoryItem~
+        +has_status(StatusType): bool
+        +play_card(CardType): None
+        +play_cards(list~CardType~): None
+        +has_card(CardType): bool
+        +has_cards(list~CardType~): bool
+        +take_damage(int): None
+        +add_energy(int): None
+    }
+}
+
+package "game/game_core.py" as GameCorePkg {
+    class RoundResult <<dataclass>> {
+        +round: int
+        +cycle: int
+        +round_in_cycle: int
+        +cards_1: list~CardType~
+        +cards_2: list~CardType~
+        +damage_1: int
+        +damage_2: int
+        +hp_1_after: int
+        +hp_2_after: int
+        +energy_1_after: int
+        +energy_2_after: int
+        +statuses_1: list~PlayerStatus~
+        +statuses_2: list~PlayerStatus~
+        +details: list~str~
+        +cycle_ended: bool
+        +bleed_damage_1: int
+        +bleed_damage_2: int
+        +after_cycle: int
+        +after_round_in_cycle: int
+        +after_hp_1: int
+        +after_hp_2: int
+        +after_statuses_1: list~PlayerStatus~
+        +after_statuses_2: list~PlayerStatus~
+        +is_game_over: bool
+        +winner: str | None
+    }
+
+    class GameCore {
+        +player_1: Player | None
+        +player_2: Player | None
+        +round_number: int
+        +cycle_number: int
+        +round_in_cycle: int
+        +is_over: bool
+        +winner: str | None
+        +round_log: list~RoundResult~
+        +start_game(): None
+        +play_round(c1, c2, bt1, bt2): RoundResult
+        +get_state(perspective): dict
+    }
+}
+
+package "game/resolver.py" as ResolverPkg {
+    class CardResolver {
+        {static} +resolve(c1, c2, s1, s2, str1, str2): ResolutionResult
+        {static} +get_consecutive_attack(history: list~PlayerHistoryItem~): int
+    }
+}
+
+package "game/session_store.py" as SessionStorePkg {
+    class SessionStore {
+        +save(game_id, GameCore, ...): None
+        +load(game_id): (GameCore, dict)
+        +delete(game_id): bool
+    }
+}
+
+package "app/converter.py" as ConverterPkg {
+    class Converter {
+        {static} +build_input_vector(state, player_key): list~float~
+        {static} +action_to_policy_index(card_str, build_target): int
+        {static} +policy_index_to_action(index): tuple
+        {static} -_action_item_to_index(item: PlayerHistoryItem): int
+    }
+}
+
+' Dependencies
+Player --> PlayerHistoryItem : "history: list"
+GameCore --> Player : "owns"
+GameCore --> RoundResult : "produces"
+CardResolver --> PlayerHistoryItem : "get_consecutive_attack() 参数"
+SessionStore --> GameCore : "persists"
+SessionStore --> Player : "serializes"
+Converter --> PlayerHistoryItem : "_action_item_to_index() 参数"
+GameCore ..> CardResolver : "calls resolve() + get_consecutive_attack()"
+
+@enduml

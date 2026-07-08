@@ -10,6 +10,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType, get_card_def
+from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus, has_active_status
 
 # Maximum damage from consecutive attack streak
@@ -64,23 +65,26 @@ class CardResolver:
     """
 
     @staticmethod
-    def get_consecutive_attack(history: list[CardType]) -> int:
+    def get_consecutive_attack(history: list[PlayerHistoryItem]) -> int:
         """Count consecutive ATTACK cards from the end of history.
 
         Only ATTACK cards count toward the streak. COUNTER, DEFENSE, and
         all other card types break it.
 
+        Per design/16 D5, accepts list[PlayerHistoryItem] instead of
+        list[CardType]; internally reads item.card for the card type.
+
         Used externally by GameCore (cross-round retention).
 
         Args:
-            history: Chronological list of cards played in previous rounds.
+            history: Chronological list of PlayerHistoryItem entries.
 
         Returns:
             Number of consecutive ATTACK cards at the end of history.
         """
         count = 0
-        for card in reversed(history):
-            if card == CardType.ATTACK:
+        for item in reversed(history):
+            if item.card == CardType.ATTACK:
                 count += 1
             else:
                 break
