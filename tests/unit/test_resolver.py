@@ -51,10 +51,7 @@ def _setup_game_core(
     gm.player_2.energy = energy_2
     gm.player_1.statuses = list(statuses_1)
     gm.player_2.statuses = list(statuses_2)
-    gm._resolve_source = source
-    gm._resolve_opponent_card = opponent_card
-    gm._resolve_attack_streak = attack_streak
-    gm._resolve_had_defense_pre = had_defense_pre
+    gm.set_resolve_context(source, opponent_card, attack_streak, had_defense_pre)
     return gm
 
 
@@ -100,8 +97,12 @@ class TestCardResolverRegistry:
         before = len(CardResolverRegistry.get_resolvers(CardType.ATTACK))
         dummy = BuildResolver()
         CardResolverRegistry.register(CardType.ATTACK, dummy)
-        after = len(CardResolverRegistry.get_resolvers(CardType.ATTACK))
-        assert after == before + 1
+        try:
+            after = len(CardResolverRegistry.get_resolvers(CardType.ATTACK))
+            assert after == before + 1
+        finally:
+            # Cleanup: remove the dummy resolver to prevent test isolation issues
+            CardResolverRegistry._registry[CardType.ATTACK].pop()
 
 
 # =============================================================================

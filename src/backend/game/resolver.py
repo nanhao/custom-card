@@ -363,10 +363,7 @@ class CardResolver:
         # Execute each resolver with its context
         for resolver, source_id, opp_card, streak, had_defense in tasks:
             # Set resolution context on GameCore before invoking resolver
-            game_core._resolve_source = source_id
-            game_core._resolve_opponent_card = opp_card
-            game_core._resolve_attack_streak = streak
-            game_core._resolve_had_defense_pre = had_defense
+            game_core.set_resolve_context(source_id, opp_card, streak, had_defense)
             resolver.resolve(game_core, details)
 
         return ResolutionResult(details=list(details.details))

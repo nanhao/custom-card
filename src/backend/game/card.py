@@ -111,7 +111,7 @@ def get_card_def(card_type: CardType) -> CardDef:
         card_type: Any of the 7 CardType enum members.
 
     Returns:
-        Immutable CardDef with priority, effects, build_cost, etc.
+        Immutable CardDef with card_type, build_cost, display_name, icon.
     """
     return _CARD_DEFS[card_type]
 
