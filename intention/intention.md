@@ -313,3 +313,6 @@ PlayerState 还要维护一个生存期字段。
 }
 ```
 所有消费了RoundResult的地方都要相应改动，包括前端。
+
+# intention_id=18
+这是一个重构任务，intention\card_strings_report.md
