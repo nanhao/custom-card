@@ -1,0 +1,65 @@
+@startuml resolve_flow
+title Card Resolution Flow - Resolver Strategy Pattern
+
+participant "GameCore" as GC
+participant "CardResolver" as CR
+participant "CardResolverRegistry" as Registry
+participant "Resolver" as R
+participant "Player" as P
+
+== Resolution Start ==
+
+GC -> CR: resolve(game_core, cards_1, cards_2,\n p1_streak, p2_streak, ...)
+activate CR
+
+CR -> CR: create ResolveDetails()
+
+loop for each card in [cards_1, cards_2]
+    CR -> Registry: get_resolvers(card_type)
+    activate Registry
+    Registry --> CR: list[Resolver]
+    deactivate Registry
+
+    CR -> CR: sort resolvers by get_priority()\n (priority 11 before 10)
+
+    loop for each resolver
+        CR -> GC: set resolve context\n (source, opponent_card,\n streak, had_defense_pre)
+
+        CR -> R: resolve(game_core, details)
+        activate R
+
+        R -> GC: get_resolve_source()
+        GC --> R: "1" or "2"
+
+        R -> GC: get_resolve_opponent_card()
+        GC --> R: opponent's CardType
+
+        R -> GC: get_resolve_attack_streak()
+        GC --> R: streak count
+
+        R -> GC: get_resolve_had_defense_pre()
+        GC --> R: True or False
+
+        alt damage effect
+            R -> P: take_damage(amount)
+        else energy effect
+            R -> P: add_energy(amount)
+        else status effect
+            R -> P: grant_status(status_type)
+        end
+
+        R -> R: details.add("description")
+
+        deactivate R
+    end
+end
+
+CR -> CR: build ResolutionResult(details)
+CR --> GC: ResolutionResult
+deactivate CR
+
+== Resolution End ==
+
+GC -> GC: read player state to build AfterResolve
+
+@enduml

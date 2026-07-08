@@ -6,7 +6,7 @@ Test cases per design/11 test_cases.md §1 (TC-CD-01 ~ TC-CD-05).
 import pytest
 from dataclasses import FrozenInstanceError
 
-from src.backend.game.card import CardType, CardDef, EffectType, get_card_def, get_initial_draw_pile
+from src.backend.game.card import CardType, CardDef, get_card_def, get_initial_draw_pile
 
 
 class TestCardType:
@@ -30,47 +30,48 @@ class TestCardType:
 
 
 class TestGetCardDef:
-    """TC-CD-02, TC-CD-03, TC-CD-05: get_card_def correctness and immutability."""
+    """Per design/21: CardDef simplified — no effects, no priority; build_cost retained."""
 
-    def test_attack_priority(self):
-        """TC-CD-02: ATTACK → priority=10, single damage effect."""
+    def test_card_def_no_effects_field(self):
+        """TC-CD-01: CardDef no longer has effects field."""
         cd = get_card_def(CardType.ATTACK)
-        assert cd.priority == 10
-        assert cd.effects == ((EffectType.DAMAGE, 10),)
-        assert cd.build_cost == 1
+        with pytest.raises(AttributeError):
+            _ = cd.effects
 
-    def test_defense_priority(self):
-        """TC-CD-02: DEFENSE → priority=11."""
-        cd = get_card_def(CardType.DEFENSE)
-        assert cd.priority == 11
-        assert cd.build_cost == 1
+    def test_card_def_no_priority_field(self):
+        """TC-CD-02: CardDef no longer has priority field."""
+        cd = get_card_def(CardType.ATTACK)
+        with pytest.raises(AttributeError):
+            _ = cd.priority
 
-    def test_flex_multi_effects(self):
-        """TC-CD-02: FLEX → priority=None, two effects (grant_defense=11, flex_damage=10)."""
-        cd = get_card_def(CardType.FLEX)
-        assert cd.priority is None
-        assert cd.effects == ((EffectType.GRANT_DEFENSE, 11), (EffectType.FLEX_DAMAGE, 10))
+    def test_card_def_fields(self):
+        """TC-CD-01: CardDef has card_type, build_cost, display_name, icon only."""
+        cd = get_card_def(CardType.ATTACK)
+        assert cd.card_type == CardType.ATTACK
+        assert cd.build_cost == 1
+        assert cd.display_name
+        assert cd.icon
 
     def test_build_cost_counter(self):
-        """TC-CD-03: COUNTER → build_cost=2."""
+        """TC-CD-04: COUNTER → build_cost=2."""
         cd = get_card_def(CardType.COUNTER)
         assert cd.build_cost == 2
 
     def test_build_cost_flex(self):
-        """TC-CD-03: FLEX → build_cost=2."""
+        """TC-CD-04: FLEX → build_cost=2."""
         cd = get_card_def(CardType.FLEX)
         assert cd.build_cost == 2
 
     def test_build_cost_attack(self):
-        """TC-CD-03: ATTACK → build_cost=1."""
+        """TC-CD-04: ATTACK → build_cost=1."""
         cd = get_card_def(CardType.ATTACK)
         assert cd.build_cost == 1
 
     def test_card_def_immutable(self):
-        """TC-CD-05: CardDef is frozen — cannot modify fields."""
+        """CardDef is frozen — cannot modify fields."""
         cd = get_card_def(CardType.ATTACK)
         with pytest.raises(FrozenInstanceError):
-            cd.priority = 5  # type: ignore[misc]
+            cd.build_cost = 5  # type: ignore[misc]
 
     def test_display_name_set(self):
         """Verify each CardDef has a non-empty display_name."""
@@ -112,3 +113,12 @@ class TestGetInitialDrawPile:
         assert pile1 == pile2
         pile1[0] = CardType.FLEX
         assert pile2[0] == CardType.ATTACK
+
+
+class TestEffectTypeRemoved:
+    """TC-CD-03: EffectType enum has been removed."""
+
+    def test_effect_type_cannot_be_imported(self):
+        """TC-CD-03: Importing EffectType raises ImportError."""
+        with pytest.raises(ImportError):
+            from src.backend.game.card import EffectType  # noqa: F811

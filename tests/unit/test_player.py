@@ -179,3 +179,24 @@ class TestPlayerHistoryItem:
         a = PlayerHistoryItem(CardType.ATTACK, None)
         b = PlayerHistoryItem(CardType.DEFENSE, None)
         assert a != b
+
+
+class TestGrantStatus:
+    """TC-PS-01, TC-PS-02: grant_status (design/21)."""
+
+    def test_grant_status_on_empty(self):
+        """TC-PS-01: grant_status(DEFENSE) adds PlayerStatus with lifetime=1."""
+        p = Player(statuses=[])
+        p.grant_status(StatusType.DEFENSE)
+        assert len(p.statuses) == 1
+        assert p.statuses[0].status_type == StatusType.DEFENSE
+        assert p.statuses[0].lifetime == 1
+
+    def test_grant_status_appends_not_overwrites(self):
+        """TC-PS-02: grant_status appends, does not replace existing."""
+        p = Player(statuses=[PlayerStatus(StatusType.DEFENSE, 1)])
+        p.grant_status(StatusType.GUARD)
+        assert len(p.statuses) == 2
+        assert p.statuses[0].status_type == StatusType.DEFENSE
+        assert p.statuses[1].status_type == StatusType.GUARD
+        assert p.statuses[1].lifetime == 1

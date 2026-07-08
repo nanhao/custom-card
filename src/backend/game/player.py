@@ -129,6 +129,17 @@ class Player:
     # Statuses
     # ------------------------------------------------------------------
 
+    def grant_status(self, status_type: StatusType) -> None:
+        """Grant a status with lifetime=1, appending to the statuses list.
+
+        Per design/21: no deduplication — the caller is responsible for
+        ensuring no duplicate statuses are granted.
+
+        Args:
+            status_type: The status type to grant (e.g. StatusType.DEFENSE).
+        """
+        self.statuses.append(PlayerStatus(status_type, lifetime=1))
+
     def has_status(self, status_type: StatusType) -> bool:
         """Return True if the player has an active status of the given type.
 

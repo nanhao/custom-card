@@ -1,0 +1,126 @@
+@startuml class_diagram
+title Class Diagram - Resolver Strategy Pattern
+
+' --- Core types ---
+enum CardType {
+  ATTACK
+  DEFENSE
+  HEAVY
+  COUNTER
+  ENERGY
+  BUILD
+  FLEX
+}
+
+class CardDef {
+  card_type: CardType
+  build_cost: int
+  display_name: str
+  icon: str
+}
+
+' --- Resolver hierarchy ---
+abstract class Resolver {
+  {abstract} get_priority(): int
+  {abstract} resolve(GameCore, ResolveDetails): None
+}
+
+class AttackDamageResolver extends Resolver {
+  get_priority(): int
+  resolve(GameCore, ResolveDetails): None
+}
+
+class GrantDefenseResolver extends Resolver {
+  get_priority(): int
+  resolve(GameCore, ResolveDetails): None
+}
+
+class GrantGuardResolver extends Resolver {
+  get_priority(): int
+  resolve(GameCore, ResolveDetails): None
+}
+
+class HeavyDamageResolver extends Resolver {
+  get_priority(): int
+  resolve(GameCore, ResolveDetails): None
+}
+
+class ReflectResolver extends Resolver {
+  get_priority(): int
+  resolve(GameCore, ResolveDetails): None
+}
+
+class GainEnergyResolver extends Resolver {
+  get_priority(): int
+  resolve(GameCore, ResolveDetails): None
+}
+
+class FlexDamageResolver extends Resolver {
+  get_priority(): int
+  resolve(GameCore, ResolveDetails): None
+}
+
+class BuildResolver extends Resolver {
+  get_priority(): int
+  resolve(GameCore, ResolveDetails): None
+}
+
+' --- Registry ---
+class CardResolverRegistry {
+  {static} register(CardType, Resolver): None
+  {static} get_resolvers(CardType): list[Resolver]
+}
+
+' --- Orchestrator ---
+class CardResolver {
+  {static} get_consecutive_attack(list): int
+  {static} resolve(GameCore, list, list, int, int, bool, bool): ResolutionResult
+}
+
+' --- Data ---
+class ResolveDetails {
+  details: list[str]
+  add(str): None
+}
+
+class ResolutionResult {
+  details: list[str]
+}
+
+' --- Game state ---
+class GameCore {
+  player_1: Player
+  player_2: Player
+  get_resolve_source(): str
+  get_resolve_opponent_card(): CardType
+  get_resolve_attack_streak(): int
+  get_resolve_had_defense_pre(): bool
+}
+
+class Player {
+  hp: int
+  energy: int
+  statuses: list
+  take_damage(int): None
+  add_energy(int): None
+  grant_status(StatusType): None
+  has_status(StatusType): bool
+}
+
+enum StatusType {
+  DEFENSE
+  GUARD
+}
+
+' --- Relationships ---
+CardResolverRegistry "1" --> "*" Resolver : registers
+CardResolver --> CardResolverRegistry : queries
+CardResolver ..> ResolveDetails : creates and passes
+CardResolver ..> ResolutionResult : returns
+Resolver --> GameCore : reads context and modifies state
+Resolver --> ResolveDetails : records
+GameCore "1" --> "2" Player : owns
+Player --> StatusType : uses
+CardDef --> CardType : identifies
+
+@enduml

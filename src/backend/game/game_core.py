@@ -200,6 +200,33 @@ class GameCore:
         self.winner: str | None = None
         self.round_log: list[RoundResult] = []
 
+        # Resolution context — set by CardResolver before each Resolver.resolve() call.
+        # These are temporary per-resolver values read by Resolver subclasses.
+        self._resolve_source: str = ""
+        self._resolve_opponent_card: CardType = CardType.ATTACK
+        self._resolve_attack_streak: int = 0
+        self._resolve_had_defense_pre: bool = False
+
+    # ------------------------------------------------------------------
+    # Resolution context accessors (design/21 — for Resolver subclasses)
+    # ------------------------------------------------------------------
+
+    def get_resolve_source(self) -> str:
+        """Return the player currently being resolved: "1" or "2"."""
+        return self._resolve_source
+
+    def get_resolve_opponent_card(self) -> CardType:
+        """Return the card played by the opponent this round."""
+        return self._resolve_opponent_card
+
+    def get_resolve_attack_streak(self) -> int:
+        """Return the current player's consecutive attack count."""
+        return self._resolve_attack_streak
+
+    def get_resolve_had_defense_pre(self) -> bool:
+        """Return whether the current player had DEFENSE before this round."""
+        return self._resolve_had_defense_pre
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -268,33 +295,24 @@ class GameCore:
             hp_2=self.player_2.hp,
         )
 
-        # Step 2: Compute attack streaks from history
+        # Step 2: Compute pre-round state for resolution
         p1_streak = CardResolver.get_consecutive_attack(self.player_1.history)
         p2_streak = CardResolver.get_consecutive_attack(self.player_2.history)
+        p1_had_defense_pre = self.player_1.has_status(StatusType.DEFENSE)
+        p2_had_defense_pre = self.player_2.has_status(StatusType.DEFENSE)
 
-        # Step 3: Resolve
+        # Step 3: Resolve — Resolver subclasses directly modify player state
         resolution = CardResolver.resolve(
-            cards_1, cards_2,
-            self.player_1.statuses,
-            self.player_2.statuses,
-            p1_streak,
-            p2_streak,
+            game_core=self,
+            cards_1=cards_1,
+            cards_2=cards_2,
+            p1_streak=p1_streak,
+            p2_streak=p2_streak,
+            p1_had_defense_pre=p1_had_defense_pre,
+            p2_had_defense_pre=p2_had_defense_pre,
         )
 
-        # Step 4: Apply damage
-        self.player_1.take_damage(resolution.damage_1)
-        self.player_2.take_damage(resolution.damage_2)
-
-        # Step 5: Apply energy and statuses
-        self.player_1.add_energy(resolution.energy_delta_1)
-        self.player_2.add_energy(resolution.energy_delta_2)
-        # Replace statuses with PlayerStatus objects, lifetime=1 each (design/15 D5)
-        self.player_1.statuses = [
-            PlayerStatus(st, lifetime=1) for st in resolution.statuses_granted_1
-        ]
-        self.player_2.statuses = [
-            PlayerStatus(st, lifetime=1) for st in resolution.statuses_granted_2
-        ]
+        # Steps 4-5 removed: damage, energy, and statuses applied directly by Resolvers.
 
         # Step 6: Process BUILD construction
         self._process_build(cards_1[0], build_target_1, self.player_1)
