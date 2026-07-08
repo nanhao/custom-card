@@ -1,0 +1,109 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam activityBackgroundColor #FFFFFF
+skinparam activityBorderColor #333333
+
+title Converter 类型化重构 — 关键流程
+
+|Converter 类加载|
+start
+:加载 _CARD_MAP\n(CardType, play_index, build_index);
+
+partition "派生映射表" {
+  :从 _CARD_MAP 派生 ALL_CARD_TYPES\nfrozenset[CardType];
+  :从 _CARD_MAP 派生 _CARD_TYPE_ORDER\ndict[CardType, int];
+  :从 _CARD_MAP 派生 _PLAY_TO_INDEX\ndict[CardType, int];
+  :从 _CARD_MAP 派生 _BUILD_TO_INDEX\ndict[CardType, int];
+  :从 _CARD_MAP 派生 _INDEX_TO_ACTION\ndict[int, tuple[CardType, CardType|None]];
+}
+
+partition "派生 _BUILD_COST（新方式）" {
+  :遍历 _CARD_MAP 每个 (card_type, _, _);
+  :调用 get_card_def(card_type);
+  :取 CardDef.build_cost;
+  :存入 _BUILD_COST[card_type] = build_cost;
+  note right
+    旧方式：_CARD_MAP 第三列直接存 build_cost
+    新方式：从 CardDef 获取，消除重复
+  end note
+}
+
+stop
+
+|build_input_vector|
+start
+:接收 GameState + player_key;
+:获取目标玩家 PlayerState;
+:获取 hand: list[CardType];
+
+partition "手牌计数（新方式）" {
+  :遍历 hand 中每个 CardType;
+  :直接以 CardType 为键\n查找 _CARD_TYPE_ORDER;
+  note right
+    旧方式：card.value 转为 str 再查找
+    新方式：CardType 直接作为键
+  end note
+  :对应计数位 +1.0;
+}
+
+:拼接 HP/energy/round/cycle 元数据;
+:拼接 last_action 索引;
+:返回 15-d float 列表;
+stop
+
+|action_to_policy_index|
+start
+:接收 card: CardType,\nbuild_target: CardType | None;
+
+if (card == CardType.BUILD?) then (是)
+  if (build_target is None?) then (是)
+    :抛出 ValueError;
+  else (否)
+    :以 build_target 为键\n查找 _BUILD_TO_INDEX;
+    :返回偶数索引;
+  endif
+else (否)
+  if (build_target is not None?) then (是)
+    :抛出 ValueError;
+  else (否)
+    :以 card 为键\n查找 _PLAY_TO_INDEX;
+    :返回奇数索引;
+  endif
+endif
+stop
+
+|_make_mask_fn (AppManager)|
+start
+:接收 hand: list[CardType], energy: int;
+
+partition "构建合法卡牌集" {
+  :legal_cards = set(hand);
+  note right
+    直接是 set[CardType]
+    旧方式：set(card.value for card in hand)
+  end note
+}
+
+:can_build = (CardType.BUILD in legal_cards\nand energy > 0);
+
+partition "mask_fn 内部" {
+  :遍历 _PLAY_TO_INDEX\n键 CardType → 值 policy_index;
+  if (card_type not in legal_cards?) then (是)
+    :屏蔽该索引 (-inf);
+  else (否)
+    :保留原值;
+  endif
+
+  :遍历 _CARD_MAP\n(card_type, _, build_index);
+  if (not can_build\nor build_cost(card_type) > energy?) then (是)
+    :屏蔽该 build_index (-inf);
+  else (否)
+    :保留原值;
+  endif
+}
+
+:返回 mask_fn 闭包;
+stop
+
+@enduml

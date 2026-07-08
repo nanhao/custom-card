@@ -1,0 +1,106 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam classAttributeIconSize 0
+
+title Converter 类型化重构 — 类图
+
+package "ai/rnn_v1/model.py" as AI {
+  class "GRUPolicyModel" as PolicyModel {
+  }
+
+  class "GRUValueModel" as ValueModel {
+  }
+
+  note as AI_Constants
+    INPUT_SIZE = 15
+    HIDDEN_SIZE = 32
+    POLICY_OUTPUT_SIZE = 13
+  end note
+}
+
+package "game/card.py" as Game {
+  enum CardType {
+    ATTACK = "attack"
+    DEFENSE = "defense"
+    HEAVY = "heavy"
+    COUNTER = "counter"
+    ENERGY = "energy"
+    BUILD = "build"
+    FLEX = "flex"
+  }
+
+  class CardDef <<dataclass>> {
+    +card_type: CardType
+    +priority: int | None
+    +effects: tuple[(EffectType, int), ...]
+    +build_cost: int
+    +display_name: str
+    +icon: str
+  }
+
+}
+
+package "app/converter.py" as App {
+  class Converter {
+    +{static} NUM_CARD_TYPES: int = 7
+
+    _CARD_MAP: list[tuple[CardType, int|None, int]]
+    _ALL_CARD_TYPES: frozenset[CardType]
+    _CARD_TYPE_ORDER: dict[CardType, int]
+    _PLAY_TO_INDEX: dict[CardType, int]
+    _BUILD_TO_INDEX: dict[CardType, int]
+    _INDEX_TO_ACTION: dict[int, tuple[CardType, CardType|None]]
+    _BUILD_COST: dict[CardType, int]
+
+    +{static} build_input_vector(state: GameState, player_key: str) -> list[float]
+    +{static} action_to_policy_index(card: CardType, build_target: CardType | None) -> int
+    +{static} policy_index_to_action(index: int) -> tuple[CardType, CardType | None]
+    +{static} build_cost(card_type: CardType) -> int
+    -{static} _action_item_to_index(item: PlayerHistoryItem) -> int
+  }
+
+  note right of Converter::_BUILD_COST
+    派生自 get_card_def(c[0]).build_cost
+    不再从 _CARD_MAP 第三列取值
+  end note
+
+  note right of Converter::_CARD_MAP
+    元素: (CardType, play_index, build_index)
+    移除 build_cost 列
+  end note
+}
+
+package "app/app_manager.py" as AppMgr {
+  class AppManager {
+    -_session_store: SessionStore
+    -_policy_models: dict[str, nn.Module]
+    -_value_models: dict[str, nn.Module]
+
+    +create_game(mode, ai_name) -> (str, GameState)
+    +ai_select_action(state, hidden, ai_name) -> (CardType, CardType|None, list[float])
+    +ai_sample_action(state, h_pol, h_val, ai_name, temp, player_key) -> ...
+    +run_selfplay(config) -> SelfPlayResult
+    -_make_mask_fn(hand: list[CardType], energy: int) -> Callable
+  }
+
+  note right of AppManager::_make_mask_fn
+    hand 已是 list[CardType]
+    Converter._PLAY_TO_INDEX 键为 CardType
+    Converter.build_cost() 接收 CardType
+  end note
+}
+
+' Dependencies
+Converter ..> AI_Constants : imports\nINPUT_SIZE, POLICY_OUTPUT_SIZE
+Converter ..> CardType : uses
+Converter ..> get_card_def : calls (for _BUILD_COST)
+Converter ..> GameState : uses
+AppManager ..> Converter : uses\n_PLAY_TO_INDEX, _CARD_MAP,\nbuild_cost()
+AppManager ..> AI_Constants : imports\nINPUT_SIZE, HIDDEN_SIZE,\nPOLICY_OUTPUT_SIZE
+AppManager ..> PolicyModel : uses
+AppManager ..> ValueModel : uses
+CardDef --> CardType : card_type
+CardDef --> "EffectType" : effects
+
+@enduml

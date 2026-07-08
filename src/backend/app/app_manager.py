@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.ai.rnn_v1.model import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
+from src.backend.ai.rnn_v1.model import HIDDEN_SIZE, INPUT_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.app.converter import Converter
 from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.app.selfplay_runner import SelfPlayRunner
@@ -129,7 +129,7 @@ class AppManager:
         energy = state.players["2"].energy
         hand = state.players["2"].hand
 
-        x = torch.tensor(input_vector, dtype=torch.float32).view(1, 1, Converter.INPUT_SIZE)
+        x = torch.tensor(input_vector, dtype=torch.float32).view(1, 1, INPUT_SIZE)
         h = torch.tensor(hidden_state, dtype=torch.float32).view(1, 1, HIDDEN_SIZE)
         mask_fn = self._make_mask_fn(hand, energy)
 
@@ -173,7 +173,7 @@ class AppManager:
         energy = state.players[player_key].energy
         hand = state.players[player_key].hand
 
-        x = torch.tensor(input_vector, dtype=torch.float32).view(1, 1, Converter.INPUT_SIZE)
+        x = torch.tensor(input_vector, dtype=torch.float32).view(1, 1, INPUT_SIZE)
         h_pol = torch.tensor(hidden_state_policy, dtype=torch.float32).view(1, 1, HIDDEN_SIZE)
         h_val = torch.tensor(hidden_state_value, dtype=torch.float32).view(1, 1, HIDDEN_SIZE)
         mask_fn = self._make_mask_fn(hand, energy)
@@ -272,8 +272,8 @@ class AppManager:
         """Create a 13-d interleaved mask function closure (design/14).
 
         Per design/19 D7: hand is list[CardType], not list[str].
-        Internal lookups use card.value to get the string representation
-        for _PLAY_TO_INDEX and _CARD_MAP compatibility.
+        Per design/20: Converter._PLAY_TO_INDEX and _CARD_MAP use
+        CardType keys, no .value conversion needed.
 
         Odd indices (1,3,5,7,9,11): pure card plays.
             - Block cards not in hand.
@@ -282,9 +282,6 @@ class AppManager:
             - Block all if BUILD not in hand or energy == 0.
             - Otherwise, block targets exceeding available energy.
 
-        Per report 2026-07-08: derives index mappings from Converter
-        instead of maintaining a separate hardcoded copy.
-
         Args:
             hand: List of CardType in the player's hand.
             energy: Current energy of the player.
@@ -292,20 +289,21 @@ class AppManager:
         Returns:
             A callable mask_fn(logits: Tensor) -> Tensor.
         """
-        # Convert CardType list to string set for lookup compatibility.
-        legal_cards = {c.value for c in hand}
-        can_build = CardType.BUILD.value in legal_cards and energy > 0
+        # Per design/20: hand is already CardType, no .value conversion needed.
+        legal_cards = set(hand)
+        can_build = CardType.BUILD in legal_cards and energy > 0
 
         def mask_fn(logits: torch.Tensor) -> torch.Tensor:
             masked = logits.clone()
-            # Odd indices: block cards not in hand (derived from Converter._PLAY_TO_INDEX)
-            for card_str, idx in Converter._PLAY_TO_INDEX.items():
-                if card_str not in legal_cards:
+            # Odd indices: block cards not in hand (keys are CardType)
+            for card_type, idx in Converter._PLAY_TO_INDEX.items():
+                if card_type not in legal_cards:
                     masked[0, idx] = float('-inf')
 
-            # Even indices: block build actions if can't build or too expensive
-            for card_str, _, _, build_idx in Converter._CARD_MAP:
-                if not can_build or Converter.build_cost(card_str) > energy:
+            # Even indices: block build actions if can't build or too expensive.
+            # Per design/20: _CARD_MAP is (CardType, play_index, build_index).
+            for card_type, _, build_idx in Converter._CARD_MAP:
+                if not can_build or Converter.build_cost(card_type) > energy:
                     masked[0, build_idx] = float('-inf')
 
             return masked

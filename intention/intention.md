@@ -323,18 +323,23 @@ GameState 类中，禁止使用卡片、状态的字符串表示，必须用对�
 
 # intention_id=20
 这是一个重构任务。目前 converter 里面有
+INPUT_SIZE: int = 15
+POLICY_OUTPUT_SIZE: int = 13
+
 _CARD_MAP: list[tuple[str, int | None, int, int]] = [
-        ("attack",  1, 1, 2),
-        ("defense", 3, 1, 4),
-        ("heavy",   5, 1, 6),
-        ("counter", 7, 2, 8),
-        ("energy",  9, 1, 10),
-        ("build",   None, 1, 0),
-        ("flex",   11, 2, 12),
-    ]
-这里有两个问题：
+    ("attack",  1, 1, 2),
+    ("defense", 3, 1, 4),
+    ("heavy",   5, 1, 6),
+    ("counter", 7, 2, 8),
+    ("energy",  9, 1, 10),
+    ("build",   None, 1, 0),
+    ("flex",   11, 2, 12),
+]
+这里有三个问题：
 1，使用了字符串字面值，而不是引用 CardType
 2，build cost 是在 CardDef 里面有定义的，不要在这里重复定义
+3，INPUT_SIZE: int = 15
+POLICY_OUTPUT_SIZE: int = 13 这两个常量定义不应该放在这里，应该放在 ai 包，或许 ai 包里面已经有定义了也说不定
 
 # intention_id=21
 这是一个重构任务。目前 _process_effect 里面有大量的 if-else，这是不合理的。

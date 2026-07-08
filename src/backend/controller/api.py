@@ -288,7 +288,7 @@ def _register_routes(app: Flask) -> None:
             # PVE: auto-compute via AppManager
             app_manager: AppManager = app.config["APP_MANAGER"]
             try:
-                card_str, build_target_str, new_hidden_state = app_manager.ai_select_action(
+                card_type, build_target_type, new_hidden_state = app_manager.ai_select_action(
                     gm.get_state(), metadata["ai_state"], metadata["ai"]
                 )
             except ValueError as exc:
@@ -305,15 +305,16 @@ def _register_routes(app: Flask) -> None:
                     f"AI inference failed: {exc}", "AI_INFERENCE_ERROR", 500
                 )), 500
 
-            # Validate AI output (defense in depth)
-            if card_str not in Converter.ALL_CARD_TYPES:
+            # Validate AI output (defense in depth).
+            # Per design/20: ai_select_action returns CardType.
+            if card_type not in Converter.ALL_CARD_TYPES:
                 return jsonify(error_response(
-                    f"AI returned invalid card: {card_str!r}",
+                    f"AI returned invalid card: {card_type!r}",
                     "AI_INFERENCE_ERROR", 500
                 )), 500
 
-            cards_2 = [str_to_card(card_str)]
-            build_target_2 = str_to_card(build_target_str) if build_target_str else None
+            cards_2 = [card_type]
+            build_target_2 = build_target_type
         else:
             # PVP: deserialize cards_2 from request body
             cards_2_raw = data.get("cards_2", [])

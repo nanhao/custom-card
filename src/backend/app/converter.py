@@ -4,10 +4,15 @@ Per design/14: 15-d input vector with metadata (HP, energy, round, cycle)
 at the front, card counts in the middle, and policy-index-encoded last
 actions at the tail. Policy output is 13-d interleaved (build/play pairs).
 
+Per design/20: _CARD_MAP uses CardType enum instead of string literals;
+INPUT_SIZE/POLICY_OUTPUT_SIZE imported from ai.rnn_v1.model;
+build_cost derived from get_card_def() instead of duplicated in _CARD_MAP.
+
 All methods are stateless. No PyTorch dependency — pure data transformation.
 """
 
-from src.backend.game.card import CardType
+from src.backend.ai.rnn_v1.model import INPUT_SIZE, POLICY_OUTPUT_SIZE
+from src.backend.game.card import CardType, get_card_def
 from src.backend.game.game_state import GameState
 from src.backend.game.player import PlayerHistoryItem
 
@@ -20,63 +25,70 @@ class Converter:
     - Policy output: 13-d interleaved (even=build+target, odd=pure play)
     - Last action encoded as policy index, -1 when no history.
 
+    Per design/20: all card mappings use CardType enum; INPUT_SIZE,
+    POLICY_OUTPUT_SIZE imported from ai.rnn_v1.model; build_cost derived
+    from get_card_def().
+
     All methods are stateless. The class serves as a namespace for
     conversion logic bridging game domain types and AI model inputs.
     """
 
     NUM_CARD_TYPES: int = 7
-    INPUT_SIZE: int = 15
-    POLICY_OUTPUT_SIZE: int = 13
 
     # ------------------------------------------------------------------
     # Master card mapping table — single source of truth for all
-    # card↔index mappings (report 2026-07-08).
+    # card↔index mappings (design/20).
     #
-    # Format: (card_str, play_index, build_cost, build_index).
+    # Format: (card_type, play_index, build_index).
+    #   card_type: CardType enum member.
     #   play_index: odd-numbered policy output index (None if not directly playable).
-    #   build_cost: energy required to construct via BUILD card.
     #   build_index: even-numbered policy output index for build+target.
+    #
+    # Per design/20 D3: build_cost is NOT stored here; it is derived
+    # from get_card_def(card_type).build_cost to avoid duplication.
     #
     # All other mapping dicts (ALL_CARD_TYPES, _PLAY_TO_INDEX, etc.) are
     # derived from this single table.
     # ------------------------------------------------------------------
 
-    _CARD_MAP: list[tuple[str, int | None, int, int]] = [
-        ("attack",  1, 1, 2),
-        ("defense", 3, 1, 4),
-        ("heavy",   5, 1, 6),
-        ("counter", 7, 2, 8),
-        ("energy",  9, 1, 10),
-        ("build",   None, 1, 0),
-        ("flex",   11, 2, 12),
+    _CARD_MAP: list[tuple[CardType, int | None, int]] = [
+        (CardType.ATTACK,  1, 2),
+        (CardType.DEFENSE, 3, 4),
+        (CardType.HEAVY,   5, 6),
+        (CardType.COUNTER, 7, 8),
+        (CardType.ENERGY,  9, 10),
+        (CardType.BUILD,   None, 0),
+        (CardType.FLEX,   11, 12),
     ]
 
-    # Public set of all valid card strings
-    ALL_CARD_TYPES: frozenset[str] = frozenset(c[0] for c in _CARD_MAP)
+    # Public set of all valid CardType values
+    ALL_CARD_TYPES: frozenset[CardType] = frozenset(c[0] for c in _CARD_MAP)
 
     # ------------------------------------------------------------------
-    # Internal: card-string ↔ policy-index mapping tables
+    # Internal: CardType ↔ policy-index mapping tables
     # (all derived from _CARD_MAP)
     # ------------------------------------------------------------------
 
-    _CARD_TYPE_ORDER: dict[str, int] = {c[0]: i for i, c in enumerate(_CARD_MAP)}
+    _CARD_TYPE_ORDER: dict[CardType, int] = {c[0]: i for i, c in enumerate(_CARD_MAP)}
 
-    # Pure play actions: card_str → policy output index (odd numbers)
-    _PLAY_TO_INDEX: dict[str, int] = {
+    # Pure play actions: CardType → policy output index (odd numbers)
+    _PLAY_TO_INDEX: dict[CardType, int] = {
         c[0]: c[1] for c in _CARD_MAP if c[1] is not None
     }
 
-    # Build actions: build_target → policy output index (even numbers)
-    _BUILD_TO_INDEX: dict[str, int] = {c[0]: c[3] for c in _CARD_MAP}
+    # Build actions: build_target (CardType) → policy output index (even numbers)
+    _BUILD_TO_INDEX: dict[CardType, int] = {c[0]: c[2] for c in _CARD_MAP}
 
-    # Reverse: policy index → (card_str, build_target | None)
-    _INDEX_TO_ACTION: dict[int, tuple[str, str | None]] = {
-        **{c[3]: ("build", c[0]) for c in _CARD_MAP},
+    # Reverse: policy index → (card, build_target)
+    _INDEX_TO_ACTION: dict[int, tuple[CardType, CardType | None]] = {
+        **{c[2]: (CardType.BUILD, c[0]) for c in _CARD_MAP},
         **{c[1]: (c[0], None) for c in _CARD_MAP if c[1] is not None},
     }
 
-    # Build cost for mask_fn (by card string, used in AppManager)
-    _BUILD_COST: dict[str, int] = {c[0]: c[2] for c in _CARD_MAP}
+    # Build cost — derived from CardDef.build_cost (design/20 D3)
+    _BUILD_COST: dict[CardType, int] = {
+        c[0]: get_card_def(c[0]).build_cost for c in _CARD_MAP
+    }
 
     # ------------------------------------------------------------------
     # Input vector construction
@@ -87,8 +99,8 @@ class Converter:
         """Build the 15-d input vector from a GameState.
 
         Per design/19 D6: accepts GameState directly instead of dict.
-        Internal lookups use card.value to convert CardType → string
-        for _CARD_TYPE_ORDER compatibility.
+        Per design/20: _CARD_TYPE_ORDER uses CardType keys, so hand
+        CardType values are used directly without .value conversion.
 
         Args:
             state: GameState from GameCore.get_state().
@@ -117,11 +129,12 @@ class Converter:
         round_in_cycle = float(state.round_in_cycle)
         cycle = float(state.cycle)
 
-        # Card counts (indices 6-12): count each type in hand (per design/19 D6,
-        # use card.value to get the string key for _CARD_TYPE_ORDER lookup).
+        # Card counts (indices 6-12): count each type in hand.
+        # Per design/20: _CARD_TYPE_ORDER uses CardType keys, so we use
+        # card directly (hand is list[CardType]).
         counts = [0.0] * Converter.NUM_CARD_TYPES
         for card in this_player.hand:
-            idx = Converter._CARD_TYPE_ORDER.get(card.value)
+            idx = Converter._CARD_TYPE_ORDER.get(card)
             if idx is not None:
                 counts[idx] += 1.0
 
@@ -156,29 +169,31 @@ class Converter:
 
     @staticmethod
     def action_to_policy_index(
-        card_str: str, build_target: str | None,
+        card: CardType, build_target: CardType | None,
     ) -> int:
         """Convert game action (card + optional build target) to policy index.
 
+        Per design/20: parameters are CardType enum, not strings.
+
         Mapping:
-            Pure play → odd indices:  attack→1, defense→3, ...
-            Build+target → even indices:  build+build→0, build+attack→2, ...
+            Pure play → odd indices:  ATTACK→1, DEFENSE→3, ...
+            Build+target → even indices:  BUILD+ATTACK→2, ...
 
         Args:
-            card_str: Card played, e.g. "attack", "build".
-            build_target: Build target card, only meaningful when card_str="build".
+            card: CardType played, e.g. CardType.ATTACK, CardType.BUILD.
+            build_target: Build target CardType, only meaningful when card=BUILD.
 
         Returns:
             Policy output index (0-12).
 
         Raises:
-            ValueError: If card_str is unknown, or build_target is invalid/absent
+            ValueError: If card is unknown, or build_target is invalid/absent
                         for a build action, or present for a non-build action.
         """
-        if card_str == "build":
+        if card == CardType.BUILD:
             if build_target is None:
                 raise ValueError(
-                    "build_target is required when card_str is 'build'."
+                    "build_target is required when card is BUILD."
                 )
             idx = Converter._BUILD_TO_INDEX.get(build_target)
             if idx is None:
@@ -189,17 +204,19 @@ class Converter:
 
         if build_target is not None:
             raise ValueError(
-                f"build_target must be None for non-build card {card_str!r}, "
+                f"build_target must be None for non-build card {card!r}, "
                 f"got {build_target!r}"
             )
-        idx = Converter._PLAY_TO_INDEX.get(card_str)
+        idx = Converter._PLAY_TO_INDEX.get(card)
         if idx is None:
-            raise ValueError(f"Unknown card string: {card_str!r}")
+            raise ValueError(f"Unknown card type: {card!r}")
         return idx
 
     @staticmethod
-    def policy_index_to_action(index: int) -> tuple[str, str | None]:
-        """Decode policy output index to (card_str, build_target).
+    def policy_index_to_action(index: int) -> tuple[CardType, CardType | None]:
+        """Decode policy output index to (card, build_target).
+
+        Per design/20: returns CardType enum, not strings.
 
         Odd indices → pure play (build_target=None).
         Even indices → build + target.
@@ -208,31 +225,34 @@ class Converter:
             index: Policy output index (0-12).
 
         Returns:
-            (card_str, build_target) tuple.
+            (card, build_target) tuple of CardType.
 
         Raises:
             IndexError: If index is outside [0, 12].
         """
-        if index < 0 or index >= Converter.POLICY_OUTPUT_SIZE:
+        if index < 0 or index >= POLICY_OUTPUT_SIZE:
             raise IndexError(
                 f"Policy index {index} out of range "
-                f"[0, {Converter.POLICY_OUTPUT_SIZE - 1}]"
+                f"[0, {POLICY_OUTPUT_SIZE - 1}]"
             )
         return Converter._INDEX_TO_ACTION[index]
 
     @staticmethod
-    def build_cost(card_str: str) -> int:
-        """Return the build (energy) cost for a card type.
+    def build_cost(card_type: CardType) -> int:
+        """Return the build (energy) cost for a CardType.
+
+        Per design/20: parameter is CardType enum; cost derived from
+        get_card_def() via _BUILD_COST dict.
 
         Used by AppManager._make_mask_fn for energy-based masking.
 
         Args:
-            card_str: Card type string, e.g. "counter".
+            card_type: CardType enum member, e.g. CardType.COUNTER.
 
         Returns:
-            Build cost (1 or 2). Returns 999 for unknown card types.
+            Build cost (1 or 2). Returns 999 for unknown CardType values.
         """
-        return Converter._BUILD_COST.get(card_str, 999)
+        return Converter._BUILD_COST.get(card_type, 999)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -242,9 +262,9 @@ class Converter:
     def _action_item_to_index(item: PlayerHistoryItem) -> int:
         """Convert a PlayerHistoryItem to policy index.
 
-        Routes through action_to_policy_index using the .value of CardType
-        enums to produce the string representation expected by the public API.
+        Per design/20: passes item.card and item.build_target directly
+        as CardType to action_to_policy_index, no .value conversion needed.
         """
-        card_str = item.card.value
-        build_target_str = item.build_target.value if item.build_target else None
-        return Converter.action_to_policy_index(card_str, build_target_str)
+        return Converter.action_to_policy_index(
+            item.card, item.build_target
+        )

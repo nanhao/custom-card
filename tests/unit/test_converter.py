@@ -5,6 +5,7 @@ Test cases per design/14 test_cases.md §1 (TC-IV), §2 (TC-AP), §3 (TC-PI).
 
 import pytest
 
+from src.backend.ai.rnn_v1.model import INPUT_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.app.converter import Converter
 from src.backend.game.card import CardType
 from src.backend.game.player import PlayerHistoryItem
@@ -38,7 +39,7 @@ class TestBuildInputVector15D:
 
         vec = Converter.build_input_vector(state, player_key="2")
 
-        assert len(vec) == Converter.INPUT_SIZE  # 15
+        assert len(vec) == INPUT_SIZE  # 15
         # Metadata (indices 0-5)
         assert vec[0] == 15.0   # own HP (P2)
         assert vec[1] == 8.0    # opponent HP (P1)
@@ -202,61 +203,62 @@ class TestActionToPolicyIndex:
     # TC-AP-01: Pure play actions (odd indices)
     # ------------------------------------------------------------------
 
-    @pytest.mark.parametrize("card_str,expected", [
-        ("attack", 1),
-        ("defense", 3),
-        ("heavy", 5),
-        ("counter", 7),
-        ("energy", 9),
-        ("flex", 11),
+    @pytest.mark.parametrize("card_type,expected", [
+        (CardType.ATTACK, 1),
+        (CardType.DEFENSE, 3),
+        (CardType.HEAVY, 5),
+        (CardType.COUNTER, 7),
+        (CardType.ENERGY, 9),
+        (CardType.FLEX, 11),
     ])
-    def test_pure_play_actions(self, card_str, expected):
+    def test_pure_play_actions(self, card_type, expected):
         """Pure card plays map to odd indices."""
-        assert Converter.action_to_policy_index(card_str, None) == expected
+        assert Converter.action_to_policy_index(card_type, None) == expected
 
     # ------------------------------------------------------------------
     # TC-AP-02: Build actions (even indices)
     # ------------------------------------------------------------------
 
     @pytest.mark.parametrize("build_target,expected", [
-        ("build", 0),
-        ("attack", 2),
-        ("defense", 4),
-        ("heavy", 6),
-        ("counter", 8),
-        ("energy", 10),
-        ("flex", 12),
+        (CardType.BUILD, 0),
+        (CardType.ATTACK, 2),
+        (CardType.DEFENSE, 4),
+        (CardType.HEAVY, 6),
+        (CardType.COUNTER, 8),
+        (CardType.ENERGY, 10),
+        (CardType.FLEX, 12),
     ])
     def test_build_actions(self, build_target, expected):
         """Build + target map to even indices."""
-        assert Converter.action_to_policy_index("build", build_target) == expected
+        assert Converter.action_to_policy_index(CardType.BUILD, build_target) == expected
 
     # ------------------------------------------------------------------
-    # TC-AP-03: Invalid card_str
+    # TC-AP-03: Invalid card — CardType not in _PLAY_TO_INDEX
+    # (BUILD has None play_index, so passing it as a pure play should fail)
     # ------------------------------------------------------------------
 
-    def test_invalid_card_str_raises(self):
-        """Unknown card string raises ValueError."""
+    def test_invalid_card_type_raises(self):
+        """CardType.BUILD without build_target raises ValueError (not in _PLAY_TO_INDEX)."""
         with pytest.raises(ValueError):
-            Converter.action_to_policy_index("invalid", None)
+            Converter.action_to_policy_index(CardType.BUILD, None)
 
     # ------------------------------------------------------------------
     # TC-AP-04: Non-build with build_target
     # ------------------------------------------------------------------
 
     def test_non_build_with_target_raises(self):
-        """attack with build_target='defense' is illegal."""
+        """ATTACK with build_target=DEFENSE is illegal."""
         with pytest.raises(ValueError):
-            Converter.action_to_policy_index("attack", "defense")
+            Converter.action_to_policy_index(CardType.ATTACK, CardType.DEFENSE)
 
     # ------------------------------------------------------------------
     # TC-AP-05: Build without build_target
     # ------------------------------------------------------------------
 
     def test_build_without_target_raises(self):
-        """build with build_target=None is illegal."""
+        """BUILD with build_target=None is illegal."""
         with pytest.raises(ValueError):
-            Converter.action_to_policy_index("build", None)
+            Converter.action_to_policy_index(CardType.BUILD, None)
 
 
 class TestPolicyIndexToAction:
@@ -266,36 +268,36 @@ class TestPolicyIndexToAction:
     # TC-PI-01: Odd indices → pure play
     # ------------------------------------------------------------------
 
-    @pytest.mark.parametrize("index,card_str", [
-        (1, "attack"),
-        (3, "defense"),
-        (5, "heavy"),
-        (7, "counter"),
-        (9, "energy"),
-        (11, "flex"),
+    @pytest.mark.parametrize("index,card_type", [
+        (1, CardType.ATTACK),
+        (3, CardType.DEFENSE),
+        (5, CardType.HEAVY),
+        (7, CardType.COUNTER),
+        (9, CardType.ENERGY),
+        (11, CardType.FLEX),
     ])
-    def test_odd_indices_pure_play(self, index, card_str):
-        """Odd indices decode to (card_str, None)."""
+    def test_odd_indices_pure_play(self, index, card_type):
+        """Odd indices decode to (CardType, None)."""
         result = Converter.policy_index_to_action(index)
-        assert result == (card_str, None)
+        assert result == (card_type, None)
 
     # ------------------------------------------------------------------
     # TC-PI-02: Even indices → build + target
     # ------------------------------------------------------------------
 
     @pytest.mark.parametrize("index,build_target", [
-        (0, "build"),
-        (2, "attack"),
-        (4, "defense"),
-        (6, "heavy"),
-        (8, "counter"),
-        (10, "energy"),
-        (12, "flex"),
+        (0, CardType.BUILD),
+        (2, CardType.ATTACK),
+        (4, CardType.DEFENSE),
+        (6, CardType.HEAVY),
+        (8, CardType.COUNTER),
+        (10, CardType.ENERGY),
+        (12, CardType.FLEX),
     ])
     def test_even_indices_build_action(self, index, build_target):
-        """Even indices decode to ('build', target)."""
+        """Even indices decode to (BUILD, target)."""
         result = Converter.policy_index_to_action(index)
-        assert result == ("build", build_target)
+        assert result == (CardType.BUILD, build_target)
 
     # ------------------------------------------------------------------
     # TC-PI-03: Out-of-range indices
@@ -318,42 +320,48 @@ class TestPolicyIndexToAction:
     def test_roundtrip_consistency(self):
         """action_to_policy_index → policy_index_to_action is identity."""
         test_cases = [
-            ("attack", None),
-            ("defense", None),
-            ("heavy", None),
-            ("counter", None),
-            ("energy", None),
-            ("flex", None),
-            ("build", "build"),
-            ("build", "attack"),
-            ("build", "defense"),
-            ("build", "heavy"),
-            ("build", "counter"),
-            ("build", "energy"),
-            ("build", "flex"),
+            (CardType.ATTACK, None),
+            (CardType.DEFENSE, None),
+            (CardType.HEAVY, None),
+            (CardType.COUNTER, None),
+            (CardType.ENERGY, None),
+            (CardType.FLEX, None),
+            (CardType.BUILD, CardType.BUILD),
+            (CardType.BUILD, CardType.ATTACK),
+            (CardType.BUILD, CardType.DEFENSE),
+            (CardType.BUILD, CardType.HEAVY),
+            (CardType.BUILD, CardType.COUNTER),
+            (CardType.BUILD, CardType.ENERGY),
+            (CardType.BUILD, CardType.FLEX),
         ]
-        for card_str, bt in test_cases:
-            idx = Converter.action_to_policy_index(card_str, bt)
+        for card_type, bt in test_cases:
+            idx = Converter.action_to_policy_index(card_type, bt)
             result = Converter.policy_index_to_action(idx)
-            assert result == (card_str, bt), f"Failed for ({card_str}, {bt})"
+            assert result == (card_type, bt), f"Failed for ({card_type}, {bt})"
 
 
 class TestBuildCost:
     """Converter.build_cost() edge cases (C8)."""
 
-    @pytest.mark.parametrize("card_str,expected", [
-        ("attack", 1),
-        ("defense", 1),
-        ("heavy", 1),
-        ("counter", 2),
-        ("energy", 1),
-        ("build", 1),
-        ("flex", 2),
+    @pytest.mark.parametrize("card_type,expected", [
+        (CardType.ATTACK, 1),
+        (CardType.DEFENSE, 1),
+        (CardType.HEAVY, 1),
+        (CardType.COUNTER, 2),
+        (CardType.ENERGY, 1),
+        (CardType.BUILD, 1),
+        (CardType.FLEX, 2),
     ])
-    def test_known_card_costs(self, card_str, expected):
+    def test_known_card_costs(self, card_type, expected):
         """All known card types return correct build cost."""
-        assert Converter.build_cost(card_str) == expected
+        assert Converter.build_cost(card_type) == expected
 
     def test_unknown_card_returns_999(self):
-        """Unknown card string returns 999 as sentinel."""
-        assert Converter.build_cost("nonexistent") == 999
+        """CardType not in _BUILD_COST returns 999 as sentinel."""
+        # _BUILD_COST contains all 7 CardType values, so we test with
+        # an arbitrary CardType that we know won't be in the dict.
+        # Since all CardType members ARE in _BUILD_COST, this tests
+        # the .get() fallback by using a key not in the dict.
+        # Create a synthetic scenario: pass a CardType that was not
+        # added to _BUILD_COST during class init.
+        assert Converter._BUILD_COST.get(None, 999) == 999

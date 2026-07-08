@@ -20,7 +20,6 @@ import torch
 from src.backend.ai.registry import get_ai_info
 from src.backend.app.converter import Converter
 from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
-from src.backend.game.card import CardType
 from src.backend.game.game_core import GameCore
 from src.backend.log.structured_logger import LoggerBuilder
 
@@ -286,12 +285,13 @@ class SelfPlayRunner:
                 temp2=temp_p2,
             )
 
-            # Play the round
+            # Play the round.
+            # Per design/20: card1/card2 are already CardType from ai_sample_action.
             try:
                 gm.play_round(
-                    [CardType(card1)], [CardType(card2)],
-                    build_target_1=CardType(bt1) if bt1 else None,
-                    build_target_2=CardType(bt2) if bt2 else None,
+                    [card1], [card2],
+                    build_target_1=bt1,
+                    build_target_2=bt2,
                 )
             except ValueError as exc:
                 print(
