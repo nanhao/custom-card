@@ -1,7 +1,8 @@
 """Card type definitions for the custom card game v2 (design/11).
 
-This module defines the CardType enum (7 values) and the CardDef dataclass
-holding per-card static metadata (priority, effects, build_cost, etc.).
+This module defines the CardType enum (7 values), the EffectType enum (7 values),
+and the CardDef dataclass holding per-card static metadata (priority, effects,
+build_cost, etc.).
 
 Per architecture D1, CardType serves as identifier only; CardDef carries
 the full effect specification used by CardResolver.
@@ -26,6 +27,23 @@ class CardType(Enum):
     FLEX = "flex"
 
 
+class EffectType(Enum):
+    """All card effect types used by CardResolver.
+
+    Values are short string identifiers used for serialization.
+    Per report 2026-07-08: eliminates bare-string effect_type comparisons
+    in resolver.py by providing compile-time-checkable enum members.
+    """
+
+    DAMAGE = "damage"
+    GRANT_DEFENSE = "grant_defense"
+    GRANT_GUARD = "grant_guard"
+    REFLECT = "reflect"
+    GAIN_ENERGY = "gain_energy"
+    FLEX_DAMAGE = "flex_damage"
+    BUILD = "build"
+
+
 @dataclass(frozen=True)
 class CardDef:
     """Per-card static metadata (design/11 interfaces.md §1).
@@ -45,7 +63,7 @@ class CardDef:
 
     card_type: CardType
     priority: int | None
-    effects: tuple[tuple[str, int], ...]
+    effects: tuple[tuple[EffectType, int], ...]
     build_cost: int
     display_name: str
     icon: str
@@ -59,7 +77,7 @@ _CARD_DEFS: dict[CardType, CardDef] = {
     CardType.ATTACK: CardDef(
         card_type=CardType.ATTACK,
         priority=10,
-        effects=(("damage", 10),),
+        effects=((EffectType.DAMAGE, 10),),
         build_cost=1,
         display_name="攻击",
         icon="⚔️",
@@ -67,7 +85,7 @@ _CARD_DEFS: dict[CardType, CardDef] = {
     CardType.DEFENSE: CardDef(
         card_type=CardType.DEFENSE,
         priority=11,
-        effects=(("grant_defense", 11), ("grant_guard", 11)),
+        effects=((EffectType.GRANT_DEFENSE, 11), (EffectType.GRANT_GUARD, 11)),
         build_cost=1,
         display_name="防御",
         icon="🛡️",
@@ -75,7 +93,7 @@ _CARD_DEFS: dict[CardType, CardDef] = {
     CardType.HEAVY: CardDef(
         card_type=CardType.HEAVY,
         priority=10,
-        effects=(("damage", 10),),
+        effects=((EffectType.DAMAGE, 10),),
         build_cost=1,
         display_name="重击",
         icon="💥",
@@ -83,7 +101,7 @@ _CARD_DEFS: dict[CardType, CardDef] = {
     CardType.COUNTER: CardDef(
         card_type=CardType.COUNTER,
         priority=11,
-        effects=(("grant_defense", 11), ("reflect", 10)),
+        effects=((EffectType.GRANT_DEFENSE, 11), (EffectType.REFLECT, 10)),
         build_cost=2,
         display_name="反击",
         icon="↩️",
@@ -91,7 +109,7 @@ _CARD_DEFS: dict[CardType, CardDef] = {
     CardType.ENERGY: CardDef(
         card_type=CardType.ENERGY,
         priority=10,
-        effects=(("gain_energy", 10),),
+        effects=((EffectType.GAIN_ENERGY, 10),),
         build_cost=1,
         display_name="聚能",
         icon="⚡",
@@ -99,7 +117,7 @@ _CARD_DEFS: dict[CardType, CardDef] = {
     CardType.BUILD: CardDef(
         card_type=CardType.BUILD,
         priority=10,
-        effects=(("build", 10),),
+        effects=((EffectType.BUILD, 10),),
         build_cost=1,
         display_name="构建",
         icon="🔨",
@@ -107,7 +125,7 @@ _CARD_DEFS: dict[CardType, CardDef] = {
     CardType.FLEX: CardDef(
         card_type=CardType.FLEX,
         priority=None,  # Multi-priority: effects carry their own priorities
-        effects=(("grant_defense", 11), ("flex_damage", 10)),
+        effects=((EffectType.GRANT_DEFENSE, 11), (EffectType.FLEX_DAMAGE, 10)),
         build_cost=2,
         display_name="攻守兼备",
         icon="⚖️",

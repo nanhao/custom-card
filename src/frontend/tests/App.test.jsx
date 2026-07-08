@@ -4,12 +4,24 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../src/App.jsx';
 
+const MOCK_CARDS = [
+  { type: 'attack', display_name: 'Attack', icon: 'A', build_cost: 1, priority: 10 },
+  { type: 'defense', display_name: 'Defense', icon: 'D', build_cost: 1, priority: 11 },
+  { type: 'heavy', display_name: 'Heavy', icon: 'H', build_cost: 1, priority: 10 },
+  { type: 'counter', display_name: 'Counter', icon: 'C', build_cost: 2, priority: 11 },
+  { type: 'energy', display_name: 'Energy', icon: 'E', build_cost: 1, priority: 10 },
+  { type: 'build', display_name: 'Build', icon: 'B', build_cost: 1, priority: 10 },
+  { type: 'flex', display_name: 'Flex', icon: 'F', build_cost: 2, priority: null },
+];
+
 vi.mock('../src/api.js', () => ({
   createGame: vi.fn(),
   getState: vi.fn(),
   playRound: vi.fn(),
   deleteGame: vi.fn(),
   listAis: vi.fn(),
+  getMyPiles: vi.fn(),
+  fetchCards: vi.fn(() => Promise.resolve({ cards: MOCK_CARDS })),
 }));
 import * as api from '../src/api.js';
 

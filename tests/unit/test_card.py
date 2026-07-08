@@ -6,7 +6,7 @@ Test cases per design/11 test_cases.md §1 (TC-CD-01 ~ TC-CD-05).
 import pytest
 from dataclasses import FrozenInstanceError
 
-from src.backend.game.card import CardType, CardDef, get_card_def, get_initial_draw_pile
+from src.backend.game.card import CardType, CardDef, EffectType, get_card_def, get_initial_draw_pile
 
 
 class TestCardType:
@@ -36,7 +36,7 @@ class TestGetCardDef:
         """TC-CD-02: ATTACK → priority=10, single damage effect."""
         cd = get_card_def(CardType.ATTACK)
         assert cd.priority == 10
-        assert cd.effects == (("damage", 10),)
+        assert cd.effects == ((EffectType.DAMAGE, 10),)
         assert cd.build_cost == 1
 
     def test_defense_priority(self):
@@ -49,7 +49,7 @@ class TestGetCardDef:
         """TC-CD-02: FLEX → priority=None, two effects (grant_defense=11, flex_damage=10)."""
         cd = get_card_def(CardType.FLEX)
         assert cd.priority is None
-        assert cd.effects == (("grant_defense", 11), ("flex_damage", 10))
+        assert cd.effects == ((EffectType.GRANT_DEFENSE, 11), (EffectType.FLEX_DAMAGE, 10))
 
     def test_build_cost_counter(self):
         """TC-CD-03: COUNTER → build_cost=2."""

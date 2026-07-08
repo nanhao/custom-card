@@ -42,6 +42,7 @@ from src.backend.controller.serializers import (
     round_result_to_dict,
     str_to_card,
 )
+from src.backend.game.card import CardType, get_card_def
 from src.backend.game.session_store import SessionStore
 
 # ---------------------------------------------------------------------------
@@ -179,6 +180,32 @@ def _register_routes(app: Flask) -> None:
         """
         ais = list_ais()
         return jsonify({"ais": ais}), 200
+
+    # ------------------------------------------------------------------
+    # GET /api/cards — Card Metadata
+    # ------------------------------------------------------------------
+
+    @app.route("/api/cards", methods=["GET"])
+    def list_cards():
+        """Return metadata for all card types.
+
+        Success: 200 OK with {"cards": [{"type": "attack", "display_name": "\u653b\u51fb", ...}]}
+        """
+        cards = []
+        for ct in CardType:
+            cd = get_card_def(ct)
+            cards.append({
+                "type": ct.value,
+                "display_name": cd.display_name,
+                "icon": cd.icon,
+                "build_cost": cd.build_cost,
+                "priority": cd.priority,
+                "effects": [
+                    {"type": et.value, "priority": pri}
+                    for et, pri in cd.effects
+                ],
+            })
+        return jsonify({"cards": cards}), 200
 
     # ------------------------------------------------------------------
     # GET /api/games/{game_id} — Get State

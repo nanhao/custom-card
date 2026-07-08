@@ -11,18 +11,24 @@
 import './App.css';
 
 // =========================================================================
-// Display constants — 7 card types (v2)
+// Helper — build derived lookup tables from cardMeta (from API)
 // =========================================================================
 
-const CARD_NAMES = {
-  attack: 'Attack', defense: 'Defense', heavy: 'Heavy',
-  counter: 'Counter', energy: 'Energy', build: 'Build', flex: 'Flex',
-};
-const CARD_ICONS = {
-  attack: '\u2694\uFE0F', defense: '\uD83D\uDEE1\uFE0F', heavy: '\uD83D\uDCA5',
-  counter: '\u21A9\uFE0F', energy: '\u26A1', build: '\uD83D\uDD28', flex: '\u2696\uFE0F',
-};
-const CARD_ORDER = ['attack', 'defense', 'heavy', 'counter', 'energy', 'build', 'flex'];
+function buildLookups(cardMeta) {
+  if (!cardMeta) return { names: {}, icons: {}, order: [], costs: {} };
+  return {
+    names: Object.fromEntries(cardMeta.map(c => [c.type, c.display_name])),
+    icons: Object.fromEntries(cardMeta.map(c => [c.type, c.icon])),
+    order: cardMeta.map(c => c.type),
+    costs: Object.fromEntries(cardMeta.map(c => [c.type, c.build_cost])),
+  };
+}
+
+// =========================================================================
+// Display constants (fallback for before API loads)
+// =========================================================================
+
+const FALLBACK_ORDER = ['attack', 'defense', 'heavy', 'counter', 'energy', 'build', 'flex'];
 
 /** Count occurrences of a card in a hand array. */
 function countInHand(hand, card) {
@@ -35,6 +41,7 @@ function countInHand(hand, card) {
 
 export default function GameBoard({
   state,
+  cardMeta,
   phase,
   mode,
   aiName,
@@ -53,6 +60,10 @@ export default function GameBoard({
   onClosePiles,
 }) {
   if (!state) return null;
+
+  // Derive lookup tables from API metadata (or use fallback order)
+  const { names: CARD_NAMES, icons: CARD_ICONS, order: apiOrder, costs: CARD_COSTS } = buildLookups(cardMeta);
+  const cardOrder = apiOrder.length > 0 ? apiOrder : FALLBACK_ORDER;
 
   // =========================================================================
   // Banner
@@ -150,7 +161,7 @@ export default function GameBoard({
       if (phase === 'select') {
         return (
           <div className="card-grid">
-            {CARD_ORDER.map(card => {
+            {cardOrder.map(card => {
               const cnt = countInHand(pH.hand, card);
               return (
                 <button key={card} className={`card-btn card-${card}`}
@@ -195,7 +206,7 @@ export default function GameBoard({
               🎮 Player 2's Hand ({pO.hand.length} cards)
             </div>
             <div className="card-grid">
-              {CARD_ORDER.map(card => {
+              {cardOrder.map(card => {
                 const cnt = countInHand(pO.hand, card);
                 return (
                   <button key={card} className={`card-btn card-${card}`}
@@ -419,8 +430,8 @@ export default function GameBoard({
               当前能量：<span style={{ color: 'var(--energy)', fontWeight: 700 }}>{state.players['1'].energy}</span>
             </div>
             <div className="build-grid">
-              {CARD_ORDER.map(card => {
-                const cost = (card === 'counter' || card === 'flex') ? 2 : 1;
+              {cardOrder.map(card => {
+                const cost = CARD_COSTS[card] || 1;
                 const canAfford = cost <= state.players['1'].energy;
                 return (
                   <button key={card} className={`build-card card-${card}`}

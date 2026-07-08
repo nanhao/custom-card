@@ -9,7 +9,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 
 from dataclasses import dataclass, field
 
-from src.backend.game.card import CardType, get_card_def
+from src.backend.game.card import CardType, EffectType, get_card_def
 from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus, has_active_status
 
@@ -25,13 +25,13 @@ class Effect:
         source_player: "1" or "2" — which player produced this effect.
         priority: 10 or 11 — resolution priority.
         source_card: The CardType that produced this effect.
-        effect_type: String identifier for the effect logic.
+        effect_type: EffectType enum member identifying the effect logic.
     """
 
     source_player: str
     priority: int
     source_card: CardType
-    effect_type: str
+    effect_type: EffectType
 
 
 @dataclass
@@ -197,7 +197,7 @@ def _process_effect(
     detail = ""
     src = effect.source_player
 
-    if effect.effect_type == "grant_defense":
+    if effect.effect_type == EffectType.GRANT_DEFENSE:
         if src == "1":
             statuses_1 = list(statuses_1) + [StatusType.DEFENSE]
             detail = "P1 gains defense"
@@ -205,7 +205,7 @@ def _process_effect(
             statuses_2 = list(statuses_2) + [StatusType.DEFENSE]
             detail = "P2 gains defense"
 
-    elif effect.effect_type == "grant_guard":
+    elif effect.effect_type == EffectType.GRANT_GUARD:
         if src == "1" and p1_had_defense_pre:
             if StatusType.GUARD not in statuses_1:
                 statuses_1 = list(statuses_1) + [StatusType.GUARD]
@@ -215,7 +215,7 @@ def _process_effect(
                 statuses_2 = list(statuses_2) + [StatusType.GUARD]
                 detail = "P2 gains GUARD (consecutive defense)"
 
-    elif effect.effect_type == "damage":
+    elif effect.effect_type == EffectType.DAMAGE:
         if effect.source_card == CardType.ATTACK:
             streak = p1_attack_streak if src == "1" else p2_attack_streak
             raw = min(streak + 1, MAX_ATTACK_STREAK_DAMAGE)
@@ -245,7 +245,7 @@ def _process_effect(
                 else:
                     detail = "P2 Heavy Strike blocked by P1 GUARD"
 
-    elif effect.effect_type == "reflect":
+    elif effect.effect_type == EffectType.REFLECT:
         if opp_card in (CardType.ATTACK, CardType.HEAVY):
             if src == "1":
                 dmg_2 += 1
@@ -254,7 +254,7 @@ def _process_effect(
                 dmg_1 += 1
                 detail = f"P2 Counter reflects {opp_card.value} → P1 takes 1"
 
-    elif effect.effect_type == "gain_energy":
+    elif effect.effect_type == EffectType.GAIN_ENERGY:
         if src == "1":
             energy_1 += 1
             detail = "P1 gains 1 energy"
@@ -262,7 +262,7 @@ def _process_effect(
             energy_2 += 1
             detail = "P2 gains 1 energy"
 
-    elif effect.effect_type == "flex_damage":
+    elif effect.effect_type == EffectType.FLEX_DAMAGE:
         if src == "1":
             if StatusType.DEFENSE not in statuses_2:
                 dmg_2 += 1
@@ -276,7 +276,7 @@ def _process_effect(
             else:
                 detail = "P2 FLEX damage blocked by P1 defense"
 
-    elif effect.effect_type == "build":
+    elif effect.effect_type == EffectType.BUILD:
         detail = f"P{src} BUILD — no immediate effect"
 
     return dmg_1, dmg_2, energy_1, energy_2, statuses_1, statuses_2, detail

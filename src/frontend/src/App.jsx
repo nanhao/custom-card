@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createGame, getState, playRound, deleteGame, listAis, getMyPiles } from './api.js';
+import { createGame, getState, playRound, deleteGame, listAis, getMyPiles, fetchCards } from './api.js';
 import GameBoard from './GameBoard.jsx';
 import './App.css';
 
@@ -24,6 +24,7 @@ export default function App() {
   // ---- Game state (active only when screen === 'game') ----
   const [gameId, setGameId] = useState(null);
   const [state, setState] = useState(null);
+  const [cardMeta, setCardMeta] = useState(null);  // card metadata from API
   const [phase, setPhase] = useState('loading'); // loading | select | reveal | gameover
   const [p1Card, setP1Card] = useState(null);    // buffered Player 1 card
   const [roundLog, setRoundLog] = useState([]);    // accumulated round results
@@ -36,7 +37,10 @@ export default function App() {
   // ---- Pile viewer state ----
   const [pileViewer, setPileViewer] = useState(null); // null | { draw_pile: [...], discard_pile: [...] }
 
-  // ---- Cleanup game on unmount ----
+  // ---- Load card metadata on mount ----
+  useEffect(() => {
+    fetchCards().then(data => setCardMeta(data.cards)).catch(() => {});
+  }, []);
   useEffect(() => {
     return () => { if (gameId) deleteGame(gameId).catch(() => {}); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -334,6 +338,7 @@ export default function App() {
       {error && <div className="error-banner">{error}</div>}
       <GameBoard
         state={state}
+        cardMeta={cardMeta}
         phase={phase}
         mode={mode}
         aiName={aiName}

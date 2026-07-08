@@ -76,6 +76,17 @@ export async function listAis() {
   return data;
 }
 
+/**
+ * Fetch card type metadata (names, icons, costs, etc.).
+ * @returns {{ cards: Array<{type: string, display_name: string, icon: string, build_cost: number}> }}
+ */
+export async function fetchCards() {
+  const resp = await fetch(`${API_BASE}/cards`);
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+  return data;
+}
+
 /** Delete a game session. */
 export async function deleteGame(gameId) {
   const resp = await fetch(`${API_BASE}/games/${gameId}`, {

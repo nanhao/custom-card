@@ -22,6 +22,7 @@ from src.backend.ai.rnn_v1.model import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.app.converter import Converter
 from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.app.selfplay_runner import SelfPlayRunner
+from src.backend.game.card import CardType
 from src.backend.game.game_core import GameCore
 from src.backend.game.session_store import SessionStore
 
@@ -270,6 +271,9 @@ class AppManager:
             - Block all if BUILD not in hand or energy == 0.
             - Otherwise, block targets exceeding available energy.
 
+        Per report 2026-07-08: derives index mappings from Converter
+        instead of maintaining a separate hardcoded copy.
+
         Args:
             hand: List of card strings in the player's hand.
             energy: Current energy of the player.
@@ -278,32 +282,19 @@ class AppManager:
             A callable mask_fn(logits: Tensor) -> Tensor.
         """
         legal_cards = set(hand)
-        can_build = "build" in legal_cards and energy > 0
+        can_build = CardType.BUILD.value in legal_cards and energy > 0
 
         def mask_fn(logits: torch.Tensor) -> torch.Tensor:
             masked = logits.clone()
-            # Odd indices (1,3,5,7,9,11): pure card plays
-            pure_play_cards = [
-                (1, "attack"), (3, "defense"), (5, "heavy"),
-                (7, "counter"), (9, "energy"), (11, "flex"),
-            ]
-            for idx, card_str in pure_play_cards:
+            # Odd indices: block cards not in hand (derived from Converter._PLAY_TO_INDEX)
+            for card_str, idx in Converter._PLAY_TO_INDEX.items():
                 if card_str not in legal_cards:
-                    masked[0, idx] = float("-inf")
+                    masked[0, idx] = float('-inf')
 
-            # Even indices (0,2,4,6,8,10,12): build + target
-            # Block all build actions if can't build
-            build_indices = [0, 2, 4, 6, 8, 10, 12]
-            build_targets = ["build", "attack", "defense", "heavy",
-                             "counter", "energy", "flex"]
-            if not can_build:
-                for idx in build_indices:
-                    masked[0, idx] = float("-inf")
-            else:
-                for idx, target_str in zip(build_indices, build_targets):
-                    cost = Converter.build_cost(target_str)
-                    if cost > energy:
-                        masked[0, idx] = float("-inf")
+            # Even indices: block build actions if can't build or too expensive
+            for card_str, _, _, build_idx in Converter._CARD_MAP:
+                if not can_build or Converter.build_cost(card_str) > energy:
+                    masked[0, build_idx] = float('-inf')
 
             return masked
 

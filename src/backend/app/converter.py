@@ -27,77 +27,55 @@ class Converter:
     INPUT_SIZE: int = 15
     POLICY_OUTPUT_SIZE: int = 13
 
+    # ------------------------------------------------------------------
+    # Master card mapping table — single source of truth for all
+    # card↔index mappings (report 2026-07-08).
+    #
+    # Format: (card_str, play_index, build_cost, build_index).
+    #   play_index: odd-numbered policy output index (None if not directly playable).
+    #   build_cost: energy required to construct via BUILD card.
+    #   build_index: even-numbered policy output index for build+target.
+    #
+    # All other mapping dicts (ALL_CARD_TYPES, _PLAY_TO_INDEX, etc.) are
+    # derived from this single table.
+    # ------------------------------------------------------------------
+
+    _CARD_MAP: list[tuple[str, int | None, int, int]] = [
+        ("attack",  1, 1, 2),
+        ("defense", 3, 1, 4),
+        ("heavy",   5, 1, 6),
+        ("counter", 7, 2, 8),
+        ("energy",  9, 1, 10),
+        ("build",   None, 1, 0),
+        ("flex",   11, 2, 12),
+    ]
+
     # Public set of all valid card strings
-    ALL_CARD_TYPES: frozenset[str] = frozenset({
-        "attack", "defense", "heavy", "counter", "energy", "build", "flex",
-    })
+    ALL_CARD_TYPES: frozenset[str] = frozenset(c[0] for c in _CARD_MAP)
 
     # ------------------------------------------------------------------
     # Internal: card-string ↔ policy-index mapping tables
+    # (all derived from _CARD_MAP)
     # ------------------------------------------------------------------
+
+    _CARD_TYPE_ORDER: dict[str, int] = {c[0]: i for i, c in enumerate(_CARD_MAP)}
 
     # Pure play actions: card_str → policy output index (odd numbers)
     _PLAY_TO_INDEX: dict[str, int] = {
-        "attack": 1,
-        "defense": 3,
-        "heavy": 5,
-        "counter": 7,
-        "energy": 9,
-        "flex": 11,
+        c[0]: c[1] for c in _CARD_MAP if c[1] is not None
     }
 
     # Build actions: build_target → policy output index (even numbers)
-    _BUILD_TO_INDEX: dict[str, int] = {
-        "build": 0,
-        "attack": 2,
-        "defense": 4,
-        "heavy": 6,
-        "counter": 8,
-        "energy": 10,
-        "flex": 12,
-    }
+    _BUILD_TO_INDEX: dict[str, int] = {c[0]: c[3] for c in _CARD_MAP}
 
     # Reverse: policy index → (card_str, build_target | None)
     _INDEX_TO_ACTION: dict[int, tuple[str, str | None]] = {
-        0: ("build", "build"),
-        1: ("attack", None),
-        2: ("build", "attack"),
-        3: ("defense", None),
-        4: ("build", "defense"),
-        5: ("heavy", None),
-        6: ("build", "heavy"),
-        7: ("counter", None),
-        8: ("build", "counter"),
-        9: ("energy", None),
-        10: ("build", "energy"),
-        11: ("flex", None),
-        12: ("build", "flex"),
+        **{c[3]: ("build", c[0]) for c in _CARD_MAP},
+        **{c[1]: (c[0], None) for c in _CARD_MAP if c[1] is not None},
     }
 
     # Build cost for mask_fn (by card string, used in AppManager)
-    _BUILD_COST: dict[str, int] = {
-        "build": 1,
-        "attack": 1,
-        "defense": 1,
-        "heavy": 1,
-        "counter": 2,
-        "energy": 1,
-        "flex": 2,
-    }
-
-    # ------------------------------------------------------------------
-    # Card-string ↔ card-type-index (for card counting)
-    # ------------------------------------------------------------------
-
-    _CARD_TYPE_ORDER: dict[str, int] = {
-        "attack": 0,
-        "defense": 1,
-        "heavy": 2,
-        "counter": 3,
-        "energy": 4,
-        "build": 5,
-        "flex": 6,
-    }
+    _BUILD_COST: dict[str, int] = {c[0]: c[2] for c in _CARD_MAP}
 
     # ------------------------------------------------------------------
     # Input vector construction
