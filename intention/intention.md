@@ -227,6 +227,10 @@ PlayerState 还要维护一个生存期字段。
 序列化、RoundResult 等等及其他有引用到 status 的地方，都改为引用类，避免代码里到处分散着各种 status 字符串字面量。
 
 # intention_id=16
+这是个代码重构任务。Player.history 的类型应该改为 list[PlayerHistoryItem]，而 build_history不需要了
+
+# intention_id=17
+```
 这是个优化任务。目前，RoundResult 的字段非常散：
     # Phase 1: After card resolution
     round: int
