@@ -72,8 +72,8 @@ def round_result_to_dict(rr: RoundResult) -> dict:
         "hp_2_after": rr.hp_2_after,
         "energy_1_after": rr.energy_1_after,
         "energy_2_after": rr.energy_2_after,
-        "statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_1],
-        "statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_2],
+        "statuses_1": [ps.to_dict() for ps in rr.statuses_1],
+        "statuses_2": [ps.to_dict() for ps in rr.statuses_2],
         "details": rr.details,
         "is_game_over": rr.is_game_over,
         "winner": rr.winner,
@@ -84,8 +84,8 @@ def round_result_to_dict(rr: RoundResult) -> dict:
         "after_round_in_cycle": rr.after_round_in_cycle,
         "after_hp_1": rr.after_hp_1,
         "after_hp_2": rr.after_hp_2,
-        "after_statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_1],
-        "after_statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_2],
+        "after_statuses_1": [ps.to_dict() for ps in rr.after_statuses_1],
+        "after_statuses_2": [ps.to_dict() for ps in rr.after_statuses_2],
     }
 
 

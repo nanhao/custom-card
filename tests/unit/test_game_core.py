@@ -415,7 +415,7 @@ class TestGetStateHistoryFormat:
 
 
 class TestStatusLifecycle:
-    """TC-GS-01 ~ TC-GS-06: PlayerStatus lifecycle in GameCore."""
+    """TC-GS-01 ~ TC-GS-08: PlayerStatus lifecycle in GameCore."""
 
     def test_play_round_statuses_are_playerstatus(self):
         """TC-GS-01: RoundResult statuses_1 are PlayerStatus (pre-tick snapshot).
@@ -435,8 +435,9 @@ class TestStatusLifecycle:
         assert isinstance(result.statuses_1[0], PlayerStatus)
         assert result.statuses_1[0].status_type == StatusType.DEFENSE
         assert result.statuses_1[0].lifetime == 1
-        # Post-tick: player statuses are empty
+        # Post-tick: both players have empty statuses
         assert gm.player_1.statuses == []
+        assert result.statuses_2 == []
 
     def test_tick_reduces_lifetime_and_removes_expired(self):
         """TC-GS-02: _tick_status_lifetimes reduces lifetime, removes expired."""

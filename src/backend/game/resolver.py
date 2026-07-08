@@ -10,7 +10,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType, get_card_def
-from src.backend.game.player_state import StatusType, PlayerStatus
+from src.backend.game.player_state import StatusType, PlayerStatus, has_active_status
 
 # Maximum damage from consecutive attack streak
 MAX_ATTACK_STREAK_DAMAGE = 3
@@ -116,14 +116,8 @@ class CardResolver:
             ResolutionResult with damage, energy deltas, and granted statuses.
         """
         # Track whether defensive status was pre-existing (for grant_guard logic).
-        p1_had_defense_pre = any(
-            ps.status_type == StatusType.DEFENSE and ps.lifetime > 0
-            for ps in player_1_statuses
-        )
-        p2_had_defense_pre = any(
-            ps.status_type == StatusType.DEFENSE and ps.lifetime > 0
-            for ps in player_2_statuses
-        )
+        p1_had_defense_pre = has_active_status(player_1_statuses, StatusType.DEFENSE)
+        p2_had_defense_pre = has_active_status(player_2_statuses, StatusType.DEFENSE)
 
         # Working state — start empty; all statuses must be re-granted by effects each round.
         # player_1_statuses/player_2_statuses are only used for had_defense_pre checks.

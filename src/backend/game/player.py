@@ -10,7 +10,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType
-from src.backend.game.player_state import StatusType, PlayerStatus
+from src.backend.game.player_state import StatusType, PlayerStatus, has_active_status
 
 # Energy cap per design/11 intention §1
 MAX_ENERGY = 5
@@ -136,6 +136,7 @@ class Player:
         """Return True if the player has an active status of the given type.
 
         Only statuses with lifetime > 0 are considered active (design/15 D3).
+        Delegates to has_active_status() in player_state.py.
 
         Args:
             status_type: The status type to check for (e.g. StatusType.DEFENSE).
@@ -144,7 +145,4 @@ class Player:
             True if any PlayerStatus in statuses matches the type and has
             lifetime > 0.
         """
-        return any(
-            ps.status_type == status_type and ps.lifetime > 0
-            for ps in self.statuses
-        )
+        return has_active_status(self.statuses, status_type)

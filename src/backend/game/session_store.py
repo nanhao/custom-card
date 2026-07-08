@@ -52,10 +52,34 @@ def _is_new_status_format(statuses: list | None) -> bool:
 
     New format: [{"type": "defense", "lifetime": 1}]
     Old format: ["defense"]
+
+    Returns False for None or empty list — treat as empty in either format.
     """
     if not statuses:
         return False
     return isinstance(statuses[0], dict)
+
+
+def _deserialize_status_list(data: dict, key: str) -> list:
+    """Deserialize a status list from a save dict, handling both formats.
+
+    New format (design/15): [{"type": "defense", "lifetime": 1}]
+    Old format (legacy):    ["defense"]
+
+    Skips malformed entries with a warning instead of crashing.
+    """
+    raw = data.get(key, [])
+    if not _is_new_status_format(raw):
+        return raw
+    result = []
+    for d in raw:
+        try:
+            result.append(PlayerStatus(StatusType(d["type"]), d["lifetime"]))
+        except (KeyError, ValueError, TypeError) as exc:
+            logger.warning(
+                "Skipping invalid status entry in %s: %s — %s", key, d, exc
+            )
+    return result
 
 
 def _serialize_player(player: Player) -> dict:
@@ -68,10 +92,7 @@ def _serialize_player(player: Player) -> dict:
     return {
         "hp": player.hp,
         "energy": player.energy,
-        "statuses": [
-            {"type": ps.status_type.value, "lifetime": ps.lifetime}
-            for ps in player.statuses
-        ],
+        "statuses": [ps.to_dict() for ps in player.statuses],
         "hand": [_card_to_str(c) for c in player.hand],
         "draw_pile": [_card_to_str(c) for c in player.draw_pile],
         "discard_pile": [_card_to_str(c) for c in player.discard_pile],
@@ -125,8 +146,8 @@ def _serialize_round_result(rr: RoundResult) -> dict:
         "hp_2_after": rr.hp_2_after,
         "energy_1_after": rr.energy_1_after,
         "energy_2_after": rr.energy_2_after,
-        "statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_1],
-        "statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_2],
+        "statuses_1": [ps.to_dict() for ps in rr.statuses_1],
+        "statuses_2": [ps.to_dict() for ps in rr.statuses_2],
         "details": rr.details,
         "is_game_over": rr.is_game_over,
         "winner": rr.winner,
@@ -137,8 +158,8 @@ def _serialize_round_result(rr: RoundResult) -> dict:
         "after_round_in_cycle": rr.after_round_in_cycle,
         "after_hp_1": rr.after_hp_1,
         "after_hp_2": rr.after_hp_2,
-        "after_statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_1],
-        "after_statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_2],
+        "after_statuses_1": [ps.to_dict() for ps in rr.after_statuses_1],
+        "after_statuses_2": [ps.to_dict() for ps in rr.after_statuses_2],
     }
 
 
@@ -157,8 +178,8 @@ def _deserialize_round_result(data: dict) -> RoundResult:
         hp_2_after=data["hp_2_after"],
         energy_1_after=data.get("energy_1_after", 0),
         energy_2_after=data.get("energy_2_after", 0),
-        statuses_1=[PlayerStatus(StatusType(d["type"]), d["lifetime"]) for d in data.get("statuses_1", [])] if _is_new_status_format(data.get("statuses_1")) else data.get("statuses_1", []),
-        statuses_2=[PlayerStatus(StatusType(d["type"]), d["lifetime"]) for d in data.get("statuses_2", [])] if _is_new_status_format(data.get("statuses_2")) else data.get("statuses_2", []),
+        statuses_1=_deserialize_status_list(data, "statuses_1"),
+        statuses_2=_deserialize_status_list(data, "statuses_2"),
         details=data["details"],
         is_game_over=data["is_game_over"],
         winner=data["winner"],
@@ -169,8 +190,8 @@ def _deserialize_round_result(data: dict) -> RoundResult:
         after_round_in_cycle=data.get("after_round_in_cycle", data.get("round_in_cycle", 1)),
         after_hp_1=data.get("after_hp_1", data.get("hp_1_after", 20)),
         after_hp_2=data.get("after_hp_2", data.get("hp_2_after", 20)),
-        after_statuses_1=[PlayerStatus(StatusType(d["type"]), d["lifetime"]) for d in data.get("after_statuses_1", [])] if _is_new_status_format(data.get("after_statuses_1")) else data.get("after_statuses_1", []),
-        after_statuses_2=[PlayerStatus(StatusType(d["type"]), d["lifetime"]) for d in data.get("after_statuses_2", [])] if _is_new_status_format(data.get("after_statuses_2")) else data.get("after_statuses_2", []),
+        after_statuses_1=_deserialize_status_list(data, "after_statuses_1"),
+        after_statuses_2=_deserialize_status_list(data, "after_statuses_2"),
     )
 
 

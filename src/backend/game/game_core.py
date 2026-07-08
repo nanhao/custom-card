@@ -209,6 +209,8 @@ class GameCore:
             hp_2_after=self.player_2.hp,
             energy_1_after=self.player_1.energy,
             energy_2_after=self.player_2.energy,
+            # Phase 1 snapshot — defensive copy to prevent _tick_status_lifetimes
+            # from mutating PlayerStatus.lifetime in the RoundResult (design/15 D4).
             statuses_1=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_1.statuses],
             statuses_2=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_2.statuses],
             details=resolution.details,
@@ -284,10 +286,7 @@ class GameCore:
             result = {
                 "hp": p.hp,
                 "energy": p.energy,
-                "statuses": [
-                    {"type": ps.status_type.value, "lifetime": ps.lifetime}
-                    for ps in p.statuses
-                ],
+                "statuses": [ps.to_dict() for ps in p.statuses],
                 "hand": [c.value for c in p.hand],
                 "history": [
                     PlayerHistoryItem(card=c, build_target=bt)
@@ -329,8 +328,8 @@ class GameCore:
                     "hp_2_after": rr.hp_2_after,
                     "energy_1_after": rr.energy_1_after,
                     "energy_2_after": rr.energy_2_after,
-                    "statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_1],
-                    "statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_2],
+                    "statuses_1": [ps.to_dict() for ps in rr.statuses_1],
+                    "statuses_2": [ps.to_dict() for ps in rr.statuses_2],
                     "details": rr.details,
                     "is_game_over": rr.is_game_over,
                     "winner": rr.winner,
@@ -341,8 +340,8 @@ class GameCore:
                     "after_round_in_cycle": rr.after_round_in_cycle,
                     "after_hp_1": rr.after_hp_1,
                     "after_hp_2": rr.after_hp_2,
-                    "after_statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_1],
-                    "after_statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_2],
+                    "after_statuses_1": [ps.to_dict() for ps in rr.after_statuses_1],
+                    "after_statuses_2": [ps.to_dict() for ps in rr.after_statuses_2],
                 }
                 for rr in self.round_log
             ],
@@ -355,18 +354,18 @@ class GameCore:
     def _tick_status_lifetimes(self) -> None:
         """Decrement all status lifetimes by 1, remove expired ones.
 
-        Per design/15 D4: operates directly on PlayerStatus.lifetime fields.
-        No longer maintains separate _status_lifetimes arrays.
+        Per design/15 D4: operates on PlayerStatus.lifetime.
+        Creates new PlayerStatus objects instead of mutating in place
+        to prevent side effects on any external references.
         """
         for player in (self.player_1, self.player_2):
             if player is None:
                 continue
-            new_statuses = []
-            for ps in player.statuses:
-                ps.lifetime -= 1
-                if ps.lifetime > 0:
-                    new_statuses.append(ps)
-            player.statuses = new_statuses
+            player.statuses = [
+                PlayerStatus(ps.status_type, ps.lifetime - 1)
+                for ps in player.statuses
+                if ps.lifetime > 1
+            ]
 
     def _start_cycle(self) -> None:
         """Start a new cycle: reclaim hands → shuffle discard into draw → draw 7 cards.

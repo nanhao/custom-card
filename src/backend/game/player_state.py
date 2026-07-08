@@ -35,3 +35,34 @@ class PlayerStatus:
 
     status_type: StatusType
     lifetime: int
+
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-safe dict: {"type": "defense", "lifetime": 1}.
+
+        Used by get_state(), session_store, and serializers to produce
+        a consistent serialization format.
+        """
+        return {"type": self.status_type.value, "lifetime": self.lifetime}
+
+    def __repr__(self) -> str:
+        """Compact repr: PlayerStatus(DEFENSE, lifetime=1)."""
+        return f"PlayerStatus({self.status_type.name}, lifetime={self.lifetime})"
+
+
+# ---------------------------------------------------------------------------
+# Module-level utilities
+# ---------------------------------------------------------------------------
+
+
+def has_active_status(
+    statuses: list[PlayerStatus], status_type: StatusType
+) -> bool:
+    """Return True if any status in the list matches type and has lifetime > 0.
+
+    Shared by Player.has_status() and CardResolver._resolve()'s pre-existing
+    status checks (design/15 §3.2, §6.1).
+    """
+    return any(
+        ps.status_type == status_type and ps.lifetime > 0
+        for ps in statuses
+    )
