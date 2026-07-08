@@ -103,10 +103,10 @@ export default function GameBoard({
             return <span key={i} className={`hist-chip chip-${cardStr}`} title={label}>{label}</span>;
           });
 
-          // Status tags
+          // Status tags — design/15: statuses are now [{"type": "defense", "lifetime": 1}]
           const statusTags = (p.statuses || []).map((s, i) => {
-            const tagCls = s === '联防' ? 'tag-guard' : 'tag-defense';
-            return <span key={i} className={`status-tag ${tagCls}`}>{s}</span>;
+            const tagCls = s.type === 'guard' ? 'tag-guard' : 'tag-defense';
+            return <span key={i} className={`status-tag ${tagCls}`}>{s.type}</span>;
           });
 
           // Display name

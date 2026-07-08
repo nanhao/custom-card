@@ -73,7 +73,7 @@ describe('PVE flow', () => {
         cards_1: ['attack'], cards_2: ['defense'],
         damage_1: 0, damage_2: 0, hp_1_after: 20, hp_2_after: 20,
         energy_1_after: 0, energy_2_after: 0,
-        statuses_1: [], statuses_2: ['defense'],
+        statuses_1: [], statuses_2: [{"type": "defense", "lifetime": 1}],
         details: ['blocked'], is_game_over: false, winner: null, cycle_ended: false,
       },
       state: { ...PVE_STATE, round: 2, round_in_cycle: 2 },

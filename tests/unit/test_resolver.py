@@ -4,6 +4,7 @@ Test cases per design/11 test_cases.md §3 (TC-RS-01 ~ TC-RS-11).
 """
 
 from src.backend.game.card import CardType
+from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.game.resolver import CardResolver
 
 
@@ -22,7 +23,7 @@ class TestPriorityLayered:
         )
         assert result.damage_1 == 0
         assert result.damage_2 == 0
-        assert "defense" in result.statuses_granted_1
+        assert StatusType.DEFENSE in result.statuses_granted_1
 
 
 class TestSamePriority:
@@ -57,24 +58,24 @@ class TestFlexMultiPriority:
         )
         assert result.damage_1 == 0
         assert result.damage_2 == 1
-        assert "defense" in result.statuses_granted_1
+        assert StatusType.DEFENSE in result.statuses_granted_1
 
 
 class TestDefenseGrantGuard:
     """TC-RS-04: Defense grants guard when player already has defense."""
 
     def test_defense_with_pre_existing_defense(self):
-        """P1 already has 'defense', P1 plays DEFENSE → gets '联防'."""
+        """P1 already has DEFENSE, P1 plays DEFENSE → gets GUARD."""
         result = CardResolver.resolve(
             cards_1=[CardType.DEFENSE],
             cards_2=[CardType.HEAVY],
-            player_1_statuses=["defense"],
+            player_1_statuses=[PlayerStatus(StatusType.DEFENSE, 1)],
             player_2_statuses=[],
             p1_attack_streak=0,
             p2_attack_streak=0,
         )
         assert result.damage_1 == 0
-        assert "联防" in result.statuses_granted_1
+        assert StatusType.GUARD in result.statuses_granted_1
 
 
 class TestCounterReflect:
@@ -92,7 +93,7 @@ class TestCounterReflect:
         )
         assert result.damage_1 == 0
         assert result.damage_2 == 1
-        assert "defense" in result.statuses_granted_1
+        assert StatusType.DEFENSE in result.statuses_granted_1
 
     def test_counter_vs_heavy(self):
         """TC-RS-05b: COUNTER vs HEAVY."""
@@ -106,7 +107,7 @@ class TestCounterReflect:
         )
         assert result.damage_1 == 1  # HEAVY penetrates defense
         assert result.damage_2 == 1  # Reflect
-        assert "defense" in result.statuses_granted_1
+        assert StatusType.DEFENSE in result.statuses_granted_1
 
     def test_counter_vs_defense(self):
         """TC-RS-05c: COUNTER vs DEFENSE."""
@@ -120,8 +121,8 @@ class TestCounterReflect:
         )
         assert result.damage_1 == 0
         assert result.damage_2 == 0
-        assert "defense" in result.statuses_granted_1
-        assert "defense" in result.statuses_granted_2
+        assert StatusType.DEFENSE in result.statuses_granted_1
+        assert StatusType.DEFENSE in result.statuses_granted_2
 
     def test_counter_vs_energy(self):
         """TC-RS-05d: COUNTER vs ENERGY — no reflect."""
@@ -136,7 +137,7 @@ class TestCounterReflect:
         assert result.damage_1 == 0
         assert result.damage_2 == 0
         assert result.energy_delta_2 == 1
-        assert "defense" in result.statuses_granted_1
+        assert StatusType.DEFENSE in result.statuses_granted_1
 
 
 class TestEnergyGain:
@@ -233,7 +234,7 @@ class TestAttackStreak:
             cards_1=[CardType.ATTACK],
             cards_2=[CardType.DEFENSE],
             player_1_statuses=[],
-            player_2_statuses=["defense"],
+            player_2_statuses=[PlayerStatus(StatusType.DEFENSE, 1)],
             p1_attack_streak=3,
             p2_attack_streak=0,
         )
@@ -244,26 +245,26 @@ class TestHeavyStrike:
     """TC-RS-10, TC-RS-11: Heavy strike mechanics."""
 
     def test_heavy_blocked_by_guard(self):
-        """TC-RS-10: HEAVY blocked by '联防' (granted same-round by DEFENSE with pre-existing defense)."""
+        """TC-RS-10: HEAVY blocked by GUARD (granted same-round by DEFENSE with pre-existing defense)."""
         result = CardResolver.resolve(
             cards_1=[CardType.HEAVY],
             cards_2=[CardType.DEFENSE],
             player_1_statuses=[],
-            player_2_statuses=["defense"],  # pre-existing from previous round
+            player_2_statuses=[PlayerStatus(StatusType.DEFENSE, 1)],  # pre-existing from previous round
             p1_attack_streak=0,
             p2_attack_streak=0,
         )
-        # P2's DEFENSE grants 联防 (had defense pre-round), blocks HEAVY
+        # P2's DEFENSE grants GUARD (had defense pre-round), blocks HEAVY
         assert result.damage_2 == 0
-        assert "联防" in result.statuses_granted_2
+        assert StatusType.GUARD in result.statuses_granted_2
 
     def test_heavy_not_blocked_by_defense(self):
-        """TC-RS-11: HEAVY NOT blocked by plain 'defense'."""
+        """TC-RS-11: HEAVY NOT blocked by plain defense."""
         result = CardResolver.resolve(
             cards_1=[CardType.HEAVY],
             cards_2=[CardType.ATTACK],
             player_1_statuses=[],
-            player_2_statuses=["defense"],
+            player_2_statuses=[PlayerStatus(StatusType.DEFENSE, 1)],
             p1_attack_streak=0,
             p2_attack_streak=0,
         )

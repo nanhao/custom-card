@@ -10,6 +10,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType, get_card_def
+from src.backend.game.player_state import StatusType, PlayerStatus
 
 # Maximum damage from consecutive attack streak
 MAX_ATTACK_STREAK_DAMAGE = 3
@@ -50,8 +51,8 @@ class ResolutionResult:
     damage_2: int
     energy_delta_1: int = 0
     energy_delta_2: int = 0
-    statuses_granted_1: list[str] = field(default_factory=list)
-    statuses_granted_2: list[str] = field(default_factory=list)
+    statuses_granted_1: list[StatusType] = field(default_factory=list)
+    statuses_granted_2: list[StatusType] = field(default_factory=list)
     details: list[str] = field(default_factory=list)
 
 
@@ -89,8 +90,8 @@ class CardResolver:
     def resolve(
         cards_1: list[CardType],
         cards_2: list[CardType],
-        player_1_statuses: list[str],
-        player_2_statuses: list[str],
+        player_1_statuses: list[PlayerStatus],
+        player_2_statuses: list[PlayerStatus],
         p1_attack_streak: int,
         p2_attack_streak: int,
     ) -> ResolutionResult:
@@ -115,13 +116,19 @@ class CardResolver:
             ResolutionResult with damage, energy deltas, and granted statuses.
         """
         # Track whether defensive status was pre-existing (for grant_guard logic).
-        p1_had_defense_pre = "defense" in player_1_statuses
-        p2_had_defense_pre = "defense" in player_2_statuses
+        p1_had_defense_pre = any(
+            ps.status_type == StatusType.DEFENSE and ps.lifetime > 0
+            for ps in player_1_statuses
+        )
+        p2_had_defense_pre = any(
+            ps.status_type == StatusType.DEFENSE and ps.lifetime > 0
+            for ps in player_2_statuses
+        )
 
         # Working state — start empty; all statuses must be re-granted by effects each round.
         # player_1_statuses/player_2_statuses are only used for had_defense_pre checks.
-        statuses_1: list[str] = []
-        statuses_2: list[str] = []
+        statuses_1: list[StatusType] = []
+        statuses_2: list[StatusType] = []
         dmg_1 = 0
         dmg_2 = 0
         energy_1 = 0
@@ -172,8 +179,8 @@ class CardResolver:
 
 def _process_effect(
     effect: Effect,
-    statuses_1: list[str],
-    statuses_2: list[str],
+    statuses_1: list[StatusType],
+    statuses_2: list[StatusType],
     p1_had_defense_pre: bool,
     p2_had_defense_pre: bool,
     p1_attack_streak: int,
@@ -183,7 +190,7 @@ def _process_effect(
     dmg_2: int,
     energy_1: int,
     energy_2: int,
-) -> tuple[int, int, int, int, list[str], list[str], str]:
+) -> tuple[int, int, int, int, list[StatusType], list[StatusType], str]:
     """Process a single Effect and return updated accumulators + detail string.
 
     Returns a tuple of (dmg_1, dmg_2, energy_1, energy_2, statuses_1, statuses_2, detail).
@@ -194,51 +201,51 @@ def _process_effect(
 
     if effect.effect_type == "grant_defense":
         if src == "1":
-            statuses_1 = list(statuses_1) + ["defense"]
+            statuses_1 = list(statuses_1) + [StatusType.DEFENSE]
             detail = "P1 gains defense"
         elif src == "2":
-            statuses_2 = list(statuses_2) + ["defense"]
+            statuses_2 = list(statuses_2) + [StatusType.DEFENSE]
             detail = "P2 gains defense"
 
     elif effect.effect_type == "grant_guard":
         if src == "1" and p1_had_defense_pre:
-            if "联防" not in statuses_1:
-                statuses_1 = list(statuses_1) + ["联防"]
-                detail = "P1 gains 联防 (consecutive defense)"
+            if StatusType.GUARD not in statuses_1:
+                statuses_1 = list(statuses_1) + [StatusType.GUARD]
+                detail = "P1 gains GUARD (consecutive defense)"
         elif src == "2" and p2_had_defense_pre:
-            if "联防" not in statuses_2:
-                statuses_2 = list(statuses_2) + ["联防"]
-                detail = "P2 gains 联防 (consecutive defense)"
+            if StatusType.GUARD not in statuses_2:
+                statuses_2 = list(statuses_2) + [StatusType.GUARD]
+                detail = "P2 gains GUARD (consecutive defense)"
 
     elif effect.effect_type == "damage":
         if effect.source_card == CardType.ATTACK:
             streak = p1_attack_streak if src == "1" else p2_attack_streak
             raw = min(streak + 1, MAX_ATTACK_STREAK_DAMAGE)
             if src == "1":
-                if "defense" not in statuses_2:
+                if StatusType.DEFENSE not in statuses_2:
                     dmg_2 += raw
                     detail = f"P1 Attack(streak={streak}) → P2 takes {raw}"
                 else:
                     detail = "P1 Attack blocked by P2 defense"
             else:
-                if "defense" not in statuses_1:
+                if StatusType.DEFENSE not in statuses_1:
                     dmg_1 += raw
                     detail = f"P2 Attack(streak={streak}) → P1 takes {raw}"
                 else:
                     detail = "P2 Attack blocked by P1 defense"
         elif effect.source_card == CardType.HEAVY:
             if src == "1":
-                if "联防" not in statuses_2:
+                if StatusType.GUARD not in statuses_2:
                     dmg_2 += 1
                     detail = "P1 Heavy Strike → P2 takes 1"
                 else:
-                    detail = "P1 Heavy Strike blocked by P2 联防"
+                    detail = "P1 Heavy Strike blocked by P2 GUARD"
             else:
-                if "联防" not in statuses_1:
+                if StatusType.GUARD not in statuses_1:
                     dmg_1 += 1
                     detail = "P2 Heavy Strike → P1 takes 1"
                 else:
-                    detail = "P2 Heavy Strike blocked by P1 联防"
+                    detail = "P2 Heavy Strike blocked by P1 GUARD"
 
     elif effect.effect_type == "reflect":
         if opp_card in (CardType.ATTACK, CardType.HEAVY):
@@ -259,13 +266,13 @@ def _process_effect(
 
     elif effect.effect_type == "flex_damage":
         if src == "1":
-            if "defense" not in statuses_2:
+            if StatusType.DEFENSE not in statuses_2:
                 dmg_2 += 1
                 detail = "P1 FLEX damage → P2 takes 1"
             else:
                 detail = "P1 FLEX damage blocked by P2 defense"
         else:
-            if "defense" not in statuses_1:
+            if StatusType.DEFENSE not in statuses_1:
                 dmg_1 += 1
                 detail = "P2 FLEX damage → P1 takes 1"
             else:

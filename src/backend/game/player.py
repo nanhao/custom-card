@@ -10,6 +10,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType
+from src.backend.game.player_state import StatusType, PlayerStatus
 
 # Energy cap per design/11 intention §1
 MAX_ENERGY = 5
@@ -39,7 +40,7 @@ class Player:
     Attributes:
         hp: Current HP, default 20, clamped to >= 0.
         energy: Current energy, default 0, clamped to [0, 5].
-        statuses: List of active status strings (e.g. "defense", "联防").
+        statuses: List of active PlayerStatus instances (design/15).
         hand: Cards currently in hand.
         draw_pile: Cards remaining in the draw pile.
         discard_pile: Cards in the discard pile.
@@ -51,7 +52,7 @@ class Player:
 
     hp: int = 20
     energy: int = 0
-    statuses: list[str] = field(default_factory=list)
+    statuses: list[PlayerStatus] = field(default_factory=list)
     hand: list[CardType] = field(default_factory=list)
     draw_pile: list[CardType] = field(default_factory=list)
     discard_pile: list[CardType] = field(default_factory=list)
@@ -131,6 +132,19 @@ class Player:
     # Statuses
     # ------------------------------------------------------------------
 
-    def has_status(self, status: str) -> bool:
-        """Return True if the player has the specified status."""
-        return status in self.statuses
+    def has_status(self, status_type: StatusType) -> bool:
+        """Return True if the player has an active status of the given type.
+
+        Only statuses with lifetime > 0 are considered active (design/15 D3).
+
+        Args:
+            status_type: The status type to check for (e.g. StatusType.DEFENSE).
+
+        Returns:
+            True if any PlayerStatus in statuses matches the type and has
+            lifetime > 0.
+        """
+        return any(
+            ps.status_type == status_type and ps.lifetime > 0
+            for ps in self.statuses
+        )

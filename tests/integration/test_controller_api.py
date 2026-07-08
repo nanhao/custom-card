@@ -48,7 +48,8 @@ class TestPlayRound:
                                json={"cards_1": ["energy"], "cards_2": ["defense"]})
         rr = resp.get_json()["round_result"]
         assert rr["energy_1_after"] == 1
-        assert "defense" in rr["statuses_2"]
+        # Statuses now in design/15 dict format: [{"type": "defense", "lifetime": 1}]
+        assert any(s["type"] == "defense" for s in rr["statuses_2"])
 
     def test_round_result_has_cycle_ended(self, api_client):
         resp = api_client.post("/api/games", json={"mode": "pvp"})

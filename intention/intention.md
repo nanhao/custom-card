@@ -219,12 +219,11 @@ The logs should meet the following critiria:
     11，出攻守平衡
     12，出构建，并且构建攻守平衡
 
-
 # intention_id=15
-这是个代码优化任务。目前，玩家的状态缺少一个专门的类来管理。这个任务就是抽象出一个玩家状态类 PlayerState。
-首先需要一个 enum，用来定义所有可能的状态，然后，PlayerState 引用这个 enum。
+这是个代码重构任务。目前，玩家的状态缺少一个专门的类来管理。这个任务就是抽象出一个玩家状态类 PlayerStatus。
+首先需要一个 enum，用来定义所有可能的状态，然后，PlayerStatus 引用这个 enum。
 PlayerState 还要维护一个生存期字段。
-然后 Player 的 statuses 改为引用 PlayerState。
+然后 Player 的 statuses 改为引用 PlayerStatus。
 序列化、RoundResult 等等及其他有引用到 status 的地方，都改为引用类，避免代码里到处分散着各种 status 字符串字面量。
 
 # intention_id=16

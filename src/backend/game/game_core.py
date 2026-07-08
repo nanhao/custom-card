@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType, get_card_def, get_initial_draw_pile
 from src.backend.game.player import Player, PlayerHistoryItem
+from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.game.resolver import CardResolver
 
 
@@ -43,8 +44,8 @@ class RoundResult:
     hp_2_after: int
     energy_1_after: int
     energy_2_after: int
-    statuses_1: list[str]
-    statuses_2: list[str]
+    statuses_1: list[PlayerStatus]
+    statuses_2: list[PlayerStatus]
     details: list[str]
 
     # Phase 2: Cycle-end actions
@@ -57,8 +58,8 @@ class RoundResult:
     after_round_in_cycle: int = 0
     after_hp_1: int = 0
     after_hp_2: int = 0
-    after_statuses_1: list[str] = field(default_factory=list)
-    after_statuses_2: list[str] = field(default_factory=list)
+    after_statuses_1: list[PlayerStatus] = field(default_factory=list)
+    after_statuses_2: list[PlayerStatus] = field(default_factory=list)
 
     is_game_over: bool = False
     winner: str | None = None
@@ -92,9 +93,6 @@ class GameCore:
         self.is_over: bool = False
         self.winner: str | None = None
         self.round_log: list[RoundResult] = []
-        # Status lifetime tracking: index-aligned with player.statuses
-        self._status_lifetimes_1: list[int] = []
-        self._status_lifetimes_2: list[int] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -173,11 +171,13 @@ class GameCore:
         # Step 5: Apply energy and statuses
         self.player_1.add_energy(resolution.energy_delta_1)
         self.player_2.add_energy(resolution.energy_delta_2)
-        # Replace statuses with the full set computed this round, lifetime=1 each
-        self.player_1.statuses = list(resolution.statuses_granted_1)
-        self.player_2.statuses = list(resolution.statuses_granted_2)
-        self._status_lifetimes_1 = [1] * len(resolution.statuses_granted_1)
-        self._status_lifetimes_2 = [1] * len(resolution.statuses_granted_2)
+        # Replace statuses with PlayerStatus objects, lifetime=1 each (design/15 D5)
+        self.player_1.statuses = [
+            PlayerStatus(st, lifetime=1) for st in resolution.statuses_granted_1
+        ]
+        self.player_2.statuses = [
+            PlayerStatus(st, lifetime=1) for st in resolution.statuses_granted_2
+        ]
 
         # Step 6: Process BUILD construction
         self._process_build(cards_1[0], build_target_1, self.player_1)
@@ -209,8 +209,8 @@ class GameCore:
             hp_2_after=self.player_2.hp,
             energy_1_after=self.player_1.energy,
             energy_2_after=self.player_2.energy,
-            statuses_1=list(self.player_1.statuses),
-            statuses_2=list(self.player_2.statuses),
+            statuses_1=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_1.statuses],
+            statuses_2=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_2.statuses],
             details=resolution.details,
         )
 
@@ -256,8 +256,8 @@ class GameCore:
         result.after_round_in_cycle = self.round_in_cycle
         result.after_hp_1 = self.player_1.hp
         result.after_hp_2 = self.player_2.hp
-        result.after_statuses_1 = list(self.player_1.statuses)
-        result.after_statuses_2 = list(self.player_2.statuses)
+        result.after_statuses_1 = [PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_1.statuses]
+        result.after_statuses_2 = [PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_2.statuses]
 
         self.round_log.append(result)
         return result
@@ -284,7 +284,10 @@ class GameCore:
             result = {
                 "hp": p.hp,
                 "energy": p.energy,
-                "statuses": list(p.statuses),
+                "statuses": [
+                    {"type": ps.status_type.value, "lifetime": ps.lifetime}
+                    for ps in p.statuses
+                ],
                 "hand": [c.value for c in p.hand],
                 "history": [
                     PlayerHistoryItem(card=c, build_target=bt)
@@ -326,8 +329,8 @@ class GameCore:
                     "hp_2_after": rr.hp_2_after,
                     "energy_1_after": rr.energy_1_after,
                     "energy_2_after": rr.energy_2_after,
-                    "statuses_1": rr.statuses_1,
-                    "statuses_2": rr.statuses_2,
+                    "statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_1],
+                    "statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_2],
                     "details": rr.details,
                     "is_game_over": rr.is_game_over,
                     "winner": rr.winner,
@@ -338,8 +341,8 @@ class GameCore:
                     "after_round_in_cycle": rr.after_round_in_cycle,
                     "after_hp_1": rr.after_hp_1,
                     "after_hp_2": rr.after_hp_2,
-                    "after_statuses_1": rr.after_statuses_1,
-                    "after_statuses_2": rr.after_statuses_2,
+                    "after_statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_1],
+                    "after_statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_2],
                 }
                 for rr in self.round_log
             ],
@@ -352,27 +355,18 @@ class GameCore:
     def _tick_status_lifetimes(self) -> None:
         """Decrement all status lifetimes by 1, remove expired ones.
 
-        Called at the start of each round. Each status has a remaining
-        lifetime in rounds; when it reaches 0 the status is removed.
+        Per design/15 D4: operates directly on PlayerStatus.lifetime fields.
+        No longer maintains separate _status_lifetimes arrays.
         """
-        for player, lifetimes in (
-            (self.player_1, self._status_lifetimes_1),
-            (self.player_2, self._status_lifetimes_2),
-        ):
+        for player in (self.player_1, self.player_2):
             if player is None:
                 continue
             new_statuses = []
-            new_lifetimes = []
-            for s, life in zip(player.statuses, lifetimes):
-                remaining = life - 1
-                if remaining > 0:
-                    new_statuses.append(s)
-                    new_lifetimes.append(remaining)
+            for ps in player.statuses:
+                ps.lifetime -= 1
+                if ps.lifetime > 0:
+                    new_statuses.append(ps)
             player.statuses = new_statuses
-            if player is self.player_1:
-                self._status_lifetimes_1 = new_lifetimes
-            else:
-                self._status_lifetimes_2 = new_lifetimes
 
     def _start_cycle(self) -> None:
         """Start a new cycle: reclaim hands → shuffle discard into draw → draw 7 cards.

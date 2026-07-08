@@ -17,6 +17,7 @@ from pathlib import Path
 from src.backend.game.card import CardType, get_initial_draw_pile
 from src.backend.game.game_core import GameCore, RoundResult
 from src.backend.game.player import Player
+from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.ai.rnn_v1.model import HIDDEN_SIZE
 
 logger = logging.getLogger(__name__)
@@ -46,16 +47,31 @@ def _str_to_card(value: str) -> CardType:
     return _CARD_TYPE_BY_VALUE[value]
 
 
+def _is_new_status_format(statuses: list | None) -> bool:
+    """Return True if statuses use the design/15 dict format.
+
+    New format: [{"type": "defense", "lifetime": 1}]
+    Old format: ["defense"]
+    """
+    if not statuses:
+        return False
+    return isinstance(statuses[0], dict)
+
+
 def _serialize_player(player: Player) -> dict:
     """Serialize a Player to a plain dict for JSON encoding.
 
     Returns dict with keys: hp, energy, statuses, hand, draw_pile,
     discard_pile, history, build_history.
+    Statuses serialized as [{"type": ..., "lifetime": ...}] per design/15 D6.
     """
     return {
         "hp": player.hp,
         "energy": player.energy,
-        "statuses": list(player.statuses),
+        "statuses": [
+            {"type": ps.status_type.value, "lifetime": ps.lifetime}
+            for ps in player.statuses
+        ],
         "hand": [_card_to_str(c) for c in player.hand],
         "draw_pile": [_card_to_str(c) for c in player.draw_pile],
         "discard_pile": [_card_to_str(c) for c in player.discard_pile],
@@ -80,7 +96,10 @@ def _deserialize_player(data: dict) -> Player:
     return Player(
         hp=data["hp"],
         energy=data["energy"],
-        statuses=data["statuses"],
+        statuses=[
+            PlayerStatus(StatusType(d["type"]), d["lifetime"])
+            for d in data["statuses"]
+        ],
         hand=[_str_to_card(s) for s in data["hand"]],
         draw_pile=[_str_to_card(s) for s in data["draw_pile"]],
         discard_pile=[_str_to_card(s) for s in data["discard_pile"]],
@@ -106,8 +125,8 @@ def _serialize_round_result(rr: RoundResult) -> dict:
         "hp_2_after": rr.hp_2_after,
         "energy_1_after": rr.energy_1_after,
         "energy_2_after": rr.energy_2_after,
-        "statuses_1": rr.statuses_1,
-        "statuses_2": rr.statuses_2,
+        "statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_1],
+        "statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.statuses_2],
         "details": rr.details,
         "is_game_over": rr.is_game_over,
         "winner": rr.winner,
@@ -118,8 +137,8 @@ def _serialize_round_result(rr: RoundResult) -> dict:
         "after_round_in_cycle": rr.after_round_in_cycle,
         "after_hp_1": rr.after_hp_1,
         "after_hp_2": rr.after_hp_2,
-        "after_statuses_1": rr.after_statuses_1,
-        "after_statuses_2": rr.after_statuses_2,
+        "after_statuses_1": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_1],
+        "after_statuses_2": [{"type": ps.status_type.value, "lifetime": ps.lifetime} for ps in rr.after_statuses_2],
     }
 
 
@@ -138,8 +157,8 @@ def _deserialize_round_result(data: dict) -> RoundResult:
         hp_2_after=data["hp_2_after"],
         energy_1_after=data.get("energy_1_after", 0),
         energy_2_after=data.get("energy_2_after", 0),
-        statuses_1=data.get("statuses_1", []),
-        statuses_2=data.get("statuses_2", []),
+        statuses_1=[PlayerStatus(StatusType(d["type"]), d["lifetime"]) for d in data.get("statuses_1", [])] if _is_new_status_format(data.get("statuses_1")) else data.get("statuses_1", []),
+        statuses_2=[PlayerStatus(StatusType(d["type"]), d["lifetime"]) for d in data.get("statuses_2", [])] if _is_new_status_format(data.get("statuses_2")) else data.get("statuses_2", []),
         details=data["details"],
         is_game_over=data["is_game_over"],
         winner=data["winner"],
@@ -150,8 +169,8 @@ def _deserialize_round_result(data: dict) -> RoundResult:
         after_round_in_cycle=data.get("after_round_in_cycle", data.get("round_in_cycle", 1)),
         after_hp_1=data.get("after_hp_1", data.get("hp_1_after", 20)),
         after_hp_2=data.get("after_hp_2", data.get("hp_2_after", 20)),
-        after_statuses_1=data.get("after_statuses_1", []),
-        after_statuses_2=data.get("after_statuses_2", []),
+        after_statuses_1=[PlayerStatus(StatusType(d["type"]), d["lifetime"]) for d in data.get("after_statuses_1", [])] if _is_new_status_format(data.get("after_statuses_1")) else data.get("after_statuses_1", []),
+        after_statuses_2=[PlayerStatus(StatusType(d["type"]), d["lifetime"]) for d in data.get("after_statuses_2", [])] if _is_new_status_format(data.get("after_statuses_2")) else data.get("after_statuses_2", []),
     )
 
 
@@ -172,8 +191,6 @@ def _serialize_game_core(
         "winner": gm.winner,
         "round_log": [_serialize_round_result(rr) for rr in gm.round_log],
         "mode": gm.mode,
-        "status_lifetimes_1": gm._status_lifetimes_1,
-        "status_lifetimes_2": gm._status_lifetimes_2,
     }
     if gm.mode == "pve" and ai is not None:
         data["ai"] = ai
@@ -220,8 +237,6 @@ def _deserialize_game_core(data: dict) -> tuple[GameCore, dict]:
     gm.is_over = data["is_over"]
     gm.winner = data["winner"]
     gm.round_log = [_deserialize_round_result(rr) for rr in data["round_log"]]
-    gm._status_lifetimes_1 = data.get("status_lifetimes_1", [])
-    gm._status_lifetimes_2 = data.get("status_lifetimes_2", [])
 
     metadata = {
         "mode": mode, "ai": ai,

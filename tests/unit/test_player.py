@@ -8,6 +8,7 @@ import pytest
 
 from src.backend.game.card import CardType
 from src.backend.game.player import Player, PlayerHistoryItem
+from src.backend.game.player_state import StatusType, PlayerStatus
 
 
 class TestPlayerDefaults:
@@ -64,17 +65,36 @@ class TestAddEnergy:
 
 
 class TestHasStatus:
-    """TC-PL-07: has_status."""
+    """TC-HS-01 ~ TC-HS-05 (design/15): has_status with StatusType."""
 
     def test_has_existing_status(self):
-        """has_status('defense') returns True when statuses=['defense']."""
-        p = Player(statuses=["defense"])
-        assert p.has_status("defense") is True
+        """TC-HS-01: has_status(DEFENSE) returns True when statuses has DEFENSE with lifetime>0."""
+        p = Player(statuses=[PlayerStatus(StatusType.DEFENSE, 1)])
+        assert p.has_status(StatusType.DEFENSE) is True
 
     def test_has_missing_status(self):
-        """has_status('联防') returns False when only 'defense' is present."""
-        p = Player(statuses=["defense"])
-        assert p.has_status("联防") is False
+        """TC-HS-02: has_status(GUARD) returns False when only DEFENSE is present."""
+        p = Player(statuses=[PlayerStatus(StatusType.DEFENSE, 1)])
+        assert p.has_status(StatusType.GUARD) is False
+
+    def test_empty_statuses_returns_false(self):
+        """TC-HS-03: statuses=[] → has_status returns False."""
+        p = Player(statuses=[])
+        assert p.has_status(StatusType.DEFENSE) is False
+
+    def test_lifetime_zero_not_considered_active(self):
+        """TC-HS-04: lifetime=0 → has_status returns False (expired)."""
+        p = Player(statuses=[PlayerStatus(StatusType.DEFENSE, 0)])
+        assert p.has_status(StatusType.DEFENSE) is False
+
+    def test_multiple_statuses_both_detected(self):
+        """TC-HS-05: multiple active statuses → both detected."""
+        p = Player(statuses=[
+            PlayerStatus(StatusType.DEFENSE, 1),
+            PlayerStatus(StatusType.GUARD, 1),
+        ])
+        assert p.has_status(StatusType.DEFENSE) is True
+        assert p.has_status(StatusType.GUARD) is True
 
 
 class TestPlayCard:

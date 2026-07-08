@@ -1,0 +1,65 @@
+@startuml status_lifecycle_flow
+skinparam backgroundColor white
+skinparam nodesep 40
+skinparam ranksep 40
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+
+title Status Lifecycle Flow — PlayerState 重构 (intention #15)
+
+actor "GameCore.play_round()" as GC
+participant "CardResolver" as CR
+participant "Player.statuses" as PS
+database "RoundResult" as RR
+actor "Frontend" as FE
+database "SessionStore" as SS
+
+== Round N: 状态授予 ==
+
+GC -> CR: resolve(cards_1, cards_2,\n  player_1.statuses,\n  player_2.statuses, ...)
+note right of CR
+  检查 pre-existing statuses:
+  - StatusType.DEFENSE in p1_statuses
+  - StatusType.GUARD in p2_statuses
+  替换字符串硬编码
+end note
+
+CR --> GC: ResolutionResult(\n  statuses_granted_1: [StatusType.DEFENSE],\n  statuses_granted_2: [])
+
+GC -> PS: statuses = [\n  PlayerStatus(DEFENSE, lifetime=1)\n]
+note right of PS
+  lifetime 由 GameCore 设为 1
+  不再维护独立 _status_lifetimes 数组
+end note
+
+GC -> RR: RoundResult(statuses_1=[PlayerStatus(DEFENSE, 1)], ...)
+
+GC -> FE: get_state() -> statuses=[{"type":"defense","lifetime":1}]
+
+GC -> SS: save() -> statuses=[{"type":"defense","lifetime":1}]
+note right of SS
+  不再保存 status_lifetimes_1/2 字段
+end note
+
+== Round N+1 开始前: 生存期 Tick ==
+
+GC -> PS: _tick_status_lifetimes()
+note right of PS
+  遍历每个 PlayerStatus:
+  - lifetime -= 1
+  - lifetime <= 0 则移除
+  不再需要索引对齐
+end note
+
+PS --> GC: statuses = [\n  PlayerStatus(DEFENSE, lifetime=0)\n] -> 被移除
+
+== Round N+1: 新一轮 ==
+
+GC -> CR: resolve(..., statuses=[], ...)
+note right of CR
+  statuses 为空
+  不会触发 grant_guard / defense 阻挡
+end note
+
+CR --> GC: ResolutionResult(statuses_granted_* = [])
+
+@enduml

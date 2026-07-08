@@ -35,7 +35,7 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
                               (design/14 format). Default empty.
         round_num: Global round number.
         energy_1, energy_2: Current energy. Default 0.
-        statuses_1, statuses_2: Current statuses (list of str).
+        statuses_1, statuses_2: Current statuses (list of dict format, design/15).
         cycle: Current cycle number.
         round_in_cycle: Position within cycle.
 

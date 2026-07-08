@@ -9,6 +9,7 @@ import pytest
 from src.backend.game.card import CardType
 from src.backend.game.game_core import GameCore
 from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.player_state import StatusType, PlayerStatus
 
 
 class TestStartGame:
@@ -406,3 +407,139 @@ class TestGetStateHistoryFormat:
         assert p1_hist[0] == PlayerHistoryItem(CardType.ATTACK, None)
         assert p1_hist[1] == PlayerHistoryItem(CardType.BUILD, CardType.ATTACK)
         assert p1_hist[2] == PlayerHistoryItem(CardType.DEFENSE, None)
+
+
+# =============================================================================
+# Status lifecycle tests — design/15 TC-GS-01 ~ TC-GS-08
+# =============================================================================
+
+
+class TestStatusLifecycle:
+    """TC-GS-01 ~ TC-GS-06: PlayerStatus lifecycle in GameCore."""
+
+    def test_play_round_statuses_are_playerstatus(self):
+        """TC-GS-01: RoundResult statuses_1 are PlayerStatus (pre-tick snapshot).
+
+        Note: After play_round, player.statuses is empty because status lifetimes
+        are ticked within the same round. The pre-tick snapshot is in RoundResult.
+        """
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.DEFENSE]
+        gm.player_2.hand = [CardType.ATTACK]
+
+        result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
+
+        # RoundResult captures pre-tick state
+        assert len(result.statuses_1) == 1
+        assert isinstance(result.statuses_1[0], PlayerStatus)
+        assert result.statuses_1[0].status_type == StatusType.DEFENSE
+        assert result.statuses_1[0].lifetime == 1
+        # Post-tick: player statuses are empty
+        assert gm.player_1.statuses == []
+
+    def test_tick_reduces_lifetime_and_removes_expired(self):
+        """TC-GS-02: _tick_status_lifetimes reduces lifetime, removes expired."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.statuses = [
+            PlayerStatus(StatusType.DEFENSE, 2),
+            PlayerStatus(StatusType.GUARD, 1),
+        ]
+
+        gm._tick_status_lifetimes()
+
+        assert len(gm.player_1.statuses) == 1
+        assert gm.player_1.statuses[0].status_type == StatusType.DEFENSE
+        assert gm.player_1.statuses[0].lifetime == 1
+
+    def test_tick_removes_single_lifetime_1(self):
+        """TC-GS-03: Single status lifetime=1 is removed after tick."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.statuses = [PlayerStatus(StatusType.DEFENSE, 1)]
+
+        gm._tick_status_lifetimes()
+
+        assert gm.player_1.statuses == []
+
+    def test_status_not_carried_over_across_rounds(self):
+        """TC-GS-04: Statuses expire within the same round (ticked to 0).
+
+        After play_round, statuses are empty because tick happens in Phase 2.
+        """
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        # Round 1: P2 plays DEFENSE → P2 gets DEFENSE (captured in RoundResult, ticked by end)
+        gm.player_1.hand = [CardType.ATTACK]
+        gm.player_2.hand = [CardType.DEFENSE]
+        result1 = gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
+        # RoundResult.statuses_2 captured before tick
+        assert len(result1.statuses_2) == 1
+        assert result1.statuses_2[0].status_type == StatusType.DEFENSE
+        # After tick, player2 has no active statuses
+        assert gm.player_2.statuses == []
+
+        # Round 2: P2 plays ATTACK → no DEFENSE granted
+        gm.player_1.hand = [CardType.ATTACK]
+        gm.player_2.hand = [CardType.ATTACK]
+        result2 = gm.play_round([CardType.ATTACK], [CardType.ATTACK])
+        assert result2.statuses_2 == []
+
+    def test_status_lifetimes_fields_removed(self):
+        """TC-GS-05: GameCore no longer has _status_lifetimes_1/_status_lifetimes_2."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        with pytest.raises(AttributeError):
+            _ = gm._status_lifetimes_1
+        with pytest.raises(AttributeError):
+            _ = gm._status_lifetimes_2
+
+    def test_roundresult_contains_playerstatus(self):
+        """TC-GS-06: RoundResult statuses_1 are PlayerStatus instances."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.DEFENSE]
+        gm.player_2.hand = [CardType.ATTACK]
+
+        result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
+
+        assert len(result.statuses_1) == 1
+        ps = result.statuses_1[0]
+        assert isinstance(ps, PlayerStatus)
+        assert ps.status_type == StatusType.DEFENSE
+        assert ps.lifetime == 1
+
+    def test_guard_not_granted_across_rounds_statuses_expire(self):
+        """TC-GS-07 (revised): GUARD is NOT granted across rounds because statuses expire.
+
+        Since statuses are ticked to empty each round, the resolver never sees
+        pre-existing DEFENSE in consecutive rounds. GUARD can only be tested
+        at the resolver unit-test level with manually set pre-existing statuses.
+        """
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        # Round 1: DEFENSE → gets DEFENSE (ticked away at round end)
+        gm.player_1.hand = [CardType.DEFENSE]
+        gm.player_2.hand = [CardType.ATTACK]
+        gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
+        # Round 2: DEFENSE again → only gets DEFENSE (no pre-existing)
+        gm.player_1.hand = [CardType.DEFENSE]
+        gm.player_2.hand = [CardType.ATTACK]
+        result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
+
+        types = [ps.status_type for ps in result.statuses_1]
+        assert StatusType.DEFENSE in types
+        assert StatusType.GUARD not in types
+
+    def test_defense_granted_when_player_plays_defense(self):
+        """TC-GS-08: Playing DEFENSE grants DEFENSE status."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.DEFENSE]
+        gm.player_2.hand = [CardType.ATTACK]
+        result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
+
+        types = [ps.status_type for ps in result.statuses_1]
+        assert StatusType.DEFENSE in types
+        assert StatusType.GUARD not in types
