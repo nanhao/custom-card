@@ -417,6 +417,7 @@ class TestBuildResolver:
             owner_card=CardType.BUILD,
         )
         ctx.build_target = CardType.ATTACK
+        ctx.build_target_cost = 1
         gm.player_1.discard_pile = []
         details = ResolveDetails()
         BuildResolver().resolve(ctx, details)
@@ -432,6 +433,7 @@ class TestBuildResolver:
             owner_card=CardType.BUILD,
         )
         ctx.build_target = CardType.HEAVY
+        ctx.build_target_cost = 2
         gm.player_1.discard_pile = []
         details = ResolveDetails()
         BuildResolver().resolve(ctx, details)
@@ -446,6 +448,7 @@ class TestBuildResolver:
             owner_card=CardType.BUILD,
         )
         ctx.build_target = CardType.FLEX
+        ctx.build_target_cost = 2
         gm.player_1.discard_pile = [CardType.ATTACK]
         details = ResolveDetails()
         BuildResolver().resolve(ctx, details)
@@ -472,6 +475,7 @@ class TestBuildResolver:
             owner_card=CardType.BUILD,
         )
         ctx.build_target = CardType.ENERGY
+        ctx.build_target_cost = 1
         details = ResolveDetails()
         BuildResolver().resolve(ctx, details)
         assert len(details.details) == 1

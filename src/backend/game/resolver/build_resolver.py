@@ -10,9 +10,9 @@ class BuildResolver(Resolver):
     """Executes BUILD card effect: deduct energy and add built card to discard.
 
     Per design/25: the resolve() method reads ctx.build_target to determine
-    which card the player chose to construct. It deducts the target card's
-    build_cost from the card_owner's energy and appends the target card to
-    the card_owner's discard_pile.
+    which card the player chose to construct, and ctx.build_target_cost
+    for the energy cost. It deducts the cost from card_owner's energy and
+    appends the target card to discard_pile.
     """
 
     def get_priority(self) -> int:
@@ -27,7 +27,7 @@ class BuildResolver(Resolver):
         """
         if ctx.build_target is None:
             return
-        cost: int = ctx.build_target.get_build_cost()
+        cost: int = ctx.build_target_cost
         ctx.card_owner.energy = max(0, ctx.card_owner.energy - cost)
         ctx.card_owner.discard_pile.append(ctx.build_target)
         details.add(f"BUILD {ctx.build_target.value} (cost {cost})")

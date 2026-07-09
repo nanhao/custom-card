@@ -125,27 +125,33 @@ class GameCore:
 
         # Step 2: Build resolver tasks from CardDef.resolvers (design/22).
         # GameCore owns the mapping lookup; CardResolver only orchestrates.
-        # Per design/25: build_target passed via ResolveContext for BUILD cards.
+        # Per design/25: build_target+build_target_cost passed via ResolveContext.
         tasks: list[tuple[Resolver, ResolveContext]] = []
 
         for card_type in cards_1:
+            build_target = build_target_1 if card_type == CardType.BUILD else None
+            build_cost = get_card_def(build_target).build_cost if build_target is not None else 0
             ctx = ResolveContext(
                 card_owner=self.player_1,
                 opponent=self.player_2,
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_2[0],
-                build_target=build_target_1 if card_type == CardType.BUILD else None,
+                build_target=build_target,
+                build_target_cost=build_cost,
             )
             for resolver_cls in get_card_def(card_type).resolvers:
                 tasks.append((resolver_cls(), ctx))
 
         for card_type in cards_2:
+            build_target = build_target_2 if card_type == CardType.BUILD else None
+            build_cost = get_card_def(build_target).build_cost if build_target is not None else 0
             ctx = ResolveContext(
                 card_owner=self.player_2,
                 opponent=self.player_1,
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_1[0],
-                build_target=build_target_2 if card_type == CardType.BUILD else None,
+                build_target=build_target,
+                build_target_cost=build_cost,
             )
             for resolver_cls in get_card_def(card_type).resolvers:
                 tasks.append((resolver_cls(), ctx))
