@@ -1,6 +1,6 @@
 {
   "logging": {
-    "enabled": false,
+    "enabled": true,
     "log_dir": "logs"
   },
   "training": {

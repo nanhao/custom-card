@@ -212,9 +212,13 @@ class SelfPlayRunner:
         # a. Create game and log game_start
         gm = GameCore(mode="pvp")
         gm.start_game()
+        init_s1 = gm.get_state(player_perspective="1")
+        init_s2 = gm.get_state(player_perspective="2")
         logger.log(
             "INFO", "selfplay.game_start",
             game_idx=game_idx, game_count=config.game_count,
+            hand1=[c.value for c in init_s1.players["1"].hand],
+            hand2=[c.value for c in init_s2.players["2"].hand],
         )
 
         # b. Initialize dual hidden states per player (32-d, design/11)
@@ -246,10 +250,22 @@ class SelfPlayRunner:
                     and config.temp_side in ("player1", "both"))
                 else 0.0
             )
-            card1, bt1, h1_pol, lp1, val1, h1_val = self._sample_action(
-                pre_state_p1, h1_pol, h1_val, config.ai1,
-                temperature=temp_p1, player_key="1",
-            )
+            try:
+                card1, bt1, h1_pol, lp1, val1, h1_val = self._sample_action(
+                    pre_state_p1, h1_pol, h1_val, config.ai1,
+                    temperature=temp_p1, player_key="1",
+                )
+            except Exception as exc:
+                logger.log(
+                    "ERROR", "selfplay.action_error",
+                    game_idx=game_idx, round=round_num, player="1",
+                    hand=[c.value for c in pre_state_p1.players["1"].hand],
+                    energy=pre_state_p1.players["1"].energy,
+                    temperature=temp_p1,
+                    error_type=type(exc).__name__,
+                    msg=str(exc),
+                )
+                raise
 
             # --- Player 2 action ---
             temp_p2 = (
@@ -258,10 +274,22 @@ class SelfPlayRunner:
                     and config.temp_side in ("player2", "both"))
                 else 0.0
             )
-            card2, bt2, h2_pol, lp2, val2, h2_val = self._sample_action(
-                pre_state_p2, h2_pol, h2_val, config.ai2,
-                temperature=temp_p2, player_key="2",
-            )
+            try:
+                card2, bt2, h2_pol, lp2, val2, h2_val = self._sample_action(
+                    pre_state_p2, h2_pol, h2_val, config.ai2,
+                    temperature=temp_p2, player_key="2",
+                )
+            except Exception as exc:
+                logger.log(
+                    "ERROR", "selfplay.action_error",
+                    game_idx=game_idx, round=round_num, player="2",
+                    hand=[c.value for c in pre_state_p2.players["2"].hand],
+                    energy=pre_state_p2.players["2"].energy,
+                    temperature=temp_p2,
+                    error_type=type(exc).__name__,
+                    msg=str(exc),
+                )
+                raise
 
             # Log model_loaded on first successful action per AI
             if config.ai1 not in loaded_models:
@@ -278,12 +306,18 @@ class SelfPlayRunner:
                 loaded_models.add(config.ai2)
 
             # Log round_action after both AIs have selected cards.
-            # Use .value for CardType serialization compatibility.
+            # Per design/27: include hand and energy for debugging.
             logger.log(
                 "DEBUG", "selfplay.round_action",
                 round=round_num,
                 card1=card1.value,
                 card2=card2.value,
+                bt1=bt1.value if bt1 else None,
+                bt2=bt2.value if bt2 else None,
+                hand1=[c.value for c in pre_state_p1.players["1"].hand],
+                hand2=[c.value for c in pre_state_p2.players["2"].hand],
+                energy1=pre_state_p1.players["1"].energy,
+                energy2=pre_state_p2.players["2"].energy,
                 temp1=temp_p1,
                 temp2=temp_p2,
             )
@@ -301,13 +335,18 @@ class SelfPlayRunner:
                     f"  [WARN] Game {game_idx}: "
                     f"play_round() failed — {exc}"
                 )
-                # Log error with exception details
                 logger.log(
                     "ERROR", "selfplay.error",
-                    error_type="ValueError",
-                    msg=str(exc),
                     game_idx=game_idx,
                     round=round_num,
+                    card1=card1.value,
+                    card2=card2.value,
+                    bt1=bt1.value if bt1 else None,
+                    bt2=bt2.value if bt2 else None,
+                    energy1=pre_state_p1.players["1"].energy,
+                    energy2=pre_state_p2.players["2"].energy,
+                    error_type="ValueError",
+                    msg=str(exc),
                 )
                 break
 
@@ -319,8 +358,12 @@ class SelfPlayRunner:
                     round=last_rr.round,
                     hp1_before=last_rr.before.hp_1,
                     hp2_before=last_rr.before.hp_2,
+                    energy1_before=last_rr.before.energy_1,
+                    energy2_before=last_rr.before.energy_2,
                     hp1_after=last_rr.after_resolve.hp_1,
                     hp2_after=last_rr.after_resolve.hp_2,
+                    energy1_after=last_rr.after_resolve.energy_1,
+                    energy2_after=last_rr.after_resolve.energy_2,
                 )
 
             # Record PPO samples (if sample output is configured)
