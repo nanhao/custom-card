@@ -8,8 +8,6 @@ This avoids requiring CardResolver to import card_def, eliminating the
 circular dependency without lazy imports.
 """
 
-from src.backend.game.card_type import CardType
-from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.resolver.base import (
     ResolveContext,
     ResolveDetails,
@@ -20,17 +18,6 @@ from src.backend.game.resolver.base import (
 
 class CardResolver:
     """Priority-layered resolution orchestrator."""
-
-    @staticmethod
-    def get_consecutive_attack(history: list[PlayerHistoryItem]) -> int:
-        """Count consecutive ATTACK cards from the end of history."""
-        count = 0
-        for item in reversed(history):
-            if item.card == CardType.ATTACK:
-                count += 1
-            else:
-                break
-        return count
 
     @staticmethod
     def resolve(

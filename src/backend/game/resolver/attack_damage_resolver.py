@@ -1,7 +1,7 @@
 """AttackDamageResolver — settles ATTACK damage (priority 10).
 
 Damage = min(streak + 1, 3), where streak is computed from
-card_owner's history via CardResolver.get_consecutive_attack().
+card_owner's history via Player.get_consecutive_attack_count().
 Blocked by opponent DEFENSE status.
 """
 
@@ -18,10 +18,7 @@ class AttackDamageResolver(Resolver):
         return 10
 
     def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
-        # Local import avoids circular dependency with orchestrator
-        from src.backend.game.resolver.orchestrator import CardResolver
-
-        streak = CardResolver.get_consecutive_attack(ctx.card_owner.history)
+        streak = ctx.card_owner.get_consecutive_attack_count()
         raw_damage = min(streak + 1, self.MAX_STREAK_DAMAGE)
 
         if ctx.opponent.has_status(StatusType.DEFENSE):

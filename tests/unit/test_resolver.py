@@ -455,20 +455,35 @@ class TestCardResolverOrchestration:
         assert gm.player_2.has_status(StatusType.DEFENSE)
 
     def test_get_consecutive_attack(self):
+        """Player.get_consecutive_attack_count() — only tail ATTACK counted."""
         history = [PlayerHistoryItem(CardType.ATTACK, None),
                     PlayerHistoryItem(CardType.ATTACK, None),
                     PlayerHistoryItem(CardType.DEFENSE, None),
                     PlayerHistoryItem(CardType.ATTACK, None)]
-        assert CardResolver.get_consecutive_attack(history) == 1
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.history = history
+        assert gm.player_1.get_consecutive_attack_count() == 1
 
     def test_get_consecutive_attack_empty(self):
-        assert CardResolver.get_consecutive_attack([]) == 0
+        """Player.get_consecutive_attack_count() — empty history returns 0."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        assert gm.player_1.get_consecutive_attack_count() == 0
 
     def test_get_consecutive_attack_all_attacks(self):
+        """Player.get_consecutive_attack_count() — all ATTACK returns count."""
         history = [PlayerHistoryItem(CardType.ATTACK, None)] * 3
-        assert CardResolver.get_consecutive_attack(history) == 3
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.history = history
+        assert gm.player_1.get_consecutive_attack_count() == 3
 
     def test_get_consecutive_attack_counter_breaks(self):
+        """Player.get_consecutive_attack_count() — non-ATTACK breaks streak."""
         history = [PlayerHistoryItem(CardType.ATTACK, None),
                     PlayerHistoryItem(CardType.COUNTER, None)]
-        assert CardResolver.get_consecutive_attack(history) == 0
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.history = history
+        assert gm.player_1.get_consecutive_attack_count() == 0

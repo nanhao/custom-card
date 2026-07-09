@@ -154,3 +154,19 @@ class Player:
             lifetime > 0.
         """
         return has_active_status(self.statuses, status_type)
+
+    def get_consecutive_attack_count(self) -> int:
+        """Count consecutive ATTACK cards from the end of history.
+
+        Used by AttackDamageResolver to compute streak damage.
+
+        Returns:
+            Number of consecutive ATTACK cards at the tail of history.
+        """
+        count = 0
+        for item in reversed(self.history):
+            if item.card == CardType.ATTACK:
+                count += 1
+            else:
+                break
+        return count
