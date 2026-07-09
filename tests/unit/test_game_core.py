@@ -605,3 +605,99 @@ class TestStatusLifecycle:
         types = [ps.status_type for ps in result.after_resolve.statuses_1]
         assert StatusType.DEFENSE in types
         assert StatusType.GUARD not in types
+
+
+# =============================================================================
+# HEAVY build_cost=2 validation — design/24 TC-CR-04, TC-CR-05
+# =============================================================================
+
+
+class TestHeavyBuildCostValidation:
+    """TC-CR-04, TC-CR-05: HEAVY build_cost=2 game-level validation."""
+
+    def test_heavy_build_insufficient_energy(self):
+        """TC-CR-04: energy=1 cannot build HEAVY (cost=2)."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 1
+        gm.player_1.hand = [CardType.BUILD, CardType.ATTACK]
+        gm.player_2.hand = [CardType.ATTACK]
+        with pytest.raises(ValueError, match="cost 2 > energy 1"):
+            gm.play_round([CardType.BUILD], [CardType.ATTACK], build_target_1=CardType.HEAVY)
+
+    def test_heavy_build_sufficient_energy(self):
+        """TC-CR-05: energy=2 can build HEAVY (cost=2), energy drops to 0."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 2
+        gm.player_1.hand = [CardType.BUILD, CardType.ATTACK]
+        gm.player_2.hand = [CardType.ATTACK]
+        result = gm.play_round([CardType.BUILD], [CardType.ATTACK], build_target_1=CardType.HEAVY)
+        assert gm.player_1.energy == 0
+        assert CardType.HEAVY in gm.player_1.discard_pile
+
+
+# =============================================================================
+# FRAGILE multi-round lifecycle — design/24 TC-PR-03, TC-PR-04, TC-E2E-01
+# =============================================================================
+
+
+class TestFragileMultiRound:
+    """TC-PR-03, TC-PR-04, TC-E2E-01: FRAGILE lifecycle across rounds."""
+
+    def test_fragile_blocks_defense_next_round(self):
+        """TC-PR-03: FRAGILE from R1 blocks DEFENSE gain in R2.
+
+        R1: P1 DEFENSE, P2 HEAVY. P1 gets DEFENSE + FRAGILE(lifetime=2).
+             Tick: DEFENSE(lifetime=1→0 removed), FRAGILE(lifetime=2→1).
+        R2: P1 DEFENSE, P2 ATTACK. FRAGILE active → DEFENSE blocked.
+        """
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.DEFENSE, CardType.DEFENSE]
+        gm.player_2.hand = [CardType.HEAVY, CardType.ATTACK]
+        gm.player_1.hp = 20
+        gm.player_2.hp = 20
+
+        # R1: P1 DEFENSE vs P2 HEAVY
+        gm.play_round([CardType.DEFENSE], [CardType.HEAVY])
+        # After R1: DEFENSE expired after tick, FRAGILE still active (lifetime=2→1)
+        assert not gm.player_1.has_status(StatusType.DEFENSE)
+        assert gm.player_1.has_status(StatusType.FRAGILE)
+        assert gm.player_1.hp == 19  # HEAVY damage (no GUARD)
+
+        # R2: P1 DEFENSE vs P2 ATTACK
+        result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
+        # FRAGILE blocks DEFENSE gain
+        assert not gm.player_1.has_status(StatusType.DEFENSE)
+        # ATTACK deals damage because no DEFENSE
+        assert gm.player_1.hp == 18
+
+    def test_fragile_expires_after_two_rounds(self):
+        """TC-PR-04: FRAGILE(lifetime=2) expires after two ticks.
+
+        R1: P1 ENERGY, P2 HEAVY. FRAGILE(lifetime=2). Tick → 1.
+        R2: P1 ENERGY, P2 ENERGY. Tick → FRAGILE(lifetime=0 removed).
+        R3: P1 DEFENSE, P2 ATTACK. DEFENSE granted normally.
+        """
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.ENERGY, CardType.ENERGY, CardType.DEFENSE]
+        gm.player_2.hand = [CardType.HEAVY, CardType.ENERGY, CardType.ATTACK]
+        gm.player_1.hp = 20
+        gm.player_2.hp = 20
+
+        # R1: P2 HEAVY → P1 gets FRAGILE
+        gm.play_round([CardType.ENERGY], [CardType.HEAVY])
+        assert gm.player_1.has_status(StatusType.FRAGILE)
+
+        # R2: both ENERGY, FRAGILE ticks from 1→0 (removed)
+        gm.play_round([CardType.ENERGY], [CardType.ENERGY])
+        assert not gm.player_1.has_status(StatusType.FRAGILE)
+
+        # R3: DEFENSE granted normally (check in after_resolve before tick)
+        result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
+        assert any(
+            ps.status_type == StatusType.DEFENSE
+            for ps in result.after_resolve.statuses_1
+        )

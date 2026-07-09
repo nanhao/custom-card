@@ -358,4 +358,8 @@ POLICY_OUTPUT_SIZE: int = 13 这两个常量定义不应该放在这里，应该
 我梳理了新的完整卡牌定义，放在 intention/card.md 文件，以后这个文件就是卡牌定义文件了。所有的卡牌代码实现都要对齐这个文件。现在，进行一次 carddef 和 resolver 的全面检查，看是否跟该文件对齐，不对齐的进行对齐。
 
 # intention_id=25
-build_resolver 的实现不对，现在是个空实现。
+build_resolver 的实现不对，现在是个空实现。resolve 的 ctx 参数里面缺少一个字段，就是 build 时玩家选了哪张卡。这里要加一个字段，然后实际结算逻辑要挪到 build_resolver 里面去
+
+# intention_id=26
+目前一个 cycle 是5回合，要改成3回合。
+目前每个 cycle 开始时是抽7张卡，要改成抽5张卡。

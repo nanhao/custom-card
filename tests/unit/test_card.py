@@ -95,6 +95,11 @@ class TestGetCardDef:
             cd = get_card_def(ct)
             assert cd.display_name, f"Missing display_name for {ct.name}"
 
+    def test_counter_display_name(self):
+        """TC-CD-03 (design/24): COUNTER display_name is '防守反击'."""
+        cd = get_card_def(CardType.COUNTER)
+        assert cd.display_name == "防守反击"
+
     def test_icon_removed(self):
         """Design/23 TC-CD-02: accessing icon raises AttributeError."""
         for ct in CardType:
