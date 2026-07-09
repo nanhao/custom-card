@@ -1,13 +1,15 @@
 """CardResolver — priority-layered resolution orchestrator.
 
-Per design/22: queries get_card_def(card_type).resolvers instead of
-CardResolverRegistry.get_resolvers(card_type).
-get_card_def is imported lazily to avoid circular dependency
-with card_def.py → resolver/__init__.py → orchestrator.py.
+Per design/22: CardResolver.resolve() accepts pre-built (Resolver, ResolveContext)
+tasks from the caller. The caller (GameCore.play_round) is responsible for
+building tasks by querying get_card_def(card_type).resolvers.
+
+This avoids requiring CardResolver to import card_def, eliminating the
+circular dependency without lazy imports.
 """
 
 from src.backend.game.card_type import CardType
-from src.backend.game.player import Player, PlayerHistoryItem
+from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.resolver.base import (
     ResolveContext,
     ResolveDetails,
@@ -32,42 +34,24 @@ class CardResolver:
 
     @staticmethod
     def resolve(
-        player_1: Player,
-        player_2: Player,
-        cards_1: list[CardType],
-        cards_2: list[CardType],
+        tasks: list[tuple[Resolver, ResolveContext]],
     ) -> ResolutionResult:
-        """Orchestrate resolution of both players' cards."""
-        # Lazy import avoids circular dependency:
-        # card_def.py → resolver/__init__.py → orchestrator.py → card_def.py
-        from src.backend.game.card_def import get_card_def  # noqa: F811
+        """Orchestrate resolution of pre-built (resolver, context) tasks.
 
+        Per design/22: tasks are built by the caller (GameCore.play_round)
+        using get_card_def(card_type).resolvers. CardResolver only sorts
+        by priority and delegates execution.
+
+        Args:
+            tasks: List of (Resolver instance, ResolveContext) pairs
+                   built by the caller from CardDef.resolvers.
+
+        Returns:
+            ResolutionResult containing all resolution detail strings.
+        """
         details = ResolveDetails()
 
-        tasks: list[tuple[Resolver, ResolveContext]] = []
-
-        for card_type in cards_1:
-            ctx = ResolveContext(
-                card_owner=player_1,
-                opponent=player_2,
-                card_played_by_owner=card_type,
-                card_played_by_opponent=cards_2[0],
-            )
-            card_def = get_card_def(card_type)
-            for resolver_cls in card_def.resolvers:
-                tasks.append((resolver_cls(), ctx))
-
-        for card_type in cards_2:
-            ctx = ResolveContext(
-                card_owner=player_2,
-                opponent=player_1,
-                card_played_by_owner=card_type,
-                card_played_by_opponent=cards_1[0],
-            )
-            card_def = get_card_def(card_type)
-            for resolver_cls in card_def.resolvers:
-                tasks.append((resolver_cls(), ctx))
-
+        # Sort by priority descending: 12 > 11 > 10
         tasks.sort(key=lambda t: t[0].get_priority(), reverse=True)
 
         for resolver, ctx in tasks:

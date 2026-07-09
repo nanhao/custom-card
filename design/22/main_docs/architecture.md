@@ -32,7 +32,7 @@
 
 **D3 — CardResolverRegistry 删除。** 注册表类及 `registry.py` 文件整体删除。映射关系从 _CARD_DEFS 表的 `resolvers` 字段读取，数据集中在一处，避免注册表与 CardDef 定义不同步的风险。
 
-**D4 — 编排器接口不变。** `CardResolver.resolve(player_1, player_2, cards_1, cards_2)` 签名不变，内部改为通过 `get_card_def(card_type).resolvers` 遍历结算器。返回 `ResolutionResult` 接口不变。对外部调用方（`game_core.py`）透明。
+**D4 — 职责分离：GameCore 构建 tasks，CardResolver 仅编排。** `CardResolver.resolve(tasks)` 签名改为接受已构建好的 `list[tuple[Resolver, ResolveContext]]`，不再自行通过 `get_card_def` 查询。tasks 的构建逻辑上移到 `GameCore.play_round()` 中。这彻底消除了 `CardResolver` 对 `card_def` 模块的依赖，无需惰性 import。
 
 **D5 — 破坏性变更。** `CardResolverRegistry` 被删除，依赖它的代码（测试、编排器）需同步修改。外部模块 GameCore、AppManager、API 等不受影响（仅 import 路径更新）。
 

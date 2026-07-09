@@ -72,6 +72,36 @@ def _make_ctx(
         )
 
 
+def _build_tasks(player_1, player_2, cards_1, cards_2):
+    """Build (Resolver, ResolveContext) tasks for CardResolver.resolve().
+
+    Per design/22: GameCore.play_round() builds tasks from
+    get_card_def(card_type).resolvers; tests mirror this pattern.
+    """
+    from src.backend.game.player import Player  # noqa: F811
+
+    tasks = []
+    for card_type in cards_1:
+        ctx = ResolveContext(
+            card_owner=player_1,
+            opponent=player_2,
+            card_played_by_owner=card_type,
+            card_played_by_opponent=cards_2[0],
+        )
+        for resolver_cls in get_card_def(card_type).resolvers:
+            tasks.append((resolver_cls(), ctx))
+    for card_type in cards_2:
+        ctx = ResolveContext(
+            card_owner=player_2,
+            opponent=player_1,
+            card_played_by_owner=card_type,
+            card_played_by_opponent=cards_1[0],
+        )
+        for resolver_cls in get_card_def(card_type).resolvers:
+            tasks.append((resolver_cls(), ctx))
+    return tasks
+
+
 # =============================================================================
 # 1. CardDef.resolvers — replaces CardResolverRegistry (TC-RG-01 ~ TC-RG-03)
 # =============================================================================
@@ -382,7 +412,8 @@ class TestPriorityOrdering:
         gm = GameCore(mode="pvp")
         gm.start_game()
         gm.player_1.statuses = [PlayerStatus(StatusType.DEFENSE, 1)]
-        result = CardResolver.resolve(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.ENERGY])
+        tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.ENERGY])
+        result = CardResolver.resolve(tasks)
         types = {ps.status_type for ps in gm.player_1.statuses}
         assert StatusType.DEFENSE in types
         assert StatusType.GUARD in types
@@ -393,7 +424,8 @@ class TestPriorityOrdering:
         gm.start_game()
         gm.player_1.hp = 20
         gm.player_2.hp = 20
-        CardResolver.resolve(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.ATTACK])
+        tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.ATTACK])
+        CardResolver.resolve(tasks)
         assert gm.player_1.hp == 20
 
 
@@ -406,7 +438,8 @@ class TestCardResolverOrchestration:
     def test_resolve_returns_result_with_details(self):
         gm = GameCore(mode="pvp")
         gm.start_game()
-        result = CardResolver.resolve(gm.player_1, gm.player_2, [CardType.ATTACK], [CardType.DEFENSE])
+        tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.ATTACK], [CardType.DEFENSE])
+        result = CardResolver.resolve(tasks)
         assert isinstance(result, ResolutionResult)
         assert len(result.details) > 0
 
@@ -415,7 +448,8 @@ class TestCardResolverOrchestration:
         gm.start_game()
         gm.player_1.hp = 20
         gm.player_2.hp = 20
-        CardResolver.resolve(gm.player_1, gm.player_2, [CardType.ATTACK], [CardType.COUNTER])
+        tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.ATTACK], [CardType.COUNTER])
+        CardResolver.resolve(tasks)
         assert gm.player_1.hp == 19
         assert gm.player_2.hp == 20
         assert gm.player_2.has_status(StatusType.DEFENSE)

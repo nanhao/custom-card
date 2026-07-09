@@ -15,6 +15,7 @@ from src.backend.game.game_state import GameState, PlayerState
 from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.game.resolver import CardResolver
+from src.backend.game.resolver.base import ResolveContext, Resolver
 from src.backend.game.round_result import (
     BeforeResolve,
     AfterResolve,
@@ -122,15 +123,31 @@ class GameCore:
             hp_2=self.player_2.hp,
         )
 
-        # Step 2: Resolve — Resolver subclasses directly modify player state.
-        # Resolvers compute streaks from history; GrantGuardResolver (priority 12)
-        # reads pre-round DEFENSE status before GrantDefenseResolver (priority 11) runs.
-        resolution = CardResolver.resolve(
-            player_1=self.player_1,
-            player_2=self.player_2,
-            cards_1=cards_1,
-            cards_2=cards_2,
-        )
+        # Step 2: Build resolver tasks from CardDef.resolvers (design/22).
+        # GameCore owns the mapping lookup; CardResolver only orchestrates.
+        tasks: list[tuple[Resolver, ResolveContext]] = []
+
+        for card_type in cards_1:
+            ctx = ResolveContext(
+                card_owner=self.player_1,
+                opponent=self.player_2,
+                card_played_by_owner=card_type,
+                card_played_by_opponent=cards_2[0],
+            )
+            for resolver_cls in get_card_def(card_type).resolvers:
+                tasks.append((resolver_cls(), ctx))
+
+        for card_type in cards_2:
+            ctx = ResolveContext(
+                card_owner=self.player_2,
+                opponent=self.player_1,
+                card_played_by_owner=card_type,
+                card_played_by_opponent=cards_1[0],
+            )
+            for resolver_cls in get_card_def(card_type).resolvers:
+                tasks.append((resolver_cls(), ctx))
+
+        resolution = CardResolver.resolve(tasks)
 
         # Steps 4-5 removed: damage, energy, and statuses applied directly by Resolvers.
 

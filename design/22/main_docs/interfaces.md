@@ -107,7 +107,7 @@ def get_initial_draw_pile() -> list[CardType]:
 
 ## 3. `game/resolver/orchestrator.py` — 编排器变更
 
-### 3.1 CardResolver.resolve() 内部变更
+### 3.1 CardResolver.resolve() 签名变更
 
 ```python
 class CardResolver:
@@ -119,40 +119,66 @@ class CardResolver:
 
     @staticmethod
     def resolve(
-        player_1: Player,
-        player_2: Player,
-        cards_1: list[CardType],
-        cards_2: list[CardType],
+        tasks: list[tuple[Resolver, ResolveContext]],
     ) -> ResolutionResult:
-        """Orchestrate resolution of both players' cards.
-        
-        变更点：通过 get_card_def(card_type).resolvers 获取结算器类，
-        实例化后按 priority 排序执行。不再依赖 CardResolverRegistry。
+        """Orchestrate resolution of pre-built (resolver, context) tasks.
+
+        变更点：不再自行构建 tasks，改为接受调用方（GameCore.play_round）
+        已构建好的 (Resolver, ResolveContext) 列表。仅负责按 priority
+        排序并委托执行。不再依赖 card_def 模块。
         """
 ```
 
-核心逻辑变更（伪代码）：
-
-```
-# 旧:
-for resolver in CardResolverRegistry.get_resolvers(card_type):
-    tasks.append((resolver, ctx))
-
-# 新:
-card_def = get_card_def(card_type)
-for resolver_cls in card_def.resolvers:
-    tasks.append((resolver_cls(), ctx))
-```
-
-### 3.2 import 变更
+### 3.2 GameCore.play_round() 变更
 
 ```python
-# 移除:
-from src.backend.game.resolver.registry import CardResolverRegistry
+class GameCore:
+    def play_round(self, cards_1, cards_2, build_target_1=None, build_target_2=None):
+        # Step 2: Build resolver tasks from CardDef.resolvers (design/22).
+        # GameCore owns the mapping lookup; CardResolver only orchestrates.
+        tasks: list[tuple[Resolver, ResolveContext]] = []
 
-# 新增:
-from src.backend.game.card_def import get_card_def
+        for card_type in cards_1:
+            ctx = ResolveContext(
+                card_owner=self.player_1, opponent=self.player_2,
+                card_played_by_owner=card_type,
+                card_played_by_opponent=cards_2[0],
+            )
+            for resolver_cls in get_card_def(card_type).resolvers:
+                tasks.append((resolver_cls(), ctx))
+
+        for card_type in cards_2:
+            ctx = ResolveContext(
+                card_owner=self.player_2, opponent=self.player_1,
+                card_played_by_owner=card_type,
+                card_played_by_opponent=cards_1[0],
+            )
+            for resolver_cls in get_card_def(card_type).resolvers:
+                tasks.append((resolver_cls(), ctx))
+
+        resolution = CardResolver.resolve(tasks)
 ```
+
+核心逻辑变更：
+
+```
+# 旧 (design/21):
+# CardResolver.resolve() 内部调用 CardResolverRegistry.get_resolvers(card_type)
+
+# 新 (design/22):
+# GameCore.play_round() 从 get_card_def(card_type).resolvers 构建 tasks
+# CardResolver.resolve(tasks) 仅排序并执行 — 不 import card_def
+```
+
+### 3.3 import 变更
+
+```python
+# orchestrator.py — 移除:
+from src.backend.game.resolver.registry import CardResolverRegistry
+# 不再需要 lazy import card_def
+
+# game_core.py — 新增:
+from src.backend.game.resolver.base import ResolveContext, Resolver
 
 ---
 
