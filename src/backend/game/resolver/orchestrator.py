@@ -5,7 +5,7 @@ ResolveContext per card, sorts by priority, and delegates to each Resolver.
 """
 
 from src.backend.game.card import CardType
-from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.resolver.base import (
     ResolveContext,
     ResolveDetails,
@@ -31,27 +31,20 @@ class CardResolver:
 
     @staticmethod
     def resolve(
-        game_core,  # GameCore instance (no type annotation — avoids circular import)
+        player_1: Player,
+        player_2: Player,
         cards_1: list[CardType],
         cards_2: list[CardType],
     ) -> ResolutionResult:
-        """Orchestrate resolution of both players' cards.
-
-        Flow:
-        1. For each card, build a ResolveContext with owner/opponent/cards.
-        2. Query CardResolverRegistry for resolvers.
-        3. Flatten into (resolver, ctx) pairs.
-        4. Sort by resolver.get_priority() (highest first).
-        5. Invoke each resolver.resolve(ctx, details).
-        """
+        """Orchestrate resolution of both players' cards."""
         details = ResolveDetails()
 
         tasks: list[tuple[Resolver, ResolveContext]] = []
 
         for card_type in cards_1:
             ctx = ResolveContext(
-                card_owner=game_core.player_1,
-                opponent=game_core.player_2,
+                card_owner=player_1,
+                opponent=player_2,
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_2[0],
             )
@@ -60,8 +53,8 @@ class CardResolver:
 
         for card_type in cards_2:
             ctx = ResolveContext(
-                card_owner=game_core.player_2,
-                opponent=game_core.player_1,
+                card_owner=player_2,
+                opponent=player_1,
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_1[0],
             )

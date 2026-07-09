@@ -125,7 +125,8 @@ class GameCore:
         # Resolvers compute streaks from history; GrantGuardResolver (priority 12)
         # reads pre-round DEFENSE status before GrantDefenseResolver (priority 11) runs.
         resolution = CardResolver.resolve(
-            game_core=self,
+            player_1=self.player_1,
+            player_2=self.player_2,
             cards_1=cards_1,
             cards_2=cards_2,
         )

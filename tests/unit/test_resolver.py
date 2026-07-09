@@ -374,7 +374,7 @@ class TestPriorityOrdering:
         gm = GameCore(mode="pvp")
         gm.start_game()
         gm.player_1.statuses = [PlayerStatus(StatusType.DEFENSE, 1)]
-        result = CardResolver.resolve(gm, [CardType.DEFENSE], [CardType.ENERGY])
+        result = CardResolver.resolve(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.ENERGY])
         types = {ps.status_type for ps in gm.player_1.statuses}
         assert StatusType.DEFENSE in types
         assert StatusType.GUARD in types
@@ -385,7 +385,7 @@ class TestPriorityOrdering:
         gm.start_game()
         gm.player_1.hp = 20
         gm.player_2.hp = 20
-        CardResolver.resolve(gm, [CardType.DEFENSE], [CardType.ATTACK])
+        CardResolver.resolve(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.ATTACK])
         assert gm.player_1.hp == 20
 
 
@@ -398,7 +398,7 @@ class TestCardResolverOrchestration:
     def test_resolve_returns_result_with_details(self):
         gm = GameCore(mode="pvp")
         gm.start_game()
-        result = CardResolver.resolve(gm, [CardType.ATTACK], [CardType.DEFENSE])
+        result = CardResolver.resolve(gm.player_1, gm.player_2, [CardType.ATTACK], [CardType.DEFENSE])
         assert isinstance(result, ResolutionResult)
         assert len(result.details) > 0
 
@@ -407,7 +407,7 @@ class TestCardResolverOrchestration:
         gm.start_game()
         gm.player_1.hp = 20
         gm.player_2.hp = 20
-        CardResolver.resolve(gm, [CardType.ATTACK], [CardType.COUNTER])
+        CardResolver.resolve(gm.player_1, gm.player_2, [CardType.ATTACK], [CardType.COUNTER])
         assert gm.player_1.hp == 19
         assert gm.player_2.hp == 20
         assert gm.player_2.has_status(StatusType.DEFENSE)
