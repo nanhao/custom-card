@@ -574,7 +574,6 @@ class TrainingRunner:
         gru_out, _ = policy_model.gru(x, h)  # (T, 1, 32)
         policy_logits = policy_model.fc_policy(gru_out.squeeze(1))  # (T, 14)
         log_probs = torch.log_softmax(policy_logits, dim=-1)  # (T, 14)
-        probs = torch.exp(log_probs)  # (T, 14)
 
         # Extract log_probs for taken actions
         action_indices = torch.tensor(actions, dtype=torch.long, device=device)  # (T,)
@@ -590,9 +589,9 @@ class TrainingRunner:
         )
         policy_loss = -torch.min(ratio * adv, clipped_ratio * adv).mean()
 
-        # Entropy — compute from single (T, 14) tensor
-        p = probs.clamp(min=1e-8)
-        entropy = -(p * torch.log(p)).sum(dim=-1).mean()  # scalar
+        # Entropy: H = -sum(p * log(p)) = -sum(exp(log_p) * log_p).
+        # nan_to_num handles p=0 case (exp(-inf)=0, 0*inf=NaN → 0).
+        entropy = -(torch.exp(log_probs) * log_probs).nan_to_num(0.0).sum(dim=-1).mean()
 
         if torch.isnan(policy_loss) or torch.isnan(entropy):
             return None
