@@ -265,18 +265,17 @@ def _register_routes(app: Flask) -> None:
             )), 400
 
         # ---- Deserialize Player 1's cards ----
+        # Per design/28: empty cards_1 = pass, no error.
         cards_1_raw = data.get("cards_1", [])
-        if not cards_1_raw:
-            return jsonify(error_response(
-                "Missing required field: cards_1", "MISSING_CARDS_1", 400
-            )), 400
 
-        try:
-            cards_1 = [str_to_card(s) for s in cards_1_raw]
-        except ValueError as exc:
-            return jsonify(error_response(
-                str(exc), "INVALID_CARD", 400
-            )), 400
+        cards_1: list[CardType] = []
+        if cards_1_raw:
+            try:
+                cards_1 = [str_to_card(s) for s in cards_1_raw]
+            except ValueError as exc:
+                return jsonify(error_response(
+                    str(exc), "INVALID_CARD", 400
+                )), 400
 
         # ---- Determine Player 2's cards ----
         if gm.mode == "pve":
@@ -301,29 +300,28 @@ def _register_routes(app: Flask) -> None:
                 )), 500
 
             # Validate AI output (defense in depth).
-            # Per design/20: ai_select_action returns CardType.
-            if card_type not in Converter.ALL_CARD_TYPES:
+            # Per design/28: card_type=None means pass, which is valid.
+            if card_type is not None and card_type not in Converter.ALL_CARD_TYPES:
                 return jsonify(error_response(
                     f"AI returned invalid card: {card_type!r}",
                     "AI_INFERENCE_ERROR", 500
                 )), 500
 
-            cards_2 = [card_type]
-            build_target_2 = build_target_type
+            # Per design/28: pass → empty cards_2, build_target=None
+            cards_2 = [card_type] if card_type is not None else []
+            build_target_2 = build_target_type if card_type is not None else None
         else:
             # PVP: deserialize cards_2 from request body
+            # Per design/28: empty cards_2 = pass, no error.
             cards_2_raw = data.get("cards_2", [])
-            if not cards_2_raw:
-                return jsonify(error_response(
-                    "Missing required field: cards_2", "MISSING_CARDS_2", 400
-                )), 400
-
-            try:
-                cards_2 = [str_to_card(s) for s in cards_2_raw]
-            except ValueError as exc:
-                return jsonify(error_response(
-                    str(exc), "INVALID_CARD", 400
-                )), 400
+            cards_2: list[CardType] = []
+            if cards_2_raw:
+                try:
+                    cards_2 = [str_to_card(s) for s in cards_2_raw]
+                except ValueError as exc:
+                    return jsonify(error_response(
+                        str(exc), "INVALID_CARD", 400
+                    )), 400
             build_target_2 = None
 
         # Parse build_target_1 from request (optional, only for BUILD)

@@ -103,8 +103,8 @@ class GameCore:
         8. Return RoundResult.
 
         Args:
-            cards_1: Cards played by Player 1 (expects exactly 1).
-            cards_2: Cards played by Player 2 (expects exactly 1).
+            cards_1: Cards played by Player 1 (empty list = pass).
+            cards_2: Cards played by Player 2 (empty list = pass).
             build_target_1: Card to construct if P1 plays BUILD.
             build_target_2: Card to construct if P2 plays BUILD.
 
@@ -132,49 +132,60 @@ class GameCore:
         # Step 2: Build resolver tasks from CardDef.resolvers (design/22).
         # GameCore owns the mapping lookup; CardResolver only orchestrates.
         # Per design/25: build_target+build_target_cost passed via ResolveContext.
+        # Per design/28: empty cards list = pass — no resolver tasks for that player.
         tasks: list[tuple[Resolver, ResolveContext]] = []
 
-        for card_type in cards_1:
-            build_target = build_target_1 if card_type == CardType.BUILD else None
-            build_cost = get_card_def(build_target).build_cost if build_target is not None else 0
-            ctx = ResolveContext(
-                card_owner=self.player_1,
-                opponent=self.player_2,
-                card_played_by_owner=card_type,
-                card_played_by_opponent=cards_2[0],
-                build_target=build_target,
-                build_target_cost=build_cost,
-            )
-            for resolver_cls in get_card_def(card_type).resolvers:
-                tasks.append((resolver_cls(), ctx))
+        if cards_1:
+            for card_type in cards_1:
+                build_target = build_target_1 if card_type == CardType.BUILD else None
+                build_cost = get_card_def(build_target).build_cost if build_target is not None else 0
+                ctx = ResolveContext(
+                    card_owner=self.player_1,
+                    opponent=self.player_2,
+                    card_played_by_owner=card_type,
+                    card_played_by_opponent=cards_2[0] if cards_2 else None,
+                    build_target=build_target,
+                    build_target_cost=build_cost,
+                )
+                for resolver_cls in get_card_def(card_type).resolvers:
+                    tasks.append((resolver_cls(), ctx))
 
-        for card_type in cards_2:
-            build_target = build_target_2 if card_type == CardType.BUILD else None
-            build_cost = get_card_def(build_target).build_cost if build_target is not None else 0
-            ctx = ResolveContext(
-                card_owner=self.player_2,
-                opponent=self.player_1,
-                card_played_by_owner=card_type,
-                card_played_by_opponent=cards_1[0],
-                build_target=build_target,
-                build_target_cost=build_cost,
-            )
-            for resolver_cls in get_card_def(card_type).resolvers:
-                tasks.append((resolver_cls(), ctx))
+        if cards_2:
+            for card_type in cards_2:
+                build_target = build_target_2 if card_type == CardType.BUILD else None
+                build_cost = get_card_def(build_target).build_cost if build_target is not None else 0
+                ctx = ResolveContext(
+                    card_owner=self.player_2,
+                    opponent=self.player_1,
+                    card_played_by_owner=card_type,
+                    card_played_by_opponent=cards_1[0] if cards_1 else None,
+                    build_target=build_target,
+                    build_target_cost=build_cost,
+                )
+                for resolver_cls in get_card_def(card_type).resolvers:
+                    tasks.append((resolver_cls(), ctx))
 
         resolution = CardResolver.resolve(tasks)
 
         # Step 3 removed: BUILD construction now handled by BuildResolver (design/25).
 
         # Step 4: Discard played cards from hands (to discard_pile)
-        self.player_1.play_cards(cards_1)
-        self.player_2.play_cards(cards_2)
-        self.player_1.discard_pile.extend(cards_1)
-        self.player_2.discard_pile.extend(cards_2)
+        # Per design/28: empty cards list = pass — no discard.
+        if cards_1:
+            self.player_1.play_cards(cards_1)
+            self.player_1.discard_pile.extend(cards_1)
+        if cards_2:
+            self.player_2.play_cards(cards_2)
+            self.player_2.discard_pile.extend(cards_2)
 
         # Step 5: Record history as PlayerHistoryItem (design/16 D3)
-        self.player_1.history.append(PlayerHistoryItem(cards_1[0], build_target_1))
-        self.player_2.history.append(PlayerHistoryItem(cards_2[0], build_target_2))
+        # Per design/28: pass records card=None, build_target=None.
+        self.player_1.history.append(
+            PlayerHistoryItem(cards_1[0] if cards_1 else None, build_target_1 if cards_1 else None)
+        )
+        self.player_2.history.append(
+            PlayerHistoryItem(cards_2[0] if cards_2 else None, build_target_2 if cards_2 else None)
+        )
 
         # Step 6: after_resolve — snapshot after card resolution, before round-end.
         after_resolve = AfterResolve(
@@ -388,6 +399,8 @@ class GameCore:
     ) -> None:
         """Validate that play_round() can proceed.
 
+        Per design/28: empty cards list = pass — skip all validation for that player.
+
         Raises ValueError if:
         - Game is over.
         - Players are not initialized.
@@ -402,48 +415,52 @@ class GameCore:
             raise ValueError(
                 "Cannot play round: game not started. Call start_game() first."
             )
-        if not self.player_1.has_cards(cards_1):
-            raise ValueError(
-                f"Not all cards in {[c.name for c in cards_1]} are in Player 1's hand."
-            )
-        if not self.player_2.has_cards(cards_2):
-            raise ValueError(
-                f"Not all cards in {[c.name for c in cards_2]} are in Player 2's hand."
-            )
 
-        # BUILD validation for P1
-        if CardType.BUILD in cards_1:
-            if self.player_1.energy == 0:
+        # Per design/28: empty cards = pass, skip hand/BUILD validation
+        if cards_1:
+            if not self.player_1.has_cards(cards_1):
                 raise ValueError(
-                    "Cannot play BUILD: energy is 0."
+                    f"Not all cards in {[c.name for c in cards_1]} are in Player 1's hand."
                 )
-            if build_target_1 is None:
-                raise ValueError(
-                    "Cannot play BUILD: build_target_1 is required."
-                )
-            build_cost = get_card_def(build_target_1).build_cost
-            if build_cost > self.player_1.energy:
-                raise ValueError(
-                    f"Cannot build {build_target_1.value}: "
-                    f"cost {build_cost} > energy {self.player_1.energy}."
-                )
+            # BUILD validation for P1
+            if CardType.BUILD in cards_1:
+                if self.player_1.energy == 0:
+                    raise ValueError(
+                        "Cannot play BUILD: energy is 0."
+                    )
+                if build_target_1 is None:
+                    raise ValueError(
+                        "Cannot play BUILD: build_target_1 is required."
+                    )
+                build_cost = get_card_def(build_target_1).build_cost
+                if build_cost > self.player_1.energy:
+                    raise ValueError(
+                        f"Cannot build {build_target_1.value}: "
+                        f"cost {build_cost} > energy {self.player_1.energy}."
+                    )
 
-        # BUILD validation for P2
-        if CardType.BUILD in cards_2:
-            if self.player_2.energy == 0:
+        # Per design/28: empty cards = pass, skip hand/BUILD validation
+        if cards_2:
+            if not self.player_2.has_cards(cards_2):
                 raise ValueError(
-                    "Cannot play BUILD: energy is 0."
+                    f"Not all cards in {[c.name for c in cards_2]} are in Player 2's hand."
                 )
-            if build_target_2 is None:
-                raise ValueError(
-                    "Cannot play BUILD: build_target_2 is required."
-                )
-            build_cost = get_card_def(build_target_2).build_cost
-            if build_cost > self.player_2.energy:
-                raise ValueError(
-                    f"Cannot build {build_target_2.value}: "
-                    f"cost {build_cost} > energy {self.player_2.energy}."
-                )
+            # BUILD validation for P2
+            if CardType.BUILD in cards_2:
+                if self.player_2.energy == 0:
+                    raise ValueError(
+                        "Cannot play BUILD: energy is 0."
+                    )
+                if build_target_2 is None:
+                    raise ValueError(
+                        "Cannot play BUILD: build_target_2 is required."
+                    )
+                build_cost = get_card_def(build_target_2).build_cost
+                if build_cost > self.player_2.energy:
+                    raise ValueError(
+                        f"Cannot build {build_target_2.value}: "
+                        f"cost {build_cost} > energy {self.player_2.energy}."
+                    )
 
     def _check_game_end(self) -> tuple[bool, str | None]:
         """Evaluate game-end conditions: HP=0 only (no round limit in v2).

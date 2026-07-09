@@ -1,7 +1,9 @@
-"""App bridge layer — orchestrates game creation and AI card selection (design/14).
+"""App bridge layer — orchestrates game creation and AI card selection (design/14, design/28).
 
 Per design/14: policy output 13-d interleaved (build/play pairs),
 mask_fn uses 13-d interleaved masking (hand cards + build energy constraints).
+
+Per design/28: policy output 14-d — pass at index 0, even=play, odd=build.
 
 Public interface:
     create_game(mode, ai_name=None) -> (game_id, state)
@@ -138,7 +140,7 @@ class AppManager:
             probs, _log_probs, new_hidden = model(x, h, mask_fn=mask_fn)
             action_idx = int(torch.argmax(probs, dim=-1).item())
 
-        # Decode 13-d interleaved output (design/14)
+        # Decode 14-d output (design/28)
         card_type, build_target = Converter.policy_index_to_action(action_idx)
 
         new_hidden_list = new_hidden.squeeze(1).squeeze(0).tolist()
@@ -193,7 +195,7 @@ class AppManager:
                 action_idx = int(torch.multinomial(probs, 1).item())
                 log_prob = float(log_probs[0, action_idx].item())
 
-        # Decode 13-d interleaved output (design/14)
+        # Decode 14-d output (design/28)
         card_type, build_target = Converter.policy_index_to_action(action_idx)
 
         new_h_pol_list = new_h_pol.squeeze(1).squeeze(0).tolist()
@@ -271,16 +273,17 @@ class AppManager:
 
     @staticmethod
     def _make_mask_fn(hand: list[CardType], energy: int):
-        """Create a 13-d interleaved mask function closure (design/14).
+        """Create a 14-d mask function closure (design/14, design/28).
 
         Per design/19 D7: hand is list[CardType], not list[str].
         Per design/20: Converter._PLAY_TO_INDEX and _CARD_MAP use
         CardType keys, no .value conversion needed.
 
-        Odd indices (1,3,5,7,9,11): pure card plays.
+        Per design/28 (14-d layout):
+        - Index 0: pass — always legal, never masked.
+        - Even indices (2,4,6,8,10,12): pure card plays.
             - Block cards not in hand.
-
-        Even indices (0,2,4,6,8,10,12): build + build target.
+        - Odd indices (1,3,5,7,9,11,13): build + build target.
             - Block all if BUILD not in hand or energy == 0.
             - Otherwise, block targets exceeding available energy.
 
@@ -297,12 +300,13 @@ class AppManager:
 
         def mask_fn(logits: torch.Tensor) -> torch.Tensor:
             masked = logits.clone()
-            # Odd indices: block cards not in hand (keys are CardType)
+            # Index 0 (pass): always legal, never masked (design/28)
+            # Even indices (2,4,6,8,10,12): block cards not in hand
             for card_type, idx in Converter._PLAY_TO_INDEX.items():
                 if card_type not in legal_cards:
                     masked[0, idx] = float('-inf')
 
-            # Even indices: block build actions if can't build or too expensive.
+            # Odd indices (1,3,5,7,9,11,13): block build actions if can't build or too expensive.
             # Per design/20: _CARD_MAP is (CardType, play_index, build_index).
             for card_type, _, build_idx in Converter._CARD_MAP:
                 if not can_build or Converter.build_cost(card_type) > energy:

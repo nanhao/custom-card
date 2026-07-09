@@ -50,7 +50,7 @@ class TestBuildInputVector42D:
         assert vec[5] == 3.0
 
     def test_own_hand_counts(self):
-        """One of each card type in own hand, attack x2."""
+        """One of each card type in own hand, attack x2. Per design/28: _CARD_TYPE_ORDER starts with BUILD."""
         state = make_game_state(
             hand_2=[CardType.ATTACK, CardType.ATTACK, CardType.DEFENSE,
                      CardType.HEAVY, CardType.COUNTER, CardType.ENERGY,
@@ -59,44 +59,48 @@ class TestBuildInputVector42D:
             hp_1=20, hp_2=20,
         )
         vec = Converter.build_input_vector(state, player_key="2")
-        assert vec[6] == 2.0
-        assert vec[7] == 1.0
-        assert vec[8] == 1.0
-        assert vec[9] == 1.0
-        assert vec[10] == 1.0
-        assert vec[11] == 1.0
-        assert vec[12] == 1.0
+        # Order: BUILD, ATTACK, DEFENSE, HEAVY, COUNTER, ENERGY, FLEX
+        assert vec[6] == 1.0   # BUILD
+        assert vec[7] == 2.0   # ATTACK x2
+        assert vec[8] == 1.0   # DEFENSE
+        assert vec[9] == 1.0   # HEAVY
+        assert vec[10] == 1.0  # COUNTER
+        assert vec[11] == 1.0  # ENERGY
+        assert vec[12] == 1.0  # FLEX
 
     def test_opponent_hand_counts(self):
-        """Opponent has defense x2 and heavy."""
+        """Opponent has defense x2 and heavy. Per design/28: _CARD_TYPE_ORDER starts with BUILD."""
         state = make_game_state(
             hand_1=[CardType.DEFENSE, CardType.DEFENSE, CardType.HEAVY],
             hand_2=[CardType.ATTACK],
             hp_1=20, hp_2=20,
         )
         vec = Converter.build_input_vector(state, player_key="2")
-        assert vec[13] == 0.0
-        assert vec[14] == 2.0
-        assert vec[15] == 1.0
-        assert vec[16] == 0.0
-        assert vec[17] == 0.0
-        assert vec[18] == 0.0
-        assert vec[19] == 0.0
+        # Order: BUILD, ATTACK, DEFENSE, HEAVY, COUNTER, ENERGY, FLEX
+        assert vec[13] == 0.0  # BUILD
+        assert vec[14] == 0.0  # ATTACK
+        assert vec[15] == 2.0  # DEFENSE
+        assert vec[16] == 1.0  # HEAVY
+        assert vec[17] == 0.0  # COUNTER
+        assert vec[18] == 0.0  # ENERGY
+        assert vec[19] == 0.0  # FLEX
 
     def test_perspective_swap(self):
-        """P1 hand maps to indices 6-12, P2 hand to 13-19."""
+        """P1 hand maps to indices 6-12, P2 hand to 13-19. Per design/28: BUILD is position 0."""
         state = make_game_state(
             hand_1=[CardType.ATTACK],
             hand_2=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
         )
         vec = Converter.build_input_vector(state, player_key="1")
-        assert vec[6] == 1.0
-        for i in range(7, 13):
+        assert vec[6] == 0.0   # BUILD
+        assert vec[7] == 1.0   # ATTACK
+        for i in range(8, 13):
             assert vec[i] == 0.0
         assert vec[13] == 0.0
-        assert vec[14] == 1.0
-        for i in range(15, 20):
+        assert vec[14] == 0.0  # ATTACK
+        assert vec[15] == 1.0  # DEFENSE
+        for i in range(16, 20):
             assert vec[i] == 0.0
 
     def test_own_status_lifetimes(self):
@@ -137,7 +141,7 @@ class TestBuildInputVector42D:
             assert vec[i] == 0.0
 
     def test_own_discard_pile_counts(self):
-        """P2 discard: attack x2, defense x3, flex x1."""
+        """P2 discard: attack x2, defense x3, flex x1. Per design/28: BUILD is position 0."""
         state = make_game_state(
             hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
@@ -146,29 +150,31 @@ class TestBuildInputVector42D:
                             CardType.DEFENSE, CardType.FLEX],
         )
         vec = Converter.build_input_vector(state, player_key="2")
-        assert vec[26] == 2.0
-        assert vec[27] == 3.0
-        assert vec[28] == 0.0
-        assert vec[29] == 0.0
-        assert vec[30] == 0.0
-        assert vec[31] == 0.0
-        assert vec[32] == 1.0
+        # Order: BUILD, ATTACK, DEFENSE, HEAVY, COUNTER, ENERGY, FLEX
+        assert vec[26] == 0.0  # BUILD
+        assert vec[27] == 2.0  # ATTACK
+        assert vec[28] == 3.0  # DEFENSE
+        assert vec[29] == 0.0  # HEAVY
+        assert vec[30] == 0.0  # COUNTER
+        assert vec[31] == 0.0  # ENERGY
+        assert vec[32] == 1.0  # FLEX
 
     def test_own_draw_pile_counts(self):
-        """P2 draw: energy x2, build x1."""
+        """P2 draw: energy x2, build x1. Per design/28: BUILD is position 0."""
         state = make_game_state(
             hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
             draw_pile_2=[CardType.ENERGY, CardType.ENERGY, CardType.BUILD],
         )
         vec = Converter.build_input_vector(state, player_key="2")
-        assert vec[33] == 0.0
-        assert vec[34] == 0.0
-        assert vec[35] == 0.0
-        assert vec[36] == 0.0
-        assert vec[37] == 2.0
-        assert vec[38] == 1.0
-        assert vec[39] == 0.0
+        # Order: BUILD, ATTACK, DEFENSE, HEAVY, COUNTER, ENERGY, FLEX
+        assert vec[33] == 1.0  # BUILD
+        assert vec[34] == 0.0  # ATTACK
+        assert vec[35] == 0.0  # DEFENSE
+        assert vec[36] == 0.0  # HEAVY
+        assert vec[37] == 0.0  # COUNTER
+        assert vec[38] == 2.0  # ENERGY
+        assert vec[39] == 0.0  # FLEX
 
     def test_empty_piles_all_zero(self):
         """Indices 26-39 all 0.0 when piles are empty."""
@@ -213,7 +219,7 @@ class TestBuildInputVector42D:
             Converter.build_input_vector(state, player_key="2")
 
     def test_last_action_segment(self):
-        """P2 played ATTACK, P1 played BUILD+DEFENSE."""
+        """P2 played ATTACK, P1 played BUILD+DEFENSE. Per design/28: indices shifted."""
         state = make_game_state(
             hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
@@ -221,8 +227,8 @@ class TestBuildInputVector42D:
             history_1=[_phi(CardType.BUILD, CardType.DEFENSE)],
         )
         vec = Converter.build_input_vector(state, player_key="2")
-        assert vec[40] == 1.0
-        assert vec[41] == 4.0
+        assert vec[40] == 2.0  # ATTACK (was 1.0 in 13-d, now 2.0 in 14-d)
+        assert vec[41] == 5.0  # BUILD+DEFENSE (was 4.0 in 13-d, now 5.0)
 
     def test_first_round_no_history(self):
         """Indices 40-41 = -1.0 when no history."""
@@ -279,15 +285,16 @@ class TestBuildInputVector42D:
         assert vec[5] == 100.0
 
     def test_many_copies_of_one_card(self):
-        """5 ATTACK in hand."""
+        """5 ATTACK in hand. Per design/28: ATTACK is position 1."""
         state = make_game_state(hand_2=[CardType.ATTACK] * 5, hand_1=[], hp_1=20, hp_2=20)
         vec = Converter.build_input_vector(state, player_key="2")
-        assert vec[6] == 5.0
-        for i in range(7, 13):
+        assert vec[6] == 0.0   # BUILD
+        assert vec[7] == 5.0   # ATTACK
+        for i in range(8, 13):
             assert vec[i] == 0.0
 
     def test_full_perspective_swap(self):
-        """Comprehensive validation when player_key='1'."""
+        """Comprehensive validation when player_key='1'. Per design/28: _CARD_TYPE_ORDER changes."""
         state = make_game_state(
             hp_1=10, hp_2=20, energy_1=2, energy_2=4,
             hand_1=[CardType.HEAVY, CardType.COUNTER],
@@ -303,15 +310,18 @@ class TestBuildInputVector42D:
         assert vec[1] == 20.0
         assert vec[2] == 2.0
         assert vec[3] == 4.0
-        assert vec[6] == 0.0
-        assert vec[7] == 0.0
-        assert vec[8] == 1.0
-        assert vec[9] == 1.0
-        assert vec[10] == 0.0
-        assert vec[11] == 0.0
-        assert vec[12] == 0.0
-        assert vec[13] == 1.0
-        for i in range(14, 20):
+        # P1 hand: BUILD=0, ATTACK=0, DEFENSE=0, HEAVY=1, COUNTER=1
+        assert vec[6] == 0.0   # BUILD
+        assert vec[7] == 0.0   # ATTACK
+        assert vec[8] == 0.0   # DEFENSE
+        assert vec[9] == 1.0   # HEAVY
+        assert vec[10] == 1.0  # COUNTER
+        assert vec[11] == 0.0  # ENERGY
+        assert vec[12] == 0.0  # FLEX
+        # P2 hand: BUILD=0, ATTACK=1
+        assert vec[13] == 0.0  # BUILD
+        assert vec[14] == 1.0  # ATTACK
+        for i in range(15, 20):
             assert vec[i] == 0.0
         assert vec[20] == 1.0
         assert vec[21] == 0.0
@@ -319,18 +329,20 @@ class TestBuildInputVector42D:
         assert vec[23] == 0.0
         assert vec[24] == 2.0
         assert vec[25] == 3.0
-        assert vec[40] == 1.0
-        assert vec[41] == 3.0
+        # Last actions: ATTACK→2, DEFENSE→4 (design/28)
+        assert vec[40] == 2.0
+        assert vec[41] == 4.0
 
 
 class TestCountByCardType:
-    """TC-CC: _count_by_card_type internal method."""
+    """TC-CC: _count_by_card_type internal method. Per design/28: order is BUILD,ATTACK,DEFENSE,HEAVY,COUNTER,ENERGY,FLEX."""
 
     def test_normal_counting(self):
         """Two ATTACK, one DEFENSE, one FLEX."""
         cards = [CardType.ATTACK, CardType.ATTACK, CardType.DEFENSE, CardType.FLEX]
         result = Converter._count_by_card_type(cards)
-        assert result == [2.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+        # Order: BUILD, ATTACK, DEFENSE, HEAVY, COUNTER, ENERGY, FLEX
+        assert result == [0.0, 2.0, 1.0, 0.0, 0.0, 0.0, 1.0]
 
     def test_empty_list(self):
         """Empty list -> seven zeros."""
@@ -403,22 +415,18 @@ class TestInputSizeConstant:
 
 
 class TestActionToPolicyIndex:
-    """TC-AP-01~05: action_to_policy_index (unchanged from design/14)."""
+    """TC-AP: action_to_policy_index (design/28: 14-d, indices shifted +1, pass=0)."""
+
+    def test_pass_action(self):
+        """card=None, build_target=None → index 0 (pass)."""
+        assert Converter.action_to_policy_index(None, None) == 0
+
+    def test_pass_with_build_target_raises(self):
+        """pass (card=None) with build_target raises ValueError."""
+        with pytest.raises(ValueError):
+            Converter.action_to_policy_index(None, CardType.ATTACK)
 
     @pytest.mark.parametrize("card_type,expected", [
-        (CardType.ATTACK, 1),
-        (CardType.DEFENSE, 3),
-        (CardType.HEAVY, 5),
-        (CardType.COUNTER, 7),
-        (CardType.ENERGY, 9),
-        (CardType.FLEX, 11),
-    ])
-    def test_pure_play_actions(self, card_type, expected):
-        """Pure card plays map to odd indices."""
-        assert Converter.action_to_policy_index(card_type, None) == expected
-
-    @pytest.mark.parametrize("build_target,expected", [
-        (CardType.BUILD, 0),
         (CardType.ATTACK, 2),
         (CardType.DEFENSE, 4),
         (CardType.HEAVY, 6),
@@ -426,8 +434,21 @@ class TestActionToPolicyIndex:
         (CardType.ENERGY, 10),
         (CardType.FLEX, 12),
     ])
+    def test_pure_play_actions(self, card_type, expected):
+        """Pure card plays map to even indices (2,4,6,8,10,12). Design/28: +1 from old."""
+        assert Converter.action_to_policy_index(card_type, None) == expected
+
+    @pytest.mark.parametrize("build_target,expected", [
+        (CardType.BUILD, 1),
+        (CardType.ATTACK, 3),
+        (CardType.DEFENSE, 5),
+        (CardType.HEAVY, 7),
+        (CardType.COUNTER, 9),
+        (CardType.ENERGY, 11),
+        (CardType.FLEX, 13),
+    ])
     def test_build_actions(self, build_target, expected):
-        """Build + target map to even indices."""
+        """Build + target map to odd indices (1,3,5,7,9,11,13). Design/28: +1 from old."""
         assert Converter.action_to_policy_index(CardType.BUILD, build_target) == expected
 
     def test_string_input_raises_valueerror(self):
@@ -447,23 +468,13 @@ class TestActionToPolicyIndex:
 
 
 class TestPolicyIndexToAction:
-    """TC-PI-01~04: policy_index_to_action (unchanged from design/14)."""
+    """TC-PI: policy_index_to_action (design/28: 14-d, pass=0, even=play, odd=build)."""
+
+    def test_pass_index(self):
+        """Index 0 decodes to (None, None) = pass."""
+        assert Converter.policy_index_to_action(0) == (None, None)
 
     @pytest.mark.parametrize("index,card_type", [
-        (1, CardType.ATTACK),
-        (3, CardType.DEFENSE),
-        (5, CardType.HEAVY),
-        (7, CardType.COUNTER),
-        (9, CardType.ENERGY),
-        (11, CardType.FLEX),
-    ])
-    def test_odd_indices_pure_play(self, index, card_type):
-        """Odd indices decode to (CardType, None)."""
-        result = Converter.policy_index_to_action(index)
-        assert result == (card_type, None)
-
-    @pytest.mark.parametrize("index,build_target", [
-        (0, CardType.BUILD),
         (2, CardType.ATTACK),
         (4, CardType.DEFENSE),
         (6, CardType.HEAVY),
@@ -471,8 +482,22 @@ class TestPolicyIndexToAction:
         (10, CardType.ENERGY),
         (12, CardType.FLEX),
     ])
-    def test_even_indices_build_action(self, index, build_target):
-        """Even indices decode to (BUILD, target)."""
+    def test_even_indices_pure_play(self, index, card_type):
+        """Even indices (2,4,6,8,10,12) decode to (CardType, None)."""
+        result = Converter.policy_index_to_action(index)
+        assert result == (card_type, None)
+
+    @pytest.mark.parametrize("index,build_target", [
+        (1, CardType.BUILD),
+        (3, CardType.ATTACK),
+        (5, CardType.DEFENSE),
+        (7, CardType.HEAVY),
+        (9, CardType.COUNTER),
+        (11, CardType.ENERGY),
+        (13, CardType.FLEX),
+    ])
+    def test_odd_indices_build_action(self, index, build_target):
+        """Odd indices (1,3,5,7,9,11,13) decode to (BUILD, target)."""
         result = Converter.policy_index_to_action(index)
         assert result == (CardType.BUILD, build_target)
 
@@ -481,14 +506,15 @@ class TestPolicyIndexToAction:
         with pytest.raises(IndexError):
             Converter.policy_index_to_action(-1)
 
-    def test_index_13_raises(self):
-        """Index 13 (beyond max) raises IndexError."""
+    def test_index_14_raises(self):
+        """Index 14 (beyond max) raises IndexError (design/28: 14-d range 0-13)."""
         with pytest.raises(IndexError):
-            Converter.policy_index_to_action(13)
+            Converter.policy_index_to_action(14)
 
     def test_roundtrip_consistency(self):
         """action_to_policy_index → policy_index_to_action is identity."""
         test_cases = [
+            (None, None),   # pass
             (CardType.ATTACK, None),
             (CardType.DEFENSE, None),
             (CardType.HEAVY, None),

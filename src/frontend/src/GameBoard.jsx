@@ -71,6 +71,8 @@ export default function GameBoard({
   pileViewer,
   onViewPiles,
   onClosePiles,
+  onPass,
+  onP2Pass,
 }) {
   if (!state) return null;
 
@@ -174,19 +176,26 @@ export default function GameBoard({
       // Normal select phase
       if (phase === 'select') {
         return (
-          <div className="card-grid">
-            {cardOrder.map(card => {
-              const cnt = countInHand(pH.hand, card);
-              return (
-                <button key={card} className={`card-btn card-${card}`}
-                  disabled={cnt === 0} onClick={() => onSelectCard(card)}>
-                  <span className="icon">{CARD_ICONS[card]}</span>
-                  <span>{CARD_NAMES[card]}</span>
-                  <span className="count">×{cnt}</span>
-                </button>
-              );
-            })}
-          </div>
+          <>
+            <div className="card-grid">
+              {cardOrder.map(card => {
+                const cnt = countInHand(pH.hand, card);
+                return (
+                  <button key={card} className={`card-btn card-${card}`}
+                    disabled={cnt === 0} onClick={() => onSelectCard(card)}>
+                    <span className="icon">{CARD_ICONS[card]}</span>
+                    <span>{CARD_NAMES[card]}</span>
+                    <span className="count">×{cnt}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="pass-row" style={{ textAlign: 'center', marginTop: 8 }}>
+              <button className="btn btn-secondary" onClick={onPass}>
+                ⏭️ 不出牌
+              </button>
+            </div>
+          </>
         );
       }
 
@@ -205,6 +214,18 @@ export default function GameBoard({
     // Per design/27: opponent hand always visible — show real card grid.
     const showOppHand = (mode === 'pve' || mode === 'pvp') && phase !== 'pvp_pass' && buildPhase === null;
     const oppLabel = mode === 'pve' ? `AI (${aiName})'s Hand` : `Player 2's Hand`;
+
+    // P2 pass button for PVP pass screen
+    const renderP2PassButton = () => {
+      if (!showP2Select) return null;
+      return (
+        <div className="pass-row" style={{ textAlign: 'center', marginTop: 8 }}>
+          <button className="btn btn-secondary" onClick={onP2Pass}>
+            ⏭️ Player 2 Pass
+          </button>
+        </div>
+      );
+    };
 
     return (
       <>
@@ -253,6 +274,7 @@ export default function GameBoard({
             </div>
           </div>
         )}
+        {renderP2PassButton()}
       </>
     );
   };
@@ -302,6 +324,25 @@ export default function GameBoard({
 
       const p2Label = mode === 'pve' ? 'AI' : 'P2';
 
+      // Render card result: show card icon or pass indicator
+      const renderCardResult = (card, label) => {
+        if (!card || card.length === 0) {
+          return (
+            <div className="result-card card-pass" style={{ opacity: 0.7 }}>
+              <span style={{ fontSize: '2rem' }}>⏭️</span>
+              <span>{label}</span>
+              <span style={{ fontSize: '0.7rem' }}>不出牌</span>
+            </div>
+          );
+        }
+        return (
+          <div className={`result-card card-${card[0]}`}>
+            <span style={{ fontSize: '2rem' }}>{CARD_ICONS[card[0]]}</span>
+            <span>{label}</span>
+          </div>
+        );
+      };
+
       // Cycle ended indicator
       const cycleBleedNote = rr.end_actions.cycle_ended ? (
         <div className="cycle-bleed" style={{ marginTop: 8 }}>
@@ -315,15 +356,9 @@ export default function GameBoard({
             ⚡ Round {rr.round} — Cycle {rr.cycle}, Round {rr.round_in_cycle}/3
           </div>
           <div className="result-cards">
-            <div className={`result-card card-${rr.cards_1[0]}`}>
-              <span style={{ fontSize: '2rem' }}>{CARD_ICONS[rr.cards_1[0]]}</span>
-              <span>P1</span>
-            </div>
+            {renderCardResult(rr.cards_1, 'P1')}
             <div className="result-vs">VS</div>
-            <div className={`result-card card-${rr.cards_2[0]}`}>
-              <span style={{ fontSize: '2rem' }}>{CARD_ICONS[rr.cards_2[0]]}</span>
-              <span>{p2Label}</span>
-            </div>
+            {renderCardResult(rr.cards_2, p2Label)}
           </div>
           <div className="result-details">{details}</div>
           {cycleBleedNote}
@@ -381,11 +416,13 @@ export default function GameBoard({
             ? null
             : lines.reduce((a, b) => [a, <br key="br" />, '  ', b]);
           const bleedTag = e.end_actions.cycle_ended ? <span className="cycle-bleed"> [Cycle End]</span> : null;
+          const p1Display = e.cards_1.length > 0 ? CARD_ICONS[e.cards_1[0]] : '⏭️';
+          const p2Display = e.cards_2.length > 0 ? CARD_ICONS[e.cards_2[0]] : '⏭️';
           return (
             <div key={e.round} className="log-entry">
               <strong>C{e.cycle}R{e.round_in_cycle}</strong> (R{e.round}):{' '}
-              P1 {CARD_ICONS[e.cards_1[0]]} vs{' '}
-              {mode === 'pve' ? 'AI' : 'P2'} {CARD_ICONS[e.cards_2[0]]}
+              P1 {p1Display} vs{' '}
+              {mode === 'pve' ? 'AI' : 'P2'} {p2Display}
               {bleedTag}
               {interleaved && <><br />&nbsp;&nbsp;{interleaved}</>}
               <br /><span style={{ color: 'var(--muted)' }}>

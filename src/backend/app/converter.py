@@ -1,4 +1,4 @@
-"""Bidirectional conversion between game state and AI model tensors (design/14, design/27).
+"""Bidirectional conversion between game state and AI model tensors (design/14, design/27, design/28).
 
 Per design/14: 15-d input vector with metadata (HP, energy, round, cycle)
 at the front, card counts in the middle, and policy-index-encoded last
@@ -7,6 +7,9 @@ actions at the tail. Policy output is 13-d interleaved (build/play pairs).
 Per design/27: INPUT_SIZE expanded to 42-d — adds opponent hand counts (7 dims),
 status lifetimes for both players (6 dims), own discard pile counts (7 dims),
 and own draw pile counts (7 dims).
+
+Per design/28: POLICY_OUTPUT_SIZE expanded to 14-d — adds pass at index 0;
+all non-pass indices shift +1; even indices now pure play, odd indices build.
 
 Per design/20: _CARD_MAP uses CardType enum instead of string literals;
 INPUT_SIZE/POLICY_OUTPUT_SIZE imported from ai.rnn_v1.model;
@@ -26,13 +29,13 @@ from src.backend.game.player_state import StatusType, PlayerStatus
 class Converter:
     """Bidirectional conversion between game state and model tensors.
 
-    Per design/14, design/27:
+    Per design/14, design/27, design/28:
     - Input: 42-d (HP×2, energy×2, round, cycle,
               own_hand×7, opp_hand×7,
               own_status×3, opp_status×3,
               own_discard×7, own_draw×7,
               last_action×2)
-    - Policy output: 13-d interleaved (even=build+target, odd=pure play)
+    - Policy output: 14-d (0=pass, even 2/4/6/8/10/12=pure play, odd 1/3/5/7/9/11/13=build)
     - Last action encoded as policy index, -1 when no history.
 
     Per design/20: all card mappings use CardType enum; INPUT_SIZE,
@@ -47,12 +50,16 @@ class Converter:
 
     # ------------------------------------------------------------------
     # Master card mapping table — single source of truth for all
-    # card↔index mappings (design/20).
+    # card↔index mappings (design/20, design/28).
+    #
+    # Per design/28: all indices shifted +1 from original 13-d layout.
+    # Index 0 is reserved for pass (not in _CARD_MAP).
+    # Even indices (2,4,6,8,10,12) = pure play; odd indices (1,3,5,7,9,11,13) = build.
     #
     # Format: (card_type, play_index, build_index).
     #   card_type: CardType enum member.
-    #   play_index: odd-numbered policy output index (None if not directly playable).
-    #   build_index: even-numbered policy output index for build+target.
+    #   play_index: even-numbered policy output index (None if not directly playable).
+    #   build_index: odd-numbered policy output index for build+target.
     #
     # Per design/20 D3: build_cost is NOT stored here; it is derived
     # from get_card_def(card_type).build_cost to avoid duplication.
@@ -62,13 +69,13 @@ class Converter:
     # ------------------------------------------------------------------
 
     _CARD_MAP: list[tuple[CardType, int | None, int]] = [
-        (CardType.ATTACK,  1, 2),
-        (CardType.DEFENSE, 3, 4),
-        (CardType.HEAVY,   5, 6),
-        (CardType.COUNTER, 7, 8),
-        (CardType.ENERGY,  9, 10),
-        (CardType.BUILD,   None, 0),
-        (CardType.FLEX,   11, 12),
+        (CardType.BUILD,   None, 1),   # build_index 1 (design/28: +1)
+        (CardType.ATTACK,  2, 3),      # play_index 2, build_index 3
+        (CardType.DEFENSE, 4, 5),
+        (CardType.HEAVY,   6, 7),
+        (CardType.COUNTER, 8, 9),
+        (CardType.ENERGY,  10, 11),
+        (CardType.FLEX,    12, 13),
     ]
 
     # Public set of all valid CardType values
@@ -81,16 +88,17 @@ class Converter:
 
     _CARD_TYPE_ORDER: dict[CardType, int] = {c[0]: i for i, c in enumerate(_CARD_MAP)}
 
-    # Pure play actions: CardType → policy output index (odd numbers)
+    # Pure play actions: CardType → policy output index (even numbers, design/28)
     _PLAY_TO_INDEX: dict[CardType, int] = {
         c[0]: c[1] for c in _CARD_MAP if c[1] is not None
     }
 
-    # Build actions: build_target (CardType) → policy output index (even numbers)
+    # Build actions: build_target (CardType) → policy output index (odd numbers, design/28)
     _BUILD_TO_INDEX: dict[CardType, int] = {c[0]: c[2] for c in _CARD_MAP}
 
-    # Reverse: policy index → (card, build_target)
-    _INDEX_TO_ACTION: dict[int, tuple[CardType, CardType | None]] = {
+    # Reverse: policy index → (card, build_target), includes pass at index 0 (design/28)
+    _INDEX_TO_ACTION: dict[int, tuple[CardType | None, CardType | None]] = {
+        0: (None, None),  # pass (design/28)
         **{c[2]: (CardType.BUILD, c[0]) for c in _CARD_MAP},
         **{c[1]: (c[0], None) for c in _CARD_MAP if c[1] is not None},
     }
@@ -210,27 +218,38 @@ class Converter:
 
     @staticmethod
     def action_to_policy_index(
-        card: CardType, build_target: CardType | None,
+        card: CardType | None, build_target: CardType | None,
     ) -> int:
         """Convert game action (card + optional build target) to policy index.
 
         Per design/20: parameters are CardType enum, not strings.
+        Per design/28: card=None, build_target=None → 0 (pass).
 
-        Mapping:
-            Pure play → odd indices:  ATTACK→1, DEFENSE→3, ...
-            Build+target → even indices:  BUILD+ATTACK→2, ...
+        Mapping (14-d, design/28):
+            pass → 0
+            Pure play → even indices:  ATTACK→2, DEFENSE→4, ...
+            Build+target → odd indices:  BUILD+ATTACK→3, ...
 
         Args:
-            card: CardType played, e.g. CardType.ATTACK, CardType.BUILD.
+            card: CardType played, or None for pass.
             build_target: Build target CardType, only meaningful when card=BUILD.
 
         Returns:
-            Policy output index (0-12).
+            Policy output index (0-13).
 
         Raises:
             ValueError: If card is unknown, or build_target is invalid/absent
                         for a build action, or present for a non-build action.
         """
+        # Pass action: no card and no build target (design/28)
+        if card is None:
+            if build_target is not None:
+                raise ValueError(
+                    f"build_target must be None when card is None (pass), "
+                    f"got {build_target!r}"
+                )
+            return 0
+
         if card == CardType.BUILD:
             if build_target is None:
                 raise ValueError(
@@ -254,22 +273,23 @@ class Converter:
         return idx
 
     @staticmethod
-    def policy_index_to_action(index: int) -> tuple[CardType, CardType | None]:
+    def policy_index_to_action(index: int) -> tuple[CardType | None, CardType | None]:
         """Decode policy output index to (card, build_target).
 
         Per design/20: returns CardType enum, not strings.
+        Per design/28: index 0 returns (None, None) for pass.
 
-        Odd indices → pure play (build_target=None).
-        Even indices → build + target.
+        Even indices (2,4,6,8,10,12) → pure play (build_target=None).
+        Odd indices (1,3,5,7,9,11,13) → build + target.
 
         Args:
-            index: Policy output index (0-12).
+            index: Policy output index (0-13).
 
         Returns:
-            (card, build_target) tuple of CardType.
+            (card, build_target) tuple; both None if pass.
 
         Raises:
-            IndexError: If index is outside [0, 12].
+            IndexError: If index is outside [0, 13].
         """
         if index < 0 or index >= POLICY_OUTPUT_SIZE:
             raise IndexError(
@@ -344,7 +364,8 @@ class Converter:
         """Convert a PlayerHistoryItem to policy index.
 
         Per design/20: passes item.card and item.build_target directly
-        as CardType to action_to_policy_index, no .value conversion needed.
+        as CardType to action_to_policy_index.
+        Per design/28: item.card may be None (pass), returns 0.
         """
         return Converter.action_to_policy_index(
             item.card, item.build_target

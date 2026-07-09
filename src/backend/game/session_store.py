@@ -33,9 +33,12 @@ _EXPECTED_AI_STATE_LEN = HIDDEN_SIZE  # 32
 # ---------------------------------------------------------------------------
 
 
-def _card_to_str(card: CardType) -> str:
-    """Convert a CardType enum member to its JSON string value."""
-    return card.value
+def _card_to_str(card: CardType | None) -> str | None:
+    """Convert a CardType enum member to its JSON string value.
+
+    Per design/28: returns None when card is None (pass).
+    """
+    return card.value if card is not None else None
 
 
 def _str_to_card(value: str) -> CardType:
@@ -130,7 +133,7 @@ def _deserialize_player(data: dict) -> Player:
         discard_pile=[_str_to_card(s) for s in data["discard_pile"]],
         history=[
             PlayerHistoryItem(
-                card=_str_to_card(d["card"]),
+                card=_str_to_card(d["card"]) if d.get("card") is not None else None,
                 build_target=_str_to_card(d["build_target"]) if d.get("build_target") else None,
             )
             for d in data["history"]

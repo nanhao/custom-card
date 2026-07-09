@@ -43,17 +43,18 @@ export async function getMyPiles(gameId) {
 }
 
 /**
- * Play a round.
+ * Play a round. Per design/28: pass null for card1/card2 to pass.
  *
  * @param {string} gameId
- * @param {string} card1 - Player 1's card.
- * @param {string|null} [card2=null] - Player 2's card (PVP only).
+ * @param {string|null} card1 - Player 1's card, or null to pass.
+ * @param {string|null} [card2=null] - Player 2's card (PVP only), or null to pass.
  * @param {string|null} [buildTarget=null] - Build target card (only when card1=build).
  * @returns {{ round_result: object, state: object }}
  */
 export async function playRound(gameId, card1, card2 = null, buildTarget = null) {
-  const body = { cards_1: [card1] };
+  const body = { cards_1: card1 !== null ? [card1] : [] };
   if (card2 !== null) body.cards_2 = [card2];
+  // Per design/28: P2 pass in PVP sends empty cards_2 explicitly.
   if (buildTarget !== null) body.build_target_1 = buildTarget;
   const resp = await fetch(`${API_BASE}/games/${gameId}/play`, {
     method: 'POST',

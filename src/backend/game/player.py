@@ -29,7 +29,7 @@ class PlayerHistoryItem:
         build_target: The card built via BUILD, or None if no build occurred.
     """
 
-    card: CardType
+    card: CardType | None  # None means pass (design/28)
     build_target: CardType | None = None
 
 

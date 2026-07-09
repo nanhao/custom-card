@@ -71,14 +71,16 @@ class TestPlayRound:
                                json={"cards_1": [hand_1[0]], "cards_2": [hand_2[0]]})
         assert resp.get_json()["round_result"]["end_actions"]["cycle_ended"] is False
 
-    def test_missing_cards_2_returns_400(self, api_client):
+    def test_missing_cards_2_means_pass(self, api_client):
+        """Per design/28: missing cards_2 = pass, should return 200 (not 400)."""
         resp = api_client.post("/api/games", json={"mode": "pvp"})
         gid = resp.get_json()["game_id"]
         state = resp.get_json()["state"]
         hand_1 = state["players"]["1"]["hand"]
         resp = api_client.post(f"/api/games/{gid}/play",
                                json={"cards_1": [hand_1[0]]})
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        assert resp.get_json()["round_result"]["cards_2"] == []
 
 
 class TestRoundResultSerialization:

@@ -115,9 +115,9 @@ Pure ML — no knowledge of game rules.
   - Own discard pile counts (7)
   - Own draw pile counts (7)
   - Last actions (2): own last policy index, opponent last policy index (-1 if first round)
-- Policy: GRU(32) → Linear(32→13) → softmax (13-d interleaved: even=build+target, odd=pure play)
+- Policy: GRU(32) → Linear(32→14) → softmax (14-d: 0=pass, even=play, odd=build+target, design/28)
 - Value: GRU(32) → Linear(32→1) → scalar value estimate (no tanh)
-- Mask function (injected via forward): blocks illegal actions (cards not in hand, insufficient energy for build)
+- Mask function (injected via forward): blocks illegal actions (cards not in hand, insufficient energy for build); pass always legal
 
 ### 3.3 App Layer (`src/backend/app/`)
 

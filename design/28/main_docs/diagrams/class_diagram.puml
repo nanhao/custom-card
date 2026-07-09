@@ -1,0 +1,112 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam noteFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title Class Diagram — Design #28 Pass Action
+
+package "ai.rnn_v1" {
+    class GRUPolicyModel {
+        + POLICY_OUTPUT_SIZE = 14
+        + INITIAL_HIDDEN_STATE: list[float]
+        --
+        + forward(x, hidden, mask_fn, temperature): (probs, log_probs, new_hidden)
+    }
+    note right of GRUPolicyModel
+        fc_policy: Linear(32 -> 14)
+        logits: (1, 14)
+    end note
+}
+
+package "app" {
+    class AppManager {
+        - _policy_models: dict
+        - _value_models: dict
+        --
+        + create_game(mode, ai_name): (game_id, GameState)
+        + ai_select_action(state, hidden_state, ai_name): (CardType|None, CardType|None, list[float])
+        + ai_sample_action(state, h_pol, h_val, ai_name, temp, player_key): (...)
+        - _make_mask_fn(hand, energy): Callable
+        - _get_policy_model(ai_name): nn.Module
+    }
+    note bottom of AppManager
+        mask_fn updated for 14-d:
+        index 0 (pass) always legal
+        even indices (2,4,6,8,10,12): require card in hand
+        odd indices (1,3,5,7,9,11,13): require BUILD + energy
+    end note
+
+    class Converter {
+        + INPUT_SIZE = 42
+        + POLICY_OUTPUT_SIZE = 14
+        + ALL_CARD_TYPES: frozenset
+        --
+        + build_input_vector(state, player_key): list[float]
+        + action_to_policy_index(card: CardType|None, build_target: CardType|None): int
+        + policy_index_to_action(index): (CardType|None, CardType|None)
+        + build_cost(card_type): int
+        - _CARD_MAP: list[(CardType, int|None, int)]
+        - _PLAY_TO_INDEX: dict[CardType, int]
+        - _BUILD_TO_INDEX: dict[CardType, int]
+        - _INDEX_TO_ACTION: dict[int, (CardType|None, CardType|None)]
+    }
+    note bottom of Converter
+        _CARD_MAP: all indices +1
+        pass = index 0, (None, None)
+        BUILD: (None, 1)
+        ATTACK: (2, 3)
+        DEFENSE: (4, 5)
+        HEAVY: (6, 7)
+        COUNTER: (8, 9)
+        ENERGY: (10, 11)
+        FLEX: (12, 13)
+    end note
+}
+
+package "game" {
+    class GameCore {
+        + ROUNDS_PER_CYCLE = 3
+        + CARDS_PER_CYCLE = 5
+        --
+        + start_game(): None
+        + play_round(cards_1, cards_2, build_target_1, build_target_2): RoundResult
+        + get_state(player_perspective): GameState
+        - _validate(cards_1, cards_2, bt1, bt2): None
+        - _tick_status_lifetimes(): None
+        - _start_cycle(): None
+        - _check_game_end(): (bool, str|None)
+    }
+    note bottom of GameCore
+        cards_1/cards_2: empty list = pass
+        _validate: skip empty lists
+        pass: no resolver tasks, no discard
+    end note
+
+    class PlayerHistoryItem {
+        + card: CardType | None
+        + build_target: CardType | None
+    }
+
+    class RoundResult {
+        + cards_1: list[CardType]
+        + cards_2: list[CardType]
+        + before: BeforeResolve
+        + after_resolve: AfterResolve
+        + end_actions: EndActions
+        + after_end_actions: AfterEndActions
+        --
+        + to_dict(rr): dict
+    }
+    note bottom of RoundResult
+        cards_1/cards_2 may be empty []
+        to_dict handles empty arrays
+    end note
+}
+
+GameCore --> PlayerHistoryItem
+AppManager --> Converter
+AppManager --> GRUPolicyModel
+AppManager --> GameCore
+
+@enduml

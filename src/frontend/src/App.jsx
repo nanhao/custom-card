@@ -186,6 +186,39 @@ export default function App() {
     }
   }
 
+  /** Pass this round (play no card). Per design/28. */
+  async function handlePass() {
+    if (mode === 'pve') {
+      // PVE: send pass directly
+      setP1Card(null);
+      setPhase('loading');
+      try {
+        const data = await playRound(gameId, null, null, null);
+        setState({
+          ...data.state,
+          players: {
+            ...data.state.players,
+            '1': { ...data.state.players['1'], statuses: data.round_result.after_resolve.statuses_1 },
+            '2': { ...data.state.players['2'], statuses: data.round_result.after_resolve.statuses_2 },
+          },
+        });
+        setRoundLog(prev => [...prev, data.round_result]);
+        setP1Card(null);
+        setBuildPhase(null);
+        setPendingBuild(null);
+        setPileViewer(null);
+        setPhase(data.round_result.after_resolve.is_game_over ? 'gameover' : 'reveal');
+      } catch (err) {
+        setError(err.message);
+        setPhase('select');
+      }
+    } else {
+      // PVP: buffer pass, show pass screen for P2
+      setP1Card(null);
+      setPhase('pvp_pass');
+    }
+  }
+
   /** Player 2 selects a card (PVP only). */
   async function handlePlayer2Card(card) {
     if (phase !== 'pvp_pass' || mode !== 'pvp') return;
@@ -195,6 +228,29 @@ export default function App() {
     setPhase('loading');
     try {
       const data = await playRound(gameId, p1Card, card);
+      setState({
+        ...data.state,
+        players: {
+          ...data.state.players,
+          '1': { ...data.state.players['1'], statuses: data.round_result.after_resolve.statuses_1 },
+          '2': { ...data.state.players['2'], statuses: data.round_result.after_resolve.statuses_2 },
+        },
+      });
+      setRoundLog(prev => [...prev, data.round_result]);
+      setP1Card(null);
+      setPhase(data.round_result.after_resolve.is_game_over ? 'gameover' : 'reveal');
+    } catch (err) {
+      setError(err.message);
+      setPhase('pvp_pass');
+    }
+  }
+
+  /** Player 2 passes (PVP only). Per design/28. */
+  async function handleP2Pass() {
+    if (phase !== 'pvp_pass' || mode !== 'pvp') return;
+    setPhase('loading');
+    try {
+      const data = await playRound(gameId, p1Card, null);
       setState({
         ...data.state,
         players: {
@@ -355,6 +411,8 @@ export default function App() {
         onNextRound={handleNextRound}
         onNewGame={handleNewGame}
         onBackToMenu={handleBackToMenu}
+        onPass={handlePass}
+        onP2Pass={handleP2Pass}
       />
     </>
   );

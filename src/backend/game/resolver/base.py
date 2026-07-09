@@ -44,7 +44,7 @@ class ResolveContext:
     card_owner: Player
     opponent: Player
     card_played_by_owner: CardType
-    card_played_by_opponent: CardType
+    card_played_by_opponent: CardType | None  # None when opponent passes (design/28)
     build_target: CardType | None = None
     build_target_cost: int = 0
 

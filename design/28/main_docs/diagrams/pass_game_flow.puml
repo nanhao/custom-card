@@ -1,0 +1,49 @@
+@startuml pass_game_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam noteFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title Pass Game Flow — Design #28
+
+actor "Player 1" as P1
+actor "Player 2" as P2
+participant "Frontend\n(App.jsx)" as FE
+participant "Controller\n(api.py)" as API
+participant "AppManager" as AM
+participant "GameCore" as GC
+participant "Converter" as CV
+
+== P1 Pass, P2 plays ATTACK ==
+
+P1 -> FE: 1. click Pass button
+FE -> API: 2. POST /play {"cards_1": []}
+API -> GC: 3. play_round(cards_1=[], cards_2=["attack"])
+GC -> GC: 4. _validate([]) — skip card check
+note right: P1 cards list empty\nskip hand validation\nskip BUILD validation
+GC -> GC: 5. build resolver tasks only for P2
+GC -> GC: 6. CardResolver.resolve()
+note right: P1 has no resolver tasks\nP2 ATTACK resolves normally\nP1 takes damage
+GC -> GC: 7. P1: no discard, hand unchanged\nP2: discard ATTACK
+GC -> GC: 8. record history: P1=None, P2=ATTACK
+GC -> API: 9. RoundResult(cards_1=[], cards_2=[ATTACK])
+API -> FE: 10. 200 {"round_result": {"cards_1": [], ...}}
+FE -> P1: 11. show result: P1 "pass" vs P2 ATTACK
+
+== Both Pass ==
+
+P1 -> FE: 1. click Pass button
+note right of FE: P1 selects pass
+FE -> FE: 2. phase = "pvp_pass"
+P2 -> FE: 3. click Pass button
+FE -> API: 4. POST /play {"cards_1": [], "cards_2": []}
+API -> GC: 5. play_round(cards_1=[], cards_2=[])
+GC -> GC: 6. _validate both — skip all checks
+GC -> GC: 7. no resolver tasks\nno card consumption\nno HP change
+GC -> GC: 8. record history: P1=None, P2=None
+GC -> GC: 9. tick status lifetimes\nadvance round
+GC -> API: 10. RoundResult(cards_1=[], cards_2=[])
+API -> FE: 11. 200 {"round_result": {"cards_1": [], ...}}
+FE -> P1: 12. show result: both "pass"
+
+@enduml
