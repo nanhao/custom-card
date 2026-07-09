@@ -61,14 +61,12 @@ def _make_ctx(
             card_owner=gm.player_1, opponent=gm.player_2,
             card_played_by_owner=owner_card,
             card_played_by_opponent=opponent_card,
-            game_core=gm,
         )
     else:
         return gm, ResolveContext(
             card_owner=gm.player_2, opponent=gm.player_1,
             card_played_by_owner=owner_card,
             card_played_by_opponent=opponent_card,
-            game_core=gm,
         )
 
 

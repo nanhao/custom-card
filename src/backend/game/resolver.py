@@ -53,7 +53,6 @@ class ResolveContext:
     opponent: Player
     card_played_by_owner: CardType
     card_played_by_opponent: CardType
-    game_core: "GameCore"
 
 
 # =============================================================================
@@ -294,7 +293,7 @@ class CardResolver:
 
     @staticmethod
     def resolve(
-        game_core: "GameCore",
+        game_core,  # GameCore instance (no type annotation — avoids circular import)
         cards_1: list[CardType],
         cards_2: list[CardType],
     ) -> ResolutionResult:
@@ -318,7 +317,6 @@ class CardResolver:
                 opponent=game_core.player_2,
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_2[0],
-                game_core=game_core,
             )
             for resolver in CardResolverRegistry.get_resolvers(card_type):
                 tasks.append((resolver, ctx))
@@ -329,7 +327,6 @@ class CardResolver:
                 opponent=game_core.player_1,
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_1[0],
-                game_core=game_core,
             )
             for resolver in CardResolverRegistry.get_resolvers(card_type):
                 tasks.append((resolver, ctx))
