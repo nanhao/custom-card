@@ -14,6 +14,7 @@ from src.backend.game.resolver import (
     AttackDamageResolver,
     GrantDefenseResolver,
     GrantGuardResolver,
+    GrantFragileResolver,
     HeavyDamageResolver,
     ReflectResolver,
     GainEnergyResolver,
@@ -142,7 +143,7 @@ class TestCardDefResolvers:
     def test_resolvers_count_per_card_type(self):
         """TC-CD-02: each CardType has correct number of resolvers."""
         expected = {
-            CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 1,
+            CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 2,
             CardType.COUNTER: 2, CardType.ENERGY: 1, CardType.BUILD: 1,
             CardType.FLEX: 2,
         }
@@ -155,7 +156,7 @@ class TestCardDefResolvers:
         expected = {
             CardType.ATTACK: {AttackDamageResolver},
             CardType.DEFENSE: {GrantDefenseResolver, GrantGuardResolver},
-            CardType.HEAVY: {HeavyDamageResolver},
+            CardType.HEAVY: {HeavyDamageResolver, GrantFragileResolver},
             CardType.COUNTER: {GrantDefenseResolver, ReflectResolver},
             CardType.ENERGY: {GainEnergyResolver},
             CardType.BUILD: {BuildResolver},

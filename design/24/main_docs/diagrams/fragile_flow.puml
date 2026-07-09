@@ -1,0 +1,74 @@
+@startuml fragile_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam classFontName Microsoft YaHei
+skinparam sequenceMessageAlign center
+
+title FRAGILE Status Resolution Flow — Intention #24
+
+participant "CardResolver\n(orchestrator)" as CR
+participant "GrantGuardResolver\n(priority 12)" as GG
+participant "GrantDefenseResolver\n(priority 11)" as GD
+participant "HeavyDamageResolver\n(priority 10)" as HD
+participant "GrantFragileResolver\n(priority 10)" as GF
+participant "Player\n(opponent)" as P
+
+== Priority 12: Check pre-round DEFENSE, grant GUARD ==
+
+CR -> GG: resolve(ctx, details)
+GG -> P: has_status(FRAGILE)?
+alt FRAGILE active
+    GG -> GG: skip — "GUARD blocked by FRAGILE"
+else no FRAGILE
+    GG -> P: has_status(DEFENSE)?
+    alt pre-round DEFENSE present
+        GG -> P: grant_status(GUARD)
+        GG -> GG: "gains GUARD"
+    else no pre-round DEFENSE
+        GG -> GG: skip
+    end
+end
+
+== Priority 11: Grant DEFENSE ==
+
+CR -> GD: resolve(ctx, details)
+GD -> P: has_status(FRAGILE)?
+alt FRAGILE active
+    GD -> GD: skip — "DEFENSE blocked by FRAGILE"
+else no FRAGILE
+    GD -> P: grant_status(DEFENSE)
+    GD -> GD: "gains DEFENSE"
+end
+
+== Priority 10: HEAVY effects (damage + fragile) ==
+
+CR -> HD: resolve(ctx, details)
+HD -> P: has_status(GUARD)?
+alt GUARD active
+    HD -> HD: "Heavy Strike blocked by opponent GUARD"
+    note right of HD
+        Damage AND Fragile
+        BOTH blocked by GUARD
+    end note
+else no GUARD
+    HD -> P: take_damage(1)
+    HD -> HD: "Heavy Strike deals 1 to opponent"
+end
+
+CR -> GF: resolve(ctx, details)
+GF -> P: has_status(GUARD)?
+alt GUARD active
+    GF -> GF: "Fragile blocked by opponent GUARD"
+else no GUARD
+    GF -> P: grant_status(FRAGILE, lifetime=2)
+    GF -> GF: "gains FRAGILE (2 rounds)"
+end
+
+note over GG, GF
+    FRAGILE prevents gaining DEFENSE/GUARD
+    But priority 11 (GD) runs before 10 (GF)
+    So same-round defense is NOT blocked.
+    FRAGILE blocks defense in SUBSEQUENT rounds.
+end note
+
+@enduml

@@ -12,14 +12,16 @@ class TestStatusType:
     """TC-ST-01 ~ TC-ST-03: StatusType enum."""
 
     def test_enum_members_exist(self):
-        """TC-ST-01: DEFENSE and GUARD exist with correct values."""
+        """TC-ST-01: DEFENSE, GUARD and FRAGILE exist with correct values."""
         assert StatusType.DEFENSE.value == "defense"
         assert StatusType.GUARD.value == "guard"
+        assert StatusType.FRAGILE.value == "fragile"
 
     def test_construct_from_string(self):
-        """TC-ST-02: StatusType("defense") → DEFENSE, StatusType("guard") → GUARD."""
+        """TC-ST-02: StatusType("defense") → DEFENSE, StatusType("guard") → GUARD, StatusType("fragile") → FRAGILE."""
         assert StatusType("defense") == StatusType.DEFENSE
         assert StatusType("guard") == StatusType.GUARD
+        assert StatusType("fragile") == StatusType.FRAGILE
 
     def test_invalid_string_raises(self):
         """TC-ST-03: StatusType("invalid") raises ValueError."""

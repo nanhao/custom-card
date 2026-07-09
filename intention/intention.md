@@ -353,3 +353,9 @@ POLICY_OUTPUT_SIZE: int = 13 这两个常量定义不应该放在这里，应该
 
 # intention_id=23
 这是一个重构任务，目前 cardDef 里面定义了 icon，但这是显示逻辑。icon 应该由前端维护
+
+# intention_id=24
+我梳理了新的完整卡牌定义，放在 intention/card.md 文件，以后这个文件就是卡牌定义文件了。所有的卡牌代码实现都要对齐这个文件。现在，进行一次 carddef 和 resolver 的全面检查，看是否跟该文件对齐，不对齐的进行对齐。
+
+# intention_id=25
+build_resolver 的实现不对，现在是个空实现。

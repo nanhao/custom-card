@@ -21,6 +21,7 @@ from src.backend.game.resolver import (
     AttackDamageResolver,
     GrantDefenseResolver,
     GrantGuardResolver,
+    GrantFragileResolver,
     HeavyDamageResolver,
     ReflectResolver,
     GainEnergyResolver,
@@ -124,7 +125,7 @@ class TestCardDefResolvers:
 
     def test_all_card_types_have_resolvers(self):
         """TC-RG-03: every CardType has correct resolver counts."""
-        expected = {CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 1,
+        expected = {CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 2,
                     CardType.COUNTER: 2, CardType.ENERGY: 1, CardType.BUILD: 1,
                     CardType.FLEX: 2}
         for ct, count in expected.items():
@@ -487,3 +488,156 @@ class TestCardResolverOrchestration:
         gm.start_game()
         gm.player_1.history = history
         assert gm.player_1.get_consecutive_attack_count() == 0
+
+
+# =============================================================================
+# 13. GrantFragileResolver — design/24
+# =============================================================================
+
+
+class TestGrantFragileResolver:
+    """TC-GF-01 ~ TC-GF-04: GrantFragileResolver."""
+
+    def test_priority_is_10(self):
+        """TC-GF-01: priority returns 10."""
+        assert GrantFragileResolver().get_priority() == 10
+
+    def test_grants_fragile_to_opponent(self):
+        """TC-GF-02: grants FRAGILE (lifetime=2) when opponent has no GUARD."""
+        gm, ctx = _make_ctx(source="1")
+        details = ResolveDetails()
+        GrantFragileResolver().resolve(ctx, details)
+        assert gm.player_2.has_status(StatusType.FRAGILE)
+        fragile = [ps for ps in gm.player_2.statuses if ps.status_type == StatusType.FRAGILE]
+        assert len(fragile) == 1
+        assert fragile[0].lifetime == 2
+        assert any("gains FRAGILE" in d for d in details.details)
+
+    def test_blocked_by_opponent_guard(self):
+        """TC-GF-03: blocked when opponent has GUARD."""
+        gm, ctx = _make_ctx(
+            source="1",
+            statuses_2=[PlayerStatus(StatusType.GUARD, 1)],
+        )
+        details = ResolveDetails()
+        GrantFragileResolver().resolve(ctx, details)
+        assert not gm.player_2.has_status(StatusType.FRAGILE)
+        assert any("blocked by opponent GUARD" in d for d in details.details)
+
+    def test_not_blocked_by_defense_alone(self):
+        """FRAGILE is blocked by GUARD only, not DEFENSE."""
+        gm, ctx = _make_ctx(
+            source="1",
+            statuses_2=[PlayerStatus(StatusType.DEFENSE, 1)],
+        )
+        details = ResolveDetails()
+        GrantFragileResolver().resolve(ctx, details)
+        assert gm.player_2.has_status(StatusType.FRAGILE)
+
+
+# =============================================================================
+# 14. FRAGILE blocks DEFENSE/ GUARD — design/24
+# =============================================================================
+
+
+class TestFragileBlocksDefense:
+    """TC-GD-01 ~ TC-GD-02: FRAGILE blocks GrantDefenseResolver."""
+
+    def test_defense_blocked_by_fragile(self):
+        """TC-GD-01: with FRAGILE, DEFENSE is not granted."""
+        gm, ctx = _make_ctx(
+            source="1",
+            statuses_1=[PlayerStatus(StatusType.FRAGILE, 2)],
+        )
+        details = ResolveDetails()
+        GrantDefenseResolver().resolve(ctx, details)
+        assert not gm.player_1.has_status(StatusType.DEFENSE)
+        assert any("blocked by FRAGILE" in d for d in details.details)
+
+    def test_defense_granted_without_fragile(self):
+        """TC-GD-02: without FRAGILE, DEFENSE is granted normally."""
+        gm, ctx = _make_ctx(source="1")
+        details = ResolveDetails()
+        GrantDefenseResolver().resolve(ctx, details)
+        assert gm.player_1.has_status(StatusType.DEFENSE)
+
+
+class TestFragileBlocksGuard:
+    """TC-GG-01 ~ TC-GG-02: FRAGILE blocks GrantGuardResolver."""
+
+    def test_guard_blocked_by_fragile(self):
+        """TC-GG-01: with FRAGILE and pre-round DEFENSE, GUARD is not granted."""
+        gm, ctx = _make_ctx(
+            source="1",
+            statuses_1=[
+                PlayerStatus(StatusType.DEFENSE, 1),
+                PlayerStatus(StatusType.FRAGILE, 2),
+            ],
+        )
+        details = ResolveDetails()
+        GrantGuardResolver().resolve(ctx, details)
+        assert not gm.player_1.has_status(StatusType.GUARD)
+        assert any("blocked by FRAGILE" in d for d in details.details)
+
+    def test_guard_granted_without_fragile(self):
+        """TC-GG-02: with pre-round DEFENSE and no FRAGILE, GUARD is granted."""
+        gm, ctx = _make_ctx(
+            source="1",
+            statuses_1=[PlayerStatus(StatusType.DEFENSE, 1)],
+        )
+        details = ResolveDetails()
+        GrantGuardResolver().resolve(ctx, details)
+        assert gm.player_1.has_status(StatusType.GUARD)
+
+
+# =============================================================================
+# 15. Priority interaction — design/24 D1
+# =============================================================================
+
+
+class TestFragilePriorityInteraction:
+    """TC-PR-01 ~ TC-PR-02: Priority ensures same-round defense before fragile."""
+
+    def test_heavy_vs_defense_same_round(self):
+        """TC-PR-01: DEFENSE (pri=11) granted before FRAGILE (pri=10) applied."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hp = 20
+        gm.player_2.hp = 20
+        tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.HEAVY])
+        CardResolver.resolve(tasks)
+        # P1: DEFENSE granted (pri=11 before pri=10 fragile)
+        assert gm.player_1.has_status(StatusType.DEFENSE)
+        # P1: FRAGILE applied (HEAVY's GrantFragileResolver pri=10, no GUARD)
+        assert gm.player_1.has_status(StatusType.FRAGILE)
+        # P1: HEAVY damage (1) applied (no GUARD)
+        assert gm.player_1.hp == 19
+
+    def test_heavy_vs_no_defense(self):
+        """TC-PR-02: HEAVY without opposing defense, both effects apply."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hp = 20
+        gm.player_2.hp = 20
+        tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.ATTACK], [CardType.HEAVY])
+        CardResolver.resolve(tasks)
+        # P1 takes HEAVY damage
+        assert gm.player_1.hp == 19
+        # P1 gains FRAGILE
+        assert gm.player_1.has_status(StatusType.FRAGILE)
+        # P2 takes ATTACK damage
+        assert gm.player_2.hp == 19
+
+    def test_heavy_vs_guard_blocks_both(self):
+        """GUARD blocks both damage AND fragile from HEAVY."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hp = 20
+        gm.player_2.hp = 20
+        gm.player_1.statuses = [PlayerStatus(StatusType.GUARD, 1)]
+        tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.ENERGY], [CardType.HEAVY])
+        CardResolver.resolve(tasks)
+        # P1 HP unchanged (GUARD blocks HEAVY damage)
+        assert gm.player_1.hp == 20
+        # P1 no FRAGILE (GUARD blocks GrantFragileResolver)
+        assert not gm.player_1.has_status(StatusType.FRAGILE)

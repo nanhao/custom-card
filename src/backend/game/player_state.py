@@ -19,6 +19,7 @@ class StatusType(Enum):
 
     DEFENSE = "defense"  # 防御状态 — blocks attack damage
     GUARD = "guard"      # 联防状态 — blocks heavy strike damage
+    FRAGILE = "fragile"  # 脆弱状态 (design/24) — 持有者无法获得防御和联防效果
 
 
 @dataclass

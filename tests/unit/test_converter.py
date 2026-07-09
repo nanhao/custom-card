@@ -345,7 +345,7 @@ class TestBuildCost:
     @pytest.mark.parametrize("card_type,expected", [
         (CardType.ATTACK, 1),
         (CardType.DEFENSE, 1),
-        (CardType.HEAVY, 1),
+        (CardType.HEAVY, 2),
         (CardType.COUNTER, 2),
         (CardType.ENERGY, 1),
         (CardType.BUILD, 1),

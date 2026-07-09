@@ -200,3 +200,23 @@ class TestGrantStatus:
         assert p.statuses[0].status_type == StatusType.DEFENSE
         assert p.statuses[1].status_type == StatusType.GUARD
         assert p.statuses[1].lifetime == 1
+
+    def test_grant_status_custom_lifetime(self):
+        """design/24: grant_status(FRAGILE, lifetime=2) sets lifetime=2."""
+        p = Player(statuses=[])
+        p.grant_status(StatusType.FRAGILE, lifetime=2)
+        assert len(p.statuses) == 1
+        assert p.statuses[0].status_type == StatusType.FRAGILE
+        assert p.statuses[0].lifetime == 2
+
+    def test_grant_status_fragile_default_lifetime(self):
+        """grant_status(FRAGILE) without explicit lifetime defaults to 1."""
+        p = Player(statuses=[])
+        p.grant_status(StatusType.FRAGILE)
+        assert p.statuses[0].lifetime == 1
+
+    def test_has_status_detects_fragile(self):
+        """has_status(FRAGILE) works correctly."""
+        p = Player(statuses=[PlayerStatus(StatusType.FRAGILE, 2)])
+        assert p.has_status(StatusType.FRAGILE) is True
+        assert p.has_status(StatusType.DEFENSE) is False

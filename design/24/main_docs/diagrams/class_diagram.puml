@@ -1,0 +1,92 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam classFontName Microsoft YaHei
+
+title CardDef & Resolver — Intention #24 (FRAGILE + alignment)
+
+package "game/player_state.py" as ps {
+    enum StatusType {
+        DEFENSE = defense
+        GUARD = guard
+        FRAGILE = fragile
+    }
+
+    class PlayerStatus <<dataclass>> {
+        status_type: StatusType
+        lifetime: int
+        +to_dict(): dict
+    }
+}
+
+package "game/card_def.py" as cd {
+    class CardDef <<dataclass, frozen>> {
+        card_type: CardType
+        build_cost: int
+        display_name: str
+        resolvers: tuple[type[Resolver], ...]
+    }
+}
+
+package "game/resolver/" as resolver {
+    abstract class Resolver {
+        +get_priority(): int
+        +resolve(ctx: ResolveContext, details: ResolveDetails): None
+    }
+
+    class AttackDamageResolver
+    class GrantDefenseResolver
+    class GrantGuardResolver
+    class HeavyDamageResolver
+    class GrantFragileResolver
+    class ReflectResolver
+    class GainEnergyResolver
+    class FlexDamageResolver
+    class BuildResolver
+
+    AttackDamageResolver --|> Resolver
+    GrantDefenseResolver --|> Resolver
+    GrantGuardResolver --|> Resolver
+    HeavyDamageResolver --|> Resolver
+    GrantFragileResolver --|> Resolver
+    ReflectResolver --|> Resolver
+    GainEnergyResolver --|> Resolver
+    FlexDamageResolver --|> Resolver
+    BuildResolver --|> Resolver
+
+    class ResolveContext <<dataclass>> {
+        card_owner: Player
+        opponent: Player
+        card_played_by_owner: CardType
+        card_played_by_opponent: CardType
+    }
+
+    class ResolveDetails <<dataclass>> {
+        details: list[str]
+        +add(detail: str): None
+    }
+}
+
+cd::CardDef --> resolver::Resolver : resolvers field
+resolver::Resolver --> resolver::ResolveContext : uses
+resolver::Resolver --> resolver::ResolveDetails : uses
+resolver::ResolveContext ..> ps::StatusType : checks via Player.has_status()
+resolver::GrantDefenseResolver ..> ps::StatusType : checks FRAGILE
+resolver::GrantGuardResolver ..> ps::StatusType : checks FRAGILE
+resolver::GrantFragileResolver ..> ps::StatusType : grants FRAGILE
+resolver::HeavyDamageResolver ..> ps::StatusType : checks GUARD
+
+note as N1
+    Intention #24 changes (vs design/22):
+    1. StatusType: +FRAGILE
+    2. Player.grant_status(): +lifetime param
+    3. CardDef.HEAVY: build_cost 1->2
+       resolvers +GrantFragileResolver
+    4. CardDef.COUNTER: display_name
+       "反击" -> "防守反击"
+    5. GrantDefenseResolver: check FRAGILE
+    6. GrantGuardResolver: check FRAGILE
+    7. NEW: GrantFragileResolver (prio 10)
+end note
+
+@enduml

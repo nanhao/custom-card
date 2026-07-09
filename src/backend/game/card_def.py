@@ -17,6 +17,7 @@ from src.backend.game.resolver.flex_damage_resolver import FlexDamageResolver
 from src.backend.game.resolver.gain_energy_resolver import GainEnergyResolver
 from src.backend.game.resolver.grant_defense_resolver import GrantDefenseResolver
 from src.backend.game.resolver.grant_guard_resolver import GrantGuardResolver
+from src.backend.game.resolver.grant_fragile_resolver import GrantFragileResolver
 from src.backend.game.resolver.heavy_damage_resolver import HeavyDamageResolver
 from src.backend.game.resolver.reflect_resolver import ReflectResolver
 
@@ -64,14 +65,14 @@ _CARD_DEFS: dict[CardType, CardDef] = {
     ),
     CardType.HEAVY: CardDef(
         card_type=CardType.HEAVY,
-        build_cost=1,
+        build_cost=2,
         display_name="重击",
-        resolvers=(HeavyDamageResolver,),
+        resolvers=(HeavyDamageResolver, GrantFragileResolver),
     ),
     CardType.COUNTER: CardDef(
         card_type=CardType.COUNTER,
         build_cost=2,
-        display_name="反击",
+        display_name="防守反击",
         resolvers=(GrantDefenseResolver, ReflectResolver),
     ),
     CardType.ENERGY: CardDef(
