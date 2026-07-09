@@ -14,11 +14,11 @@ from src.backend.game.resolver.orchestrator import CardResolver
 from src.backend.game.resolver.registry import CardResolverRegistry
 
 # Individual resolver classes — for direct testing
-from src.backend.game.resolver.attack_damage import AttackDamageResolver
-from src.backend.game.resolver.build import BuildResolver
-from src.backend.game.resolver.flex_damage import FlexDamageResolver
-from src.backend.game.resolver.gain_energy import GainEnergyResolver
-from src.backend.game.resolver.grant_defense import GrantDefenseResolver
-from src.backend.game.resolver.grant_guard import GrantGuardResolver
-from src.backend.game.resolver.heavy_damage import HeavyDamageResolver
-from src.backend.game.resolver.reflect import ReflectResolver
+from src.backend.game.resolver.attack_damage_resolver import AttackDamageResolver
+from src.backend.game.resolver.build_resolver import BuildResolver
+from src.backend.game.resolver.flex_damage_resolver import FlexDamageResolver
+from src.backend.game.resolver.gain_energy_resolver import GainEnergyResolver
+from src.backend.game.resolver.grant_defense_resolver import GrantDefenseResolver
+from src.backend.game.resolver.grant_guard_resolver import GrantGuardResolver
+from src.backend.game.resolver.heavy_damage_resolver import HeavyDamageResolver
+from src.backend.game.resolver.reflect_resolver import ReflectResolver
