@@ -4,23 +4,26 @@ Per design/21: _process_effect module-level function is replaced by per-effect
 Resolver subclasses registered via CardResolverRegistry. Each Resolver directly
 modifies GameCore player state through its public methods.
 
-Per architecture D9, this module is pure logic — no UI, no I/O.
+Resolvers receive all context via ResolveContext dataclass — no indirect
+GameCore state queries needed.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from src.backend.game.card import CardType
-from src.backend.game.player import PlayerHistoryItem
-from src.backend.game.player_state import StatusType, PlayerStatus
+from src.backend.game.player import Player, PlayerHistoryItem
+from src.backend.game.player_state import StatusType
+
+
+# =============================================================================
+# Data types
+# =============================================================================
 
 
 @dataclass
 class ResolveDetails:
-    """Settlement detail collector, the data source for ResolutionResult.details.
-
-    Each Resolver records resolution steps via add() during settlement.
-    """
+    """Settlement detail collector, the data source for ResolutionResult.details."""
 
     details: list[str] = field(default_factory=list)
 
@@ -32,11 +35,25 @@ class ResolveDetails:
 
 @dataclass
 class ResolutionResult:
-    """Resolution outcome. State changes are already applied to GameCore,
+    """Resolution outcome. State changes are already applied to GameCore players,
     so this only carries the details from ResolveDetails.
     """
 
     details: list[str]
+
+
+@dataclass
+class ResolveContext:
+    """All context needed by a Resolver to settle one card's effects.
+
+    Passed directly to resolve() — no GameCore indirection needed.
+    """
+
+    card_owner: Player
+    opponent: Player
+    card_played_by_owner: CardType
+    card_played_by_opponent: CardType
+    game_core: "GameCore"
 
 
 # =============================================================================
@@ -53,27 +70,14 @@ class Resolver(ABC):
 
     @abstractmethod
     def get_priority(self) -> int:
-        """Return resolution priority (10 or 11)."""
+        """Return resolution priority."""
 
     @abstractmethod
-    def resolve(self, game_core: "GameCore", details: ResolveDetails) -> None:
-        """Execute effect resolution, directly modifying GameCore player state.
+    def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
+        """Execute effect resolution, directly modifying Player state via ctx.
 
-        Reads resolution context via game_core.get_resolve_* methods.
         Records settlement details via details.add().
         """
-
-    # ------------------------------------------------------------------
-    # Helper — resolve player id to Player instance
-    # ------------------------------------------------------------------
-
-    def _source_player(self, gc: "GameCore") -> "Player":
-        """Return the source player (the one who played the card)."""
-        return gc.player_1 if gc.get_resolve_source() == "1" else gc.player_2
-
-    def _opponent_player(self, gc: "GameCore") -> "Player":
-        """Return the opponent player."""
-        return gc.player_2 if gc.get_resolve_source() == "1" else gc.player_1
 
 
 # =============================================================================
@@ -84,7 +88,9 @@ class Resolver(ABC):
 class AttackDamageResolver(Resolver):
     """Settles ATTACK damage (priority 10).
 
-    Damage = min(streak + 1, 3). Blocked by opponent DEFENSE status.
+    Damage = min(streak + 1, 3), where streak is computed from
+    card_owner's history via CardResolver.get_consecutive_attack().
+    Blocked by opponent DEFENSE status.
     """
 
     # Maximum damage from consecutive attack streak
@@ -93,74 +99,69 @@ class AttackDamageResolver(Resolver):
     def get_priority(self) -> int:
         return 10
 
-    def resolve(self, game_core: "GameCore", details: ResolveDetails) -> None:
-        src_id = game_core.get_resolve_source()
-        opponent = self._opponent_player(game_core)
-        streak = game_core.get_resolve_attack_streak()
+    def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
+        # Compute streak from card_owner's history at resolution time
+        streak = CardResolver.get_consecutive_attack(ctx.card_owner.history)
         raw_damage = min(streak + 1, self.MAX_STREAK_DAMAGE)
 
-        if opponent.has_status(StatusType.DEFENSE):
-            details.add(f"P{src_id} Attack(streak={streak}) blocked by opponent defense")
+        if ctx.opponent.has_status(StatusType.DEFENSE):
+            details.add(f"Attack(streak={streak}) blocked by opponent defense")
         else:
-            opponent.take_damage(raw_damage)
-            details.add(f"P{src_id} Attack(streak={streak}) deals {raw_damage} to opponent")
+            ctx.opponent.take_damage(raw_damage)
+            details.add(f"Attack(streak={streak}) deals {raw_damage} to opponent")
 
 
 class GrantDefenseResolver(Resolver):
-    """Grants DEFENSE status to the source player (priority 11)."""
+    """Grants DEFENSE status to the card_owner (priority 11)."""
 
     def get_priority(self) -> int:
         return 11
 
-    def resolve(self, game_core: "GameCore", details: ResolveDetails) -> None:
-        src_id = game_core.get_resolve_source()
-        player = self._source_player(game_core)
-        player.grant_status(StatusType.DEFENSE)
-        details.add(f"P{src_id} gains DEFENSE")
+    def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
+        ctx.card_owner.grant_status(StatusType.DEFENSE)
+        details.add("gains DEFENSE")
 
 
 class GrantGuardResolver(Resolver):
-    """Grants GUARD status if source player had DEFENSE pre-round (priority 11).
+    """Grants GUARD status if card_owner had DEFENSE pre-round (priority 12).
 
+    Priority 12 runs BEFORE any GrantDefenseResolver (priority 11), so
+    card_owner.has_status(DEFENSE) reflects the pre-round state.
     Does NOT grant GUARD if already present.
     """
 
     def get_priority(self) -> int:
-        return 11
+        return 12
 
-    def resolve(self, game_core: "GameCore", details: ResolveDetails) -> None:
-        if not game_core.get_resolve_had_defense_pre():
+    def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
+        # Priority 12 ensures no GrantDefense has run yet,
+        # so DEFENSE status reflects pre-round state.
+        if not ctx.card_owner.has_status(StatusType.DEFENSE):
             return
 
-        src_id = game_core.get_resolve_source()
-        player = self._source_player(game_core)
-
-        # Check if GUARD already present (avoid duplicate)
-        if player.has_status(StatusType.GUARD):
+        # Avoid duplicate GUARD
+        if ctx.card_owner.has_status(StatusType.GUARD):
             return
 
-        player.grant_status(StatusType.GUARD)
-        details.add(f"P{src_id} gains GUARD (consecutive defense)")
+        ctx.card_owner.grant_status(StatusType.GUARD)
+        details.add("gains GUARD (consecutive defense)")
 
 
 class HeavyDamageResolver(Resolver):
     """Settles HEAVY strike damage (priority 10).
 
-    Deals 1 damage, blocked by opponent GUARD status only (DEFENSE does not block).
+    Deals 1 damage, blocked by opponent GUARD status only.
     """
 
     def get_priority(self) -> int:
         return 10
 
-    def resolve(self, game_core: "GameCore", details: ResolveDetails) -> None:
-        src_id = game_core.get_resolve_source()
-        opponent = self._opponent_player(game_core)
-
-        if opponent.has_status(StatusType.GUARD):
-            details.add(f"P{src_id} Heavy Strike blocked by opponent GUARD")
+    def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
+        if ctx.opponent.has_status(StatusType.GUARD):
+            details.add("Heavy Strike blocked by opponent GUARD")
         else:
-            opponent.take_damage(1)
-            details.add(f"P{src_id} Heavy Strike deals 1 to opponent")
+            ctx.opponent.take_damage(1)
+            details.add("Heavy Strike deals 1 to opponent")
 
 
 class ReflectResolver(Resolver):
@@ -172,19 +173,18 @@ class ReflectResolver(Resolver):
     def get_priority(self) -> int:
         return 10
 
-    def resolve(self, game_core: "GameCore", details: ResolveDetails) -> None:
-        opp_card = game_core.get_resolve_opponent_card()
-        if opp_card not in (CardType.ATTACK, CardType.HEAVY):
+    def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
+        if ctx.card_played_by_opponent not in (CardType.ATTACK, CardType.HEAVY):
             return
 
-        src_id = game_core.get_resolve_source()
-        opponent = self._opponent_player(game_core)
-        opponent.take_damage(1)
-        details.add(f"P{src_id} Counter reflects {opp_card.value}, deals 1 to opponent")
+        ctx.opponent.take_damage(1)
+        details.add(
+            f"Counter reflects {ctx.card_played_by_opponent.value}, deals 1 to opponent"
+        )
 
 
 class GainEnergyResolver(Resolver):
-    """Grants 1 energy to the source player (priority 10).
+    """Grants 1 energy to the card_owner (priority 10).
 
     Clamping to [0,5] is handled by Player.add_energy().
     """
@@ -192,11 +192,9 @@ class GainEnergyResolver(Resolver):
     def get_priority(self) -> int:
         return 10
 
-    def resolve(self, game_core: "GameCore", details: ResolveDetails) -> None:
-        src_id = game_core.get_resolve_source()
-        player = self._source_player(game_core)
-        player.add_energy(1)
-        details.add(f"P{src_id} gains 1 energy")
+    def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
+        ctx.card_owner.add_energy(1)
+        details.add("gains 1 energy")
 
 
 class FlexDamageResolver(Resolver):
@@ -208,15 +206,12 @@ class FlexDamageResolver(Resolver):
     def get_priority(self) -> int:
         return 10
 
-    def resolve(self, game_core: "GameCore", details: ResolveDetails) -> None:
-        src_id = game_core.get_resolve_source()
-        opponent = self._opponent_player(game_core)
-
-        if opponent.has_status(StatusType.DEFENSE):
-            details.add(f"P{src_id} FLEX damage blocked by opponent defense")
+    def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
+        if ctx.opponent.has_status(StatusType.DEFENSE):
+            details.add("FLEX damage blocked by opponent defense")
         else:
-            opponent.take_damage(1)
-            details.add(f"P{src_id} FLEX damage deals 1 to opponent")
+            ctx.opponent.take_damage(1)
+            details.add("FLEX damage deals 1 to opponent")
 
 
 class BuildResolver(Resolver):
@@ -225,9 +220,8 @@ class BuildResolver(Resolver):
     def get_priority(self) -> int:
         return 10
 
-    def resolve(self, game_core: "GameCore", details: ResolveDetails) -> None:
-        src_id = game_core.get_resolve_source()
-        details.add(f"P{src_id} BUILD — no immediate effect")
+    def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
+        details.add("BUILD — no immediate effect")
 
 
 # =============================================================================
@@ -239,7 +233,6 @@ class CardResolverRegistry:
     """Registry mapping CardType to its Resolver list.
 
     All methods are classmethods. Registration happens at module load time.
-    The registry is a class-level dict with default entries for all 7 CardTypes.
     """
 
     _registry: dict[CardType, list[Resolver]] = {}
@@ -284,27 +277,13 @@ CardResolverRegistry.register(CardType.FLEX, FlexDamageResolver())
 class CardResolver:
     """Priority-layered resolution orchestrator.
 
-    Replaces the old _process_effect module-level function. Queries
-    CardResolverRegistry for each card's resolvers, sorts by priority,
-    sets resolution context on GameCore, and delegates to each Resolver.
+    Queries CardResolverRegistry for each card's resolvers, builds a
+    ResolveContext per card, sorts by priority, and delegates to each Resolver.
     """
 
     @staticmethod
     def get_consecutive_attack(history: list[PlayerHistoryItem]) -> int:
-        """Count consecutive ATTACK cards from the end of history.
-
-        Only ATTACK cards count toward the streak. COUNTER, DEFENSE, and
-        all other card types break it.
-
-        Per design/16 D5, accepts list[PlayerHistoryItem] and reads
-        item.card for the card type.
-
-        Args:
-            history: Chronological list of PlayerHistoryItem entries.
-
-        Returns:
-            Number of consecutive ATTACK cards at the end of history.
-        """
+        """Count consecutive ATTACK cards from the end of history."""
         count = 0
         for item in reversed(history):
             if item.card == CardType.ATTACK:
@@ -318,52 +297,47 @@ class CardResolver:
         game_core: "GameCore",
         cards_1: list[CardType],
         cards_2: list[CardType],
-        p1_streak: int,
-        p2_streak: int,
-        p1_had_defense_pre: bool,
-        p2_had_defense_pre: bool,
     ) -> ResolutionResult:
         """Orchestrate resolution of both players' cards.
 
         Flow:
-        1. Collect all (card_type, source_player, streak, had_defense_pre)
-        2. For each, query CardResolverRegistry for resolvers
-        3. Flatten into (resolver, source, opponent_card, streak, had_defense) tuples
-        4. Sort by resolver.get_priority() (11 before 10)
-        5. Set GameCore resolve context and invoke each resolver
-
-        Args:
-            game_core: GameCore instance whose state will be modified.
-            cards_1: Cards played by Player 1 (expects exactly 1).
-            cards_2: Cards played by Player 2 (expects exactly 1).
-            p1_streak: P1's consecutive attack count before this round.
-            p2_streak: P2's consecutive attack count before this round.
-            p1_had_defense_pre: Whether P1 had DEFENSE before this round.
-            p2_had_defense_pre: Whether P2 had DEFENSE before this round.
-
-        Returns:
-            ResolutionResult with collected settlement details.
+        1. For each card, build a ResolveContext with owner/opponent/cards.
+        2. Query CardResolverRegistry for resolvers.
+        3. Flatten into (resolver, ctx) pairs.
+        4. Sort by resolver.get_priority() (highest first).
+        5. Invoke each resolver.resolve(ctx, details).
         """
         details = ResolveDetails()
 
-        # Build resolution tasks: (resolver, source_id, opponent_card, streak, had_defense)
-        tasks: list[tuple[Resolver, str, CardType, int, bool]] = []
+        # Build (resolver, ResolveContext) tasks for both players
+        tasks: list[tuple[Resolver, ResolveContext]] = []
 
         for card_type in cards_1:
+            ctx = ResolveContext(
+                card_owner=game_core.player_1,
+                opponent=game_core.player_2,
+                card_played_by_owner=card_type,
+                card_played_by_opponent=cards_2[0],
+                game_core=game_core,
+            )
             for resolver in CardResolverRegistry.get_resolvers(card_type):
-                tasks.append((resolver, "1", cards_2[0], p1_streak, p1_had_defense_pre))
+                tasks.append((resolver, ctx))
 
         for card_type in cards_2:
+            ctx = ResolveContext(
+                card_owner=game_core.player_2,
+                opponent=game_core.player_1,
+                card_played_by_owner=card_type,
+                card_played_by_opponent=cards_1[0],
+                game_core=game_core,
+            )
             for resolver in CardResolverRegistry.get_resolvers(card_type):
-                tasks.append((resolver, "2", cards_1[0], p2_streak, p2_had_defense_pre))
+                tasks.append((resolver, ctx))
 
-        # Sort by priority: 11 before 10
+        # Sort by priority: highest first
         tasks.sort(key=lambda t: t[0].get_priority(), reverse=True)
 
-        # Execute each resolver with its context
-        for resolver, source_id, opp_card, streak, had_defense in tasks:
-            # Set resolution context on GameCore before invoking resolver
-            game_core.set_resolve_context(source_id, opp_card, streak, had_defense)
-            resolver.resolve(game_core, details)
+        for resolver, ctx in tasks:
+            resolver.resolve(ctx, details)
 
         return ResolutionResult(details=list(details.details))

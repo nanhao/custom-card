@@ -53,52 +53,6 @@ class GameCore:
         self.winner: str | None = None
         self.round_log: list[RoundResult] = []
 
-        # Resolution context — set by CardResolver before each Resolver.resolve() call.
-        # These are temporary per-resolver values read by Resolver subclasses.
-        self._resolve_source: str = ""
-        self._resolve_opponent_card: CardType = CardType.ATTACK
-        self._resolve_attack_streak: int = 0
-        self._resolve_had_defense_pre: bool = False
-
-    # ------------------------------------------------------------------
-    # Resolution context accessors (design/21 — for Resolver subclasses)
-    # ------------------------------------------------------------------
-
-    def set_resolve_context(
-        self, source: str, opponent_card: CardType,
-        attack_streak: int, had_defense_pre: bool,
-    ) -> None:
-        """Set the per-resolver resolution context before invoking a Resolver.
-
-        Called by CardResolver.resolve() before each resolver.resolve() call.
-
-        Args:
-            source: The player being resolved ("1" or "2").
-            opponent_card: The card played by the opponent this round.
-            attack_streak: The source player's consecutive attack count.
-            had_defense_pre: Whether the source player had DEFENSE pre-round.
-        """
-        self._resolve_source = source
-        self._resolve_opponent_card = opponent_card
-        self._resolve_attack_streak = attack_streak
-        self._resolve_had_defense_pre = had_defense_pre
-
-    def get_resolve_source(self) -> str:
-        """Return the player currently being resolved: "1" or "2"."""
-        return self._resolve_source
-
-    def get_resolve_opponent_card(self) -> CardType:
-        """Return the card played by the opponent this round."""
-        return self._resolve_opponent_card
-
-    def get_resolve_attack_streak(self) -> int:
-        """Return the current player's consecutive attack count."""
-        return self._resolve_attack_streak
-
-    def get_resolve_had_defense_pre(self) -> bool:
-        """Return whether the current player had DEFENSE before this round."""
-        return self._resolve_had_defense_pre
-
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -167,21 +121,13 @@ class GameCore:
             hp_2=self.player_2.hp,
         )
 
-        # Step 2: Compute pre-round state for resolution
-        p1_streak = CardResolver.get_consecutive_attack(self.player_1.history)
-        p2_streak = CardResolver.get_consecutive_attack(self.player_2.history)
-        p1_had_defense_pre = self.player_1.has_status(StatusType.DEFENSE)
-        p2_had_defense_pre = self.player_2.has_status(StatusType.DEFENSE)
-
-        # Step 3: Resolve — Resolver subclasses directly modify player state
+        # Step 2: Resolve — Resolver subclasses directly modify player state.
+        # Resolvers compute streaks from history; GrantGuardResolver (priority 12)
+        # reads pre-round DEFENSE status before GrantDefenseResolver (priority 11) runs.
         resolution = CardResolver.resolve(
             game_core=self,
             cards_1=cards_1,
             cards_2=cards_2,
-            p1_streak=p1_streak,
-            p2_streak=p2_streak,
-            p1_had_defense_pre=p1_had_defense_pre,
-            p2_had_defense_pre=p2_had_defense_pre,
         )
 
         # Steps 4-5 removed: damage, energy, and statuses applied directly by Resolvers.
