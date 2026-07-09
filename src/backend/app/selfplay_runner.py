@@ -310,8 +310,8 @@ class SelfPlayRunner:
             logger.log(
                 "DEBUG", "selfplay.round_action",
                 round=round_num,
-                card1=card1.value,
-                card2=card2.value,
+                card1=card1.value if card1 else None,
+                card2=card2.value if card2 else None,
                 bt1=bt1.value if bt1 else None,
                 bt2=bt2.value if bt2 else None,
                 hand1=[c.value for c in pre_state_p1.players["1"].hand],
@@ -326,7 +326,7 @@ class SelfPlayRunner:
             # Per design/20: card1/card2 are already CardType from ai_sample_action.
             try:
                 gm.play_round(
-                    [card1], [card2],
+                    [card1] if card1 else [], [card2] if card2 else [],
                     build_target_1=bt1,
                     build_target_2=bt2,
                 )
@@ -339,8 +339,8 @@ class SelfPlayRunner:
                     "ERROR", "selfplay.error",
                     game_idx=game_idx,
                     round=round_num,
-                    card1=card1.value,
-                    card2=card2.value,
+                    card1=card1.value if card1 else None,
+                    card2=card2.value if card2 else None,
                     bt1=bt1.value if bt1 else None,
                     bt2=bt2.value if bt2 else None,
                     energy1=pre_state_p1.players["1"].energy,
