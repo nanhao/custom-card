@@ -283,7 +283,7 @@ def _register_routes(app: Flask) -> None:
             app_manager: AppManager = app.config["APP_MANAGER"]
             try:
                 card_type, build_target_type, new_hidden_state = app_manager.ai_select_action(
-                    gm.get_state(), metadata["ai_state"], metadata["ai"]
+                    gm.get_state(player_perspective="2"), metadata["ai_state"], metadata["ai"]
                 )
             except ValueError as exc:
                 return jsonify(error_response(
