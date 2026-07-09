@@ -1,0 +1,76 @@
+"""CardResolver — priority-layered resolution orchestrator.
+
+Queries CardResolverRegistry for each card's resolvers, builds a
+ResolveContext per card, sorts by priority, and delegates to each Resolver.
+"""
+
+from src.backend.game.card import CardType
+from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.resolver.base import (
+    ResolveContext,
+    ResolveDetails,
+    ResolutionResult,
+    Resolver,
+)
+from src.backend.game.resolver.registry import CardResolverRegistry
+
+
+class CardResolver:
+    """Priority-layered resolution orchestrator."""
+
+    @staticmethod
+    def get_consecutive_attack(history: list[PlayerHistoryItem]) -> int:
+        """Count consecutive ATTACK cards from the end of history."""
+        count = 0
+        for item in reversed(history):
+            if item.card == CardType.ATTACK:
+                count += 1
+            else:
+                break
+        return count
+
+    @staticmethod
+    def resolve(
+        game_core,  # GameCore instance (no type annotation — avoids circular import)
+        cards_1: list[CardType],
+        cards_2: list[CardType],
+    ) -> ResolutionResult:
+        """Orchestrate resolution of both players' cards.
+
+        Flow:
+        1. For each card, build a ResolveContext with owner/opponent/cards.
+        2. Query CardResolverRegistry for resolvers.
+        3. Flatten into (resolver, ctx) pairs.
+        4. Sort by resolver.get_priority() (highest first).
+        5. Invoke each resolver.resolve(ctx, details).
+        """
+        details = ResolveDetails()
+
+        tasks: list[tuple[Resolver, ResolveContext]] = []
+
+        for card_type in cards_1:
+            ctx = ResolveContext(
+                card_owner=game_core.player_1,
+                opponent=game_core.player_2,
+                card_played_by_owner=card_type,
+                card_played_by_opponent=cards_2[0],
+            )
+            for resolver in CardResolverRegistry.get_resolvers(card_type):
+                tasks.append((resolver, ctx))
+
+        for card_type in cards_2:
+            ctx = ResolveContext(
+                card_owner=game_core.player_2,
+                opponent=game_core.player_1,
+                card_played_by_owner=card_type,
+                card_played_by_opponent=cards_1[0],
+            )
+            for resolver in CardResolverRegistry.get_resolvers(card_type):
+                tasks.append((resolver, ctx))
+
+        tasks.sort(key=lambda t: t[0].get_priority(), reverse=True)
+
+        for resolver, ctx in tasks:
+            resolver.resolve(ctx, details)
+
+        return ResolutionResult(details=list(details.details))
