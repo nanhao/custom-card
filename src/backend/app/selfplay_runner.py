@@ -228,8 +228,10 @@ class SelfPlayRunner:
 
         # c. Round loop
         while not gm.is_over:
-            pre_state = gm.get_state()
-            round_num = pre_state.round
+            # Per design/27 D4: state with perspective so draw/discard piles are populated.
+            pre_state_p1 = gm.get_state(player_perspective="1")
+            pre_state_p2 = gm.get_state(player_perspective="2")
+            round_num = pre_state_p1.round
 
             # Determine if this round should use temperature sampling
             should_sample = (
@@ -245,7 +247,7 @@ class SelfPlayRunner:
                 else 0.0
             )
             card1, bt1, h1_pol, lp1, val1, h1_val = self._sample_action(
-                pre_state, h1_pol, h1_val, config.ai1,
+                pre_state_p1, h1_pol, h1_val, config.ai1,
                 temperature=temp_p1, player_key="1",
             )
 
@@ -257,7 +259,7 @@ class SelfPlayRunner:
                 else 0.0
             )
             card2, bt2, h2_pol, lp2, val2, h2_val = self._sample_action(
-                pre_state, h2_pol, h2_val, config.ai2,
+                pre_state_p2, h2_pol, h2_val, config.ai2,
                 temperature=temp_p2, player_key="2",
             )
 
@@ -324,11 +326,12 @@ class SelfPlayRunner:
             # Record PPO samples (if sample output is configured)
             # Per design/10 D2: filter by config.perspective
             if config.sample_output is not None:
+                # Per design/27 D4: use perspective-specific states.
                 state_vec_p1 = Converter.build_input_vector(
-                    pre_state, player_key="1"
+                    pre_state_p1, player_key="1"
                 )
                 state_vec_p2 = Converter.build_input_vector(
-                    pre_state, player_key="2"
+                    pre_state_p2, player_key="2"
                 )
                 if config.perspective in ("ai1", "both"):
                     # Compute policy index for P1's action (design/14)
