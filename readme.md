@@ -111,7 +111,7 @@ python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
     --game 200 --temperature 0.5 --temp_step 3 --temp_side both \
     --perspective ai1 --sample_output data/samples.json --temp_seed 42
 
-python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 200 --temperature 1 --temp_step 200 --temp_side both --perspective both --sample_output samples/rnn_v2_self_play.json --perspective ai1
+python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 1000 --temperature 2 --temp_step 2000 --temp_side both --perspective both --sample_output samples/v1/rnn_v1_self_play.json --perspective ai1
 ```
 
 **Structured Logging:** Set `enabled` to `true` in `src/backend/config/backend.json`
@@ -155,7 +155,7 @@ python src/backend/scripts/train.py ^
     --model rnn_v1.1 ^
     --epoch 10
 
-python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/backend/ai/rnn_v1/gen2 --model rnn_v1.1 --epoch 10
+python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/backend/ai/rnn_v1/gen2 --model rnn_v1.1 --epoch 100
 ```
 
 **Training Outputs:** After training, two weight files are saved

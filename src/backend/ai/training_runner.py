@@ -213,6 +213,7 @@ class TrainingRunner:
 
         all_perspectives: list[dict] = []
         for file_path in json_files:
+            print(f"Loading {file_path}...")
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     games = json.load(f)
@@ -221,7 +222,13 @@ class TrainingRunner:
                     f"Failed to parse sample file {file_path!r}: {exc}"
                 ) from exc
 
-            for game in games:
+            print(f"  Parsed {len(games)} games, validating steps...")
+            total_games = len(games)
+            for game_idx, game in enumerate(games):
+                # Print progress every 10% of games
+                if game_idx % max(1, total_games // 10) == 0:
+                    pct = int(game_idx / total_games * 100)
+                    print(f"  Validating... {pct}% ({game_idx}/{total_games} games)")
                 for p_idx, perspective in enumerate(game.get("perspectives", [])):
                     for s_idx, step in enumerate(perspective.get("steps", [])):
                         for key in ("input", "action", "reward", "value"):
@@ -281,6 +288,9 @@ class TrainingRunner:
             raise RuntimeError(
                 f"no valid training samples found in {sample_path!r}"
             )
+
+        total_steps = sum(len(p["steps"]) for p in all_perspectives)
+        print(f"  Loaded {len(all_perspectives)} perspectives ({total_steps} steps)")
         return all_perspectives
 
     # ------------------------------------------------------------------
@@ -420,8 +430,10 @@ class TrainingRunner:
 
         Stores new_advantages and new_value_targets in each perspective dict.
         """
+        print(f"[Phase 2] Recomputing advantages for {len(perspectives)} perspectives...")
+        total = len(perspectives)
         with torch.no_grad():
-            for perspective in perspectives:
+            for i, perspective in enumerate(perspectives):
                 steps = perspective["steps"]
                 T = len(steps)
 
