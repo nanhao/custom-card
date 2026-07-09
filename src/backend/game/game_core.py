@@ -1,8 +1,11 @@
-"""Game state machine for the custom card game v2 (design/11).
+"""Game state machine for the custom card game v2 (design/11, design/26).
 
 Per design/11 D4, the v2 game introduces cycle mechanics: rounds are grouped
-into cycles of 5, with cycle-end HP bleed and deck reshuffling. No maximum
-round limit — game ends only when HP reaches 0.
+into cycles of 3 (design/26 D1, was 5), with cycle-end HP bleed and deck
+reshuffling. No maximum round limit — game ends only when HP reaches 0.
+
+Per design/26 D2: CARDS_PER_CYCLE = 5 (was hardcoded 7), initial draw pile
+stays at 7 cards (D3), so 2 cards remain in draw pile after first deal.
 
 Per architecture D9, this module is pure logic — no UI, no I/O.
 """
@@ -28,16 +31,18 @@ from src.backend.game.round_result import (
 class GameCore:
     """Manages the full v2 game lifecycle with cycle mechanics.
 
-    Key changes from v1 (design/11):
-    - ROUNDS_PER_CYCLE = 5: games proceed in cycles with no max round limit.
+    Key changes from v1 (design/11, design/26):
+    - ROUNDS_PER_CYCLE = 3 (design/26 D1, was 5): 3 rounds per cycle.
+    - CARDS_PER_CYCLE = 5 (design/26 D2): draw 5 cards per cycle start.
     - cycle_number and round_in_cycle track position within a cycle.
     - _start_cycle() handles deck shuffling and card drawing.
-    - Cycle-end HP bleed: both players lose 1 HP after round 5.
+    - Cycle-end HP bleed: both players lose 1 HP after round 3 (was 5).
     - build_target parameter for BUILD card construction.
     - BUILD settlement handled by BuildResolver (design/25).
     """
 
-    ROUNDS_PER_CYCLE = 5
+    ROUNDS_PER_CYCLE = 3
+    CARDS_PER_CYCLE = 5
     INITIAL_HP = 20
 
     def __init__(self, mode: str = "pvp") -> None:
@@ -64,7 +69,8 @@ class GameCore:
         """Initialize both players and start the first cycle.
 
         Sets HP=20, energy=0, initializes the draw pile with 7 cards,
-        then triggers _start_cycle() to shuffle and deal hands.
+        then triggers _start_cycle() to shuffle and deal 5 cards per hand.
+        Per design/26 D3: 2 cards remain in draw pile.
         """
         initial_pile = get_initial_draw_pile()
         self.player_1 = Player(hp=20, draw_pile=list(initial_pile))
@@ -92,7 +98,7 @@ class GameCore:
         3. Resolve card effects via CardResolver.
         4. Discard played cards.
         5. Record history.
-        6. Check cycle end (round 5 → bleed + new cycle).
+        6. Check cycle end (round 3 → bleed + new cycle).
         7. Check game end (HP=0).
         8. Return RoundResult.
 
@@ -216,7 +222,7 @@ class GameCore:
         # a) Status lifetime tick (every round)
         self._tick_status_lifetimes()
 
-        # b) Cycle-end processing (round 5)
+        # b) Cycle-end processing (round 3)
         end_actions = EndActions()
         if self.round_in_cycle >= self.ROUNDS_PER_CYCLE:
             end_actions.cycle_ended = True
@@ -350,13 +356,13 @@ class GameCore:
             ]
 
     def _start_cycle(self) -> None:
-        """Start a new cycle: reclaim hands → shuffle discard into draw → draw 7 cards.
+        """Start a new cycle: reclaim hands → shuffle discard into draw → draw CARDS_PER_CYCLE cards.
 
-        Per design/11 D4:
+        Per design/11 D4 + design/26 D2:
         1. Move all cards from hands to discard_pile.
         2. Move all cards from discard_pile to draw_pile.
         3. Shuffle the draw_pile.
-        4. Draw 7 cards from draw_pile into hand.
+        4. Draw CARDS_PER_CYCLE (5) cards from draw_pile into hand.
         """
         for player in (self.player_1, self.player_2):
             if player is None:
@@ -367,9 +373,9 @@ class GameCore:
             # Move discard to draw pile
             player.draw_pile.extend(player.discard_pile)
             player.discard_pile = []
-            # Shuffle and draw 7
+            # Shuffle and draw CARDS_PER_CYCLE cards
             random.shuffle(player.draw_pile)
-            draw_count = min(7, len(player.draw_pile))
+            draw_count = min(self.CARDS_PER_CYCLE, len(player.draw_pile))
             player.hand = player.draw_pile[:draw_count]
             player.draw_pile = player.draw_pile[draw_count:]
 

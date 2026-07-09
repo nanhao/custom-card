@@ -260,7 +260,7 @@ export default function GameBoard({
       const turnLabel = mode === 'pve' ? 'Your Turn' : "Player 1's Turn";
       return (
         <div className="round-info">
-          Cycle {state.cycle}, Round {state.round_in_cycle}/5{' '}
+          Cycle {state.cycle}, Round {state.round_in_cycle}/3{' '}
           — <span className="highlight">{turnLabel}</span>{' '}
           — Select a card
         </div>
@@ -304,7 +304,7 @@ export default function GameBoard({
       return (
         <div className="result-panel">
           <div className="result-title">
-            ⚡ Round {rr.round} — Cycle {rr.cycle}, Round {rr.round_in_cycle}/5
+            ⚡ Round {rr.round} — Cycle {rr.cycle}, Round {rr.round_in_cycle}/3
           </div>
           <div className="result-cards">
             <div className={`result-card card-${rr.cards_1[0]}`}>
@@ -356,7 +356,7 @@ export default function GameBoard({
         <div className="log-area">
           <h3>📜 Round Log</h3>
           <span style={{ color: 'var(--muted)' }}>
-            Game started. Each player has 20 HP. 7 cards drawn from shuffled deck.
+            Game started. Each player has 20 HP. 5 cards drawn from shuffled deck.
           </span>
         </div>
       );
@@ -396,7 +396,7 @@ export default function GameBoard({
     <>
       {renderBanner()}
       <div className="cycle-info">
-        Cycle {state.cycle}, Round {state.round_in_cycle}/5{' '}
+        Cycle {state.cycle}, Round {state.round_in_cycle}/3{' '}
         {state.round_log?.length > 0 && state.round_log[state.round_log.length - 1]?.end_actions.cycle_ended
           ? <span className="cycle-bleed">[Cycle ended — HP bleed applied]</span>
           : null}

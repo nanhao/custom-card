@@ -54,7 +54,7 @@ class GameState:
     Attributes:
         round: Current round number (1-based).
         cycle: Current cycle number (1-based).
-        round_in_cycle: Round position within current cycle (1–5).
+        round_in_cycle: Round position within current cycle (1–3, design/26 D1).
         players: Player states keyed by "1" and "2".
         is_over: True if game has ended.
         winner: "1", "2", "draw", or None if game ongoing.

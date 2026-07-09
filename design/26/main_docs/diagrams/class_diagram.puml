@@ -1,0 +1,83 @@
+@startuml class_diagram
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam backgroundColor #FFFFFF
+skinparam classBackgroundColor #FEFEFE
+skinparam classBorderColor #333333
+skinparam classFontColor #333333
+
+package "game" {
+    class GameCore {
+        + ROUNDS_PER_CYCLE: int = 3
+        + CARDS_PER_CYCLE: int = 5
+        + INITIAL_HP: int = 20
+        + mode: str
+        + round_number: int
+        + cycle_number: int
+        + round_in_cycle: int
+        + is_over: bool
+        + winner: str | None
+        + round_log: list[RoundResult]
+        --
+        + start_game(): void
+        + play_round(cards_1, cards_2, build_target_1, build_target_2): RoundResult
+        + get_state(player_perspective): GameState
+        - _start_cycle(): void
+        - _validate(...): void
+        - _tick_status_lifetimes(): void
+    }
+
+    class GameState {
+        + round: int
+        + cycle: int
+        + round_in_cycle: int
+        + players: dict[str, PlayerState]
+        + is_over: bool
+        + winner: str | None
+        + mode: str
+        + round_log: list[RoundResult]
+        --
+        + to_dict(): dict
+    }
+
+    class RoundResult {
+        + round: int
+        + cycle: int
+        + round_in_cycle: int
+        + cards_1: list[CardType]
+        + cards_2: list[CardType]
+        + before: BeforeResolve
+        + after_resolve: AfterResolve
+        + end_actions: EndActions
+        + after_end_actions: AfterEndActions
+        --
+        + to_frontend_dict(): dict
+    }
+
+    class EndActions {
+        + cycle_ended: bool
+        + bleed_damage_1: int
+        + bleed_damage_2: int
+    }
+
+    class AfterEndActions {
+        + round: int
+        + cycle: int
+        + round_in_cycle: int
+    }
+
+    GameCore --> GameState : get_state() returns
+    GameCore --> RoundResult : play_round() returns
+    RoundResult *-- EndActions
+    RoundResult *-- AfterEndActions
+}
+
+note right of GameCore::ROUNDS_PER_CYCLE
+  D1: 5 -> 3
+end note
+
+note right of GameCore::CARDS_PER_CYCLE
+  D2: 新增常量，替代硬编码 7
+end note
+
+@enduml

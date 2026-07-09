@@ -110,7 +110,7 @@ class TestGameState:
         ps1 = PlayerState(hp=0, energy=0, statuses=[], hand=[], history=[])
         ps2 = PlayerState(hp=20, energy=0, statuses=[], hand=[], history=[])
         gs = GameState(
-            round=10, cycle=2, round_in_cycle=5,
+            round=10, cycle=4, round_in_cycle=3,
             players={"1": ps1, "2": ps2},
             is_over=True, winner="1", mode="pvp", round_log=[],
         )
@@ -122,7 +122,7 @@ class TestGameState:
         ps1 = PlayerState(hp=0, energy=0, statuses=[], hand=[], history=[])
         ps2 = PlayerState(hp=0, energy=0, statuses=[], hand=[], history=[])
         gs = GameState(
-            round=5, cycle=1, round_in_cycle=5,
+            round=3, cycle=1, round_in_cycle=3,
             players={"1": ps1, "2": ps2},
             is_over=True, winner="draw", mode="pvp", round_log=[],
         )

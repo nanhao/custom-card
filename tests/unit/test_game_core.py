@@ -17,16 +17,16 @@ class TestStartGame:
     """TC-GC-01: start_game initialization."""
 
     def test_start_game_state(self):
-        """After start_game: hp=20, energy=0, hand=7, round=1, cycle=1, round_in_cycle=1."""
+        """After start_game: hp=20, energy=0, hand=5, round=1, cycle=1, round_in_cycle=1."""
         gm = GameCore(mode="pvp")
         gm.start_game()
         assert gm.player_1.hp == 20
         assert gm.player_2.hp == 20
         assert gm.player_1.energy == 0
         assert gm.player_2.energy == 0
-        assert len(gm.player_1.hand) == 7
-        assert len(gm.player_2.hand) == 7
-        assert len(gm.player_1.draw_pile) == 0
+        assert len(gm.player_1.hand) == 5
+        assert len(gm.player_2.hand) == 5
+        assert len(gm.player_1.draw_pile) == 2
         assert len(gm.player_1.discard_pile) == 0
         assert gm.round_number == 1
         assert gm.cycle_number == 1
@@ -34,12 +34,12 @@ class TestStartGame:
         assert gm.is_over is False
 
     def test_start_game_draw_pile_initialized(self):
-        """Draw pile is initialized with 7 cards, then all drawn into hand."""
+        """Draw pile initialized with 7 cards, 5 drawn, 2 remain in draw_pile (design/26 D3)."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        # After _start_cycle, hand has 7 cards, draw_pile is empty
-        assert len(gm.player_1.hand) == 7
-        assert len(gm.player_1.draw_pile) == 0
+        # After _start_cycle, hand has 5 cards, draw_pile has 2 remaining
+        assert len(gm.player_1.hand) == 5
+        assert len(gm.player_1.draw_pile) == 2
 
 
 class TestPlayRoundDiscard:
@@ -67,13 +67,13 @@ class TestCycleMechanics:
     """TC-GC-03, GC-04, GC-05, GC-06: Cycle mechanics."""
 
     def test_cycle_end_bleed(self):
-        """TC-GC-03: After 5th round, both players lose 1 HP and new cycle starts."""
+        """TC-GC-03: After 3rd round, both players lose 1 HP and new cycle starts (design/26 D1)."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        # Fast-forward to round_in_cycle=5
-        gm.round_in_cycle = 5
+        # Fast-forward to round_in_cycle=3
+        gm.round_in_cycle = 3
         gm.cycle_number = 1
-        gm.round_number = 5
+        gm.round_number = 3
         gm.player_1.hand = [CardType.ATTACK]
         gm.player_2.hand = [CardType.ATTACK]
         gm.player_1.hp = 10
@@ -94,11 +94,11 @@ class TestCycleMechanics:
         assert result.after_end_actions.round_in_cycle == 1
 
     def test_mid_cycle_no_bleed(self):
-        """Round 3 of a cycle: no cycle_ended, no HP bleed."""
+        """Round 2 of a cycle: no cycle_ended, no HP bleed (design/26 D1)."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        gm.round_in_cycle = 3
-        gm.round_number = 3
+        gm.round_in_cycle = 2
+        gm.round_number = 2
         gm.player_1.hand = [CardType.ATTACK]
         gm.player_2.hand = [CardType.DEFENSE]
         gm.player_1.hp = 10
@@ -109,12 +109,12 @@ class TestCycleMechanics:
         assert gm.player_1.hp == 10  # No bleed
 
     def test_cycle_bleed_causes_game_end(self):
-        """TC-GC-04: Cycle end bleed with hp=1 each → both die → draw."""
+        """TC-GC-04: Cycle end bleed with hp=1 each → both die → draw (design/26 D1)."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        gm.round_in_cycle = 5
+        gm.round_in_cycle = 3
         gm.cycle_number = 1
-        gm.round_number = 5
+        gm.round_number = 3
         gm.player_1.hand = [CardType.DEFENSE]
         gm.player_2.hand = [CardType.DEFENSE]
         gm.player_1.hp = 1
@@ -128,12 +128,12 @@ class TestCycleMechanics:
         assert gm.player_2.hp == 0
 
     def test_new_cycle_reclaims_cards(self):
-        """TC-GC-05: New cycle reclaims hand → discard → draw_pile → shuffle → draw 7."""
+        """TC-GC-05: New cycle reclaims hand → discard → draw_pile → shuffle → draw 5 (design/26 D2)."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        gm.round_in_cycle = 5
-        gm.round_number = 5
-        # Set up: hand has 3 cards, discard has 5+ cards for enough to draw 7
+        gm.round_in_cycle = 3
+        gm.round_number = 3
+        # Set up: hand has 3 cards, discard has 5+ cards for enough to draw 5
         gm.player_1.hand = [CardType.ATTACK] * 3
         gm.player_2.hand = [CardType.DEFENSE] * 3
         gm.player_1.discard_pile = [CardType.HEAVY] * 10
@@ -144,16 +144,16 @@ class TestCycleMechanics:
         gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
         # New cycle started
         assert gm.round_in_cycle == 1
-        # hand has 7 cards (drawn from shuffled pile, enough in deck)
-        assert len(gm.player_1.hand) == 7
+        # hand has 5 cards (drawn from shuffled pile, enough in deck)
+        assert len(gm.player_1.hand) == 5
         assert len(gm.player_1.draw_pile) >= 0  # remaining in draw pile
 
     def test_cycle_preserves_attack_streak(self):
-        """TC-GC-06: New cycle preserves attack streak in history."""
+        """TC-GC-06: New cycle preserves attack streak in history (design/26 D1)."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        gm.round_in_cycle = 5
-        gm.round_number = 5
+        gm.round_in_cycle = 3
+        gm.round_number = 3
         gm.player_1.history = [
             PlayerHistoryItem(CardType.ATTACK, None),
             PlayerHistoryItem(CardType.ATTACK, None),
@@ -180,7 +180,7 @@ class TestGameEnd:
         gm.player_2.hp = 15
         gm.cycle_number = 50
         gm.round_number = 250
-        gm.round_in_cycle = 3
+        gm.round_in_cycle = 2
         assert gm._check_game_end() == (False, None)
 
     def test_hp_zero_ends_game(self):
@@ -385,11 +385,11 @@ class TestHistoryRecording:
         ]
 
     def test_cycle_preserves_history_items(self):
-        """TC-GC-H04: New cycle preserves full history (PlayerHistoryItem format)."""
+        """TC-GC-H04: New cycle preserves full history (PlayerHistoryItem format) (design/26 D1)."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        gm.round_in_cycle = 5
-        gm.round_number = 5
+        gm.round_in_cycle = 3
+        gm.round_number = 3
         # Set 2 rounds of history in PlayerHistoryItem format
         gm.player_1.history = [
             PlayerHistoryItem(CardType.ATTACK, None),
@@ -831,3 +831,122 @@ class TestBuildResolverIntegration:
         assert CardType.ATTACK in gm.player_1.discard_pile
         assert gm.player_2.energy == 1
         assert CardType.DEFENSE in gm.player_2.discard_pile
+
+
+# =============================================================================
+# Design/26 — ROUNDS_PER_CYCLE=3, CARDS_PER_CYCLE=5
+# TC-INIT-02, TC-INIT-03, TC-DRAW-03, TC-DRAW-04
+# =============================================================================
+
+
+class TestDesign26Draw:
+    """TC-INIT-02, TC-INIT-03, TC-DRAW-03, TC-DRAW-04: new cycle/draw params."""
+
+    def test_initial_draw_pile_has_2_remaining(self):
+        """TC-INIT-02: Initial draw pile 7 cards, 5 drawn, 2 remain."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        assert len(gm.player_1.draw_pile) == 2
+        assert len(gm.player_2.draw_pile) == 2
+
+    def test_initial_hand_plus_draw_equals_full_pile(self):
+        """TC-INIT-03: hand + draw_pile = complete initial pile (7 cards)."""
+        from src.backend.game.card_def import get_initial_draw_pile
+
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        all_cards_1 = list(gm.player_1.hand) + list(gm.player_1.draw_pile)
+        all_cards_2 = list(gm.player_2.hand) + list(gm.player_2.draw_pile)
+        initial = sorted(get_initial_draw_pile(), key=lambda c: c.value)
+        assert sorted(all_cards_1, key=lambda c: c.value) == initial
+        assert sorted(all_cards_2, key=lambda c: c.value) == initial
+
+    def test_draw_limited_when_pile_smaller_than_draw_count(self):
+        """TC-DRAW-03: draw_pile < CARDS_PER_CYCLE → draw all available."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        # Manually trigger _start_cycle with tiny draw pile
+        gm.player_1.draw_pile = [CardType.ATTACK, CardType.DEFENSE]
+        gm.player_1.discard_pile = []
+        gm.player_1.hand = []
+        gm._start_cycle()
+        assert len(gm.player_1.hand) == 2
+
+    def test_draw_empty_when_pile_empty(self):
+        """TC-DRAW-04: draw_pile empty → hand stays empty."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.draw_pile = []
+        gm.player_1.discard_pile = []
+        gm.player_1.hand = []
+        gm._start_cycle()
+        assert len(gm.player_1.hand) == 0
+
+    def test_cycle_end_bleed_single_death(self):
+        """TC-CYCLE-03: P1 survive (HP=2), P2 bleed death (HP=1) → P1 wins."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.round_in_cycle = 3
+        gm.round_number = 3
+        gm.player_1.hand = [CardType.DEFENSE]
+        gm.player_2.hand = [CardType.ATTACK]
+        gm.player_1.hp = 2
+        gm.player_2.hp = 1
+
+        result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
+        assert gm.is_over is True
+        assert gm.winner == "1"
+        assert gm.player_2.hp == 0
+
+    def test_tick_statuses_not_affected_by_cycle_change(self):
+        """TC-REG-01: status lifetime tick works correctly with new cycle params."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.DEFENSE]
+        gm.player_2.hand = [CardType.ATTACK]
+        result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
+        # Status ticked away after round (unchanged behavior)
+        assert gm.player_1.statuses == []
+        # But captured in round result
+        assert len(result.after_resolve.statuses_1) == 1
+
+    def test_energy_system_not_affected(self):
+        """TC-REG-02: energy system unchanged with new cycle params."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.ENERGY]
+        gm.player_2.hand = [CardType.ATTACK]
+        gm.play_round([CardType.ENERGY], [CardType.ATTACK])
+        assert gm.player_1.energy == 1
+
+    def test_build_cost_not_affected(self):
+        """TC-REG-03: build cost unchanged with new cycle params."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 1
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.ATTACK]
+        gm.play_round(
+            [CardType.BUILD], [CardType.ATTACK],
+            build_target_1=CardType.ATTACK,
+        )
+        assert gm.player_1.energy == 0  # cost 1 consumed
+
+    def test_draw_pile_count_after_cycle_reshuffle(self):
+        """TC-DRAW-02: after cycle reshuffle, hand=5, remainder in draw_pile."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.round_in_cycle = 3
+        gm.round_number = 3
+        # hand=2, discard=10 → reshuffled draw_pile=12 → draw 5, 7 remain
+        gm.player_1.hand = [CardType.ATTACK, CardType.DEFENSE]
+        gm.player_2.hand = [CardType.ATTACK, CardType.DEFENSE]
+        gm.player_1.discard_pile = [CardType.HEAVY] * 10
+        gm.player_1.draw_pile = []
+        gm.player_2.discard_pile = [CardType.ENERGY] * 10
+        gm.player_2.draw_pile = []
+
+        gm.play_round([CardType.ATTACK], [CardType.DEFENSE])
+        assert len(gm.player_1.hand) == 5
+        assert len(gm.player_1.draw_pile) == 7  # 12 - 5
+        assert len(gm.player_1.discard_pile) == 0

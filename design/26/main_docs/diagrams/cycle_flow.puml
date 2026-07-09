@@ -1,0 +1,67 @@
+@startuml cycle_flow
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam backgroundColor #FFFFFF
+skinparam participantBackgroundColor #F5F5F5
+skinparam participantBorderColor #333333
+skinparam sequenceArrowThickness 1.5
+
+title 3 回合 Cycle 流程（D1: ROUNDS_PER_CYCLE=3, D2: CARDS_PER_CYCLE=5）
+
+actor Client
+
+== start_game() ==
+
+Client -> GameCore: start_game()
+activate GameCore
+GameCore -> GameCore: 初始化 draw_pile (7张)
+GameCore -> GameCore: _start_cycle()
+note right: 洗牌后从7张中抽5张入手牌\n剩余2张留在 draw_pile
+GameCore --> Client: hand = 5 张
+deactivate GameCore
+
+== Round 1 (round_in_cycle = 1) ==
+
+Client -> GameCore: play_round(cards_1, cards_2)
+activate GameCore
+GameCore -> GameCore: _validate()
+GameCore -> GameCore: resolve cards
+GameCore -> GameCore: discard played cards
+GameCore -> GameCore: record history
+GameCore -> GameCore: round_in_cycle == 3?\n→ No, skip bleed
+GameCore -> GameCore: round_number++, round_in_cycle = 2
+GameCore --> Client: RoundResult(end_actions.cycle_ended = False)
+deactivate GameCore
+
+== Round 2 (round_in_cycle = 2) ==
+
+Client -> GameCore: play_round(cards_1, cards_2)
+activate GameCore
+GameCore -> GameCore: _validate() + resolve + discard + history
+GameCore -> GameCore: round_in_cycle == 3?\n→ No, skip bleed
+GameCore -> GameCore: round_number++, round_in_cycle = 3
+GameCore --> Client: RoundResult(end_actions.cycle_ended = False)
+deactivate GameCore
+
+== Round 3 — Cycle End (round_in_cycle = 3) ==
+
+Client -> GameCore: play_round(cards_1, cards_2)
+activate GameCore
+GameCore -> GameCore: _validate() + resolve + discard + history
+GameCore -> GameCore: _tick_status_lifetimes()
+GameCore -> GameCore: round_in_cycle >= ROUNDS_PER_CYCLE (3)
+note right: bleed: 双方各扣 1 HP
+GameCore -> GameCore: P1.take_damage(1), P2.take_damage(1)
+GameCore -> GameCore: _check_game_end()
+alt game over
+    GameCore --> Client: RoundResult(end_actions.cycle_ended=True,\nafter_end_actions.is_game_over=True)
+else game continues
+    GameCore -> GameCore: cycle_number++, round_in_cycle = 0
+    GameCore -> GameCore: _start_cycle()
+    note right: 回收手牌 + 弃牌堆 →\n洗入抽牌堆 → 抽 CARDS_PER_CYCLE(5) 张
+    GameCore -> GameCore: round_number++, round_in_cycle = 1
+    GameCore --> Client: RoundResult(end_actions.cycle_ended=True,\nafter_end_actions.round_in_cycle=1, cycle=2)
+end
+deactivate GameCore
+
+@enduml

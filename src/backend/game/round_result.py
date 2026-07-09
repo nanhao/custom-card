@@ -49,7 +49,8 @@ class AfterResolve:
 class EndActions:
     """Round-end actions applied after card resolution (Phase 2).
 
-    cycle_ended is True only when round_in_cycle reaches ROUNDS_PER_CYCLE.
+    cycle_ended is True when the round is the last round of the cycle
+    (round_in_cycle reaches ROUNDS_PER_CYCLE).
     bleed_damage values are 0 when cycle_ended is False.
     """
     cycle_ended: bool = False

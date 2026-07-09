@@ -12,7 +12,7 @@ The current game (design/11+) introduces a deep strategic system on top of the o
 - **Card Types**: 7 — Attack, Defense, Heavy Strike, Counter, Energy, Build, Flex (攻守兼备).
 - **Energy System**: Each player has an energy bar (0–5). Cards have a `build_cost` (1 or 2). Playing cards costs _no_ energy; only _building_ new cards via the Build card consumes energy.
 - **Deck System**: Each player has a draw pile and discard pile. No initial hand — cards are drawn at cycle start.
-- **Cycle (轮) System**: A cycle consists of 5 rounds. At each cycle start, all hands are discarded, discard piles shuffled into draw piles, and 7 cards drawn. At cycle end, each player loses 1 HP (bleed) to prevent infinite loops.
+- **Cycle (轮) System**: A cycle consists of 3 rounds (design/26 D1, was 5). At each cycle start, all hands are discarded, discard piles shuffled into draw piles, and 5 cards drawn (design/26 D2, was 7). The initial draw pile contains all 7 card types (2× Attack + 1 each of others), so 2 cards remain in the draw pile after the first deal (design/26 D3). At cycle end, each player loses 1 HP (bleed) to prevent infinite loops.
 - **Priority Resolution**: Each card effect has a priority (10 or 11). Priority 11 effects (mostly defensive buffs) resolve before priority 10 effects (damage).
 - **Status System**: Players can gain statuses like "Defense" (防御) and "Joint Defense" (联防) with managed lifetimes.
 - **Win Condition**: A player wins when the opponent's HP reaches 0; no maximum round limit.

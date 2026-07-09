@@ -34,7 +34,7 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
     Hand entries are CardType enum members.
 
     Args:
-        hand_1, hand_2: Player hands (list of CardType). Default 7x ATTACK.
+        hand_1, hand_2: Player hands (list of CardType). Default 5x ATTACK.
         hp_1, hp_2: Player HP. Default 20.
         history_1, history_2: Played card histories as list[PlayerHistoryItem].
                               Default empty.
@@ -48,9 +48,9 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
         GameState instance matching GameCore.get_state() output format.
     """
     if hand_1 is None:
-        hand_1 = [CardType.ATTACK] * 7
+        hand_1 = [CardType.ATTACK] * 5
     if hand_2 is None:
-        hand_2 = [CardType.ATTACK] * 7
+        hand_2 = [CardType.ATTACK] * 5
     if history_1 is None:
         history_1 = []
     if history_2 is None:
