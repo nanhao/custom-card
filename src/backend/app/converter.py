@@ -162,18 +162,22 @@ class Converter:
         ]
 
         # Own discard pile counts (indices 26-32)
-        own_discard = (
-            Converter._count_by_card_type(this_player.discard_pile)
-            if this_player.discard_pile is not None
-            else [0.0] * Converter.NUM_CARD_TYPES
-        )
+        # Per design/27 D4: draw_pile/discard_pile must not be None;
+        # caller must pass state with matching player_perspective.
+        if this_player.discard_pile is None:
+            raise ValueError(
+                f"discard_pile is None for player {player_key!r}. "
+                f"Call get_state() with player_perspective={player_key!r}."
+            )
+        own_discard = Converter._count_by_card_type(this_player.discard_pile)
 
         # Own draw pile counts (indices 33-39)
-        own_draw = (
-            Converter._count_by_card_type(this_player.draw_pile)
-            if this_player.draw_pile is not None
-            else [0.0] * Converter.NUM_CARD_TYPES
-        )
+        if this_player.draw_pile is None:
+            raise ValueError(
+                f"draw_pile is None for player {player_key!r}. "
+                f"Call get_state() with player_perspective={player_key!r}."
+            )
+        own_draw = Converter._count_by_card_type(this_player.draw_pile)
 
         # Last action indices (40-41): compute from PlayerHistoryItem
         this_last = -1.0

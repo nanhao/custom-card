@@ -1,6 +1,6 @@
 # custom-card — Project Overview
 
-A 2-player turn-based card game with simultaneous card resolution, AI opponents (GRU-based neural networks), and a PPO reinforcement learning training pipeline.
+A 2-player turn-based card game with simultaneous card resolution, AI opponents (GRU-based neural networks), and a PPO reinforcement learning training pipeline. Players can see each other's hands (design/27).
 
 ---
 
@@ -9,12 +9,16 @@ A 2-player turn-based card game with simultaneous card resolution, AI opponents 
 The current game (design/11+) introduces a deep strategic system on top of the original v1 rules:
 
 - **Players**: 2, each starting with 20 HP.
-- **Card Types**: 7 — Attack, Defense, Heavy Strike, Counter, Energy, Build, Flex (攻守兼备).
+- **Card Types**: 7 — Attack (攻击), Defense (防御), Heavy Strike (重击), Counter (防守反击), Energy (聚能), Build (构建), Flex (攻守兼备).
 - **Energy System**: Each player has an energy bar (0–5). Cards have a `build_cost` (1 or 2). Playing cards costs _no_ energy; only _building_ new cards via the Build card consumes energy.
-- **Deck System**: Each player has a draw pile and discard pile. No initial hand — cards are drawn at cycle start.
-- **Cycle (轮) System**: A cycle consists of 3 rounds (design/26 D1, was 5). At each cycle start, all hands are discarded, discard piles shuffled into draw piles, and 5 cards drawn (design/26 D2, was 7). The initial draw pile contains all 7 card types (2× Attack + 1 each of others), so 2 cards remain in the draw pile after the first deal (design/26 D3). At cycle end, each player loses 1 HP (bleed) to prevent infinite loops.
-- **Priority Resolution**: Each card effect has a priority (10 or 11). Priority 11 effects (mostly defensive buffs) resolve before priority 10 effects (damage).
-- **Status System**: Players can gain statuses like "Defense" (防御) and "Joint Defense" (联防) with managed lifetimes.
+- **Deck System**: Each player has a draw pile and discard pile. No initial hand — cards are drawn at cycle start. Initial draw pile: 2× Attack + 1 each of Defense, Heavy, Counter, Energy, Build (7 cards, no Flex).
+- **Cycle (轮) System**: A cycle consists of 3 rounds (design/26 D1). At each cycle start, all hands are discarded, discard piles shuffled into draw piles, and 5 cards drawn (design/26 D2). The initial draw pile contains 7 cards (design/26 D3), so 2 cards remain after the first deal. At cycle end, each player loses 1 HP (bleed) to prevent infinite loops.
+- **Priority Resolution**: Each card effect has a priority (10, 11, or 12). Higher priority effects resolve first.
+- **Status System**: Players can gain statuses with managed lifetimes:
+  - **Defense (防御)** — blocks attack damage.
+  - **Guard (联防)** — blocks heavy strike damage and its fragile effect.
+  - **Fragile (脆弱)** — prevents gaining defense/guard (design/24).
+- **Mutual Hand Visibility**: Both players can see each other's current hand (design/27).
 - **Win Condition**: A player wins when the opponent's HP reaches 0; no maximum round limit.
 
 ---
@@ -41,9 +45,12 @@ The project follows a **layered architecture** with strict separation of concern
 │  (Bridge)       │          │  (Pure Logic)      │
 │                 │          │                    │
 │ AppManager      │◄────────►│ GameCore           │
-│ Converter       │          │ CardResolver       │
+│ Converter       │          │ CardResolver (9)   │
 │ SelfPlayRunner  │          │ Player / CardDef   │
-│ SelfPlayConfig  │          │ SessionStore       │
+│ SelfPlayConfig  │          │ GameState          │
+│                 │          │ RoundResult        │
+│                 │          │ PlayerStatus       │
+│                 │          │ SessionStore       │
 └────────┬────────┘          └────────────────────┘
          │
 ┌────────▼────────────────────────────────────────┐
@@ -77,10 +84,13 @@ Pure game logic. The only module that knows game rules.
 | File | Responsibility |
 |------|---------------|
 | `card_type.py` | `CardType` enum (7 values) |
-| `card_def.py` | `CardDef` dataclass (build_cost, display_name, resolvers mapping) |
-| `player.py` | `Player` class: HP, energy, statuses, draw/discard piles, hand, history |
-| `resolver/` | `CardResolver` — priority-layered effect resolution engine (strategy pattern, 8 Resolver subclasses) |
-| `game_core.py` | `GameCore` — game state machine (create, play_round, cycle management, end detection) + `RoundResult` dataclass |
+| `card_def.py` | `CardDef` dataclass (build_cost, display_name, resolvers mapping per design/22) |
+| `player.py` | `Player` + `PlayerHistoryItem`: HP, energy, statuses, piles, hand, history (design/16) |
+| `player_state.py` | `StatusType` enum + `PlayerStatus` dataclass with lifetime (design/15) |
+| `game_state.py` | `GameState` + `PlayerState` typed dataclass snapshots (design/19) |
+| `round_result.py` | `RoundResult` four-phase dataclass: `BeforeResolve`, `AfterResolve`, `EndActions`, `AfterEndActions` (design/17) |
+| `resolver/` | `CardResolver` orchestrator + 9 Resolver subclasses (strategy pattern, design/21/22) |
+| `game_core.py` | `GameCore` — game state machine (create, play_round, cycle management, end detection) |
 | `session_store.py` | `SessionStore` — pure disk-based JSON persistence (save/load/delete games) |
 
 ### 3.2 AI Layer (`src/backend/ai/`)
@@ -95,11 +105,19 @@ Pure ML — no knowledge of game rules.
 | `training_utils.py` | Training artifact generation — CSV loss/grad logging + PNG charts |
 | `rnn_v1/model.py` | Split GRU models: `GRUPolicyModel` (15→32→13) + `GRUValueModel` (15→32→1) |
 
-**Model Architecture (design/14)**:
-- Input: 15-d vector (HP×2, energy×2, round_in_cycle, cycle, card_counts×7, last_action×2)
-- Policy: GRU(32) → Linear(32→13) → softmax (13-d interleaved: play/build pairs)
-- Value: GRU(32) → Linear(32→1) → scalar win-rate estimate
-- Mask function (injected via forward): blocks illegal actions (cards not in hand, insufficient energy)
+**Model Architecture (design/14, design/27)**:
+- Input: 42-d vector (design/27)
+  - Metadata (6): HP×2, energy×2, round_in_cycle, cycle
+  - Own hand counts (7): attack, defense, heavy, counter, energy, build, flex
+  - Opponent hand counts (7): same order
+  - Own status lifetimes (3): DEFENSE, GUARD, FRAGILE (0 if absent)
+  - Opponent status lifetimes (3): same order
+  - Own discard pile counts (7)
+  - Own draw pile counts (7)
+  - Last actions (2): own last policy index, opponent last policy index (-1 if first round)
+- Policy: GRU(32) → Linear(32→13) → softmax (13-d interleaved: even=build+target, odd=pure play)
+- Value: GRU(32) → Linear(32→1) → scalar value estimate (no tanh)
+- Mask function (injected via forward): blocks illegal actions (cards not in hand, insufficient energy for build)
 
 ### 3.3 App Layer (`src/backend/app/`)
 
@@ -107,10 +125,10 @@ Bridge between game logic and AI — the only layer that understands both.
 
 | File | Responsibility |
 |------|---------------|
-| `app_manager.py` | `AppManager` — game creation, AI action selection (greedy + sampling), model lifecycle (loading/caching policy + value models) |
-| `converter.py` | `Converter` — card↔index bidirectional mapping, input vector construction (15-d), illegal action masking |
+| `app_manager.py` | `AppManager` — game creation, AI action selection (greedy + sampling), model lifecycle (loading/caching policy + value models), mask function construction |
+| `converter.py` | `Converter` — card↔index bidirectional mapping, 42-d input vector construction (design/27), illegal action masking, accepts `GameState` dataclass (design/19) |
 | `selfplay_config.py` | `SelfPlayConfig` + `SelfPlayResult` dataclasses |
-| `selfplay_runner.py` | `SelfPlayRunner` — AI vs AI game loop with PPO sample generation (game→perspective→steps hierarchy) |
+| `selfplay_runner.py` | `SelfPlayRunner` — AI vs AI game loop with PPO sample generation (game→perspective→steps hierarchy, design/7) |
 
 ### 3.4 Controller Layer (`src/backend/controller/`)
 
@@ -119,7 +137,7 @@ Thin HTTP adapter — no business logic.
 | File | Responsibility |
 |------|---------------|
 | `api.py` | Flask app factory + routes: `POST /api/games`, `GET /api/games/{id}`, `POST /api/games/{id}/play`, `DELETE /api/games/{id}`, `GET /api/ais` |
-| `serializers.py` | CardType↔string conversion, RoundResult→dict formatting, error response helpers |
+| `serializers.py` | CardType↔string, RoundResult→dict, GameState→dict (design/19), error response helpers |
 
 ### 3.5 Other Backend Modules
 
@@ -180,9 +198,9 @@ Register new AI version in registry.py
 
 | Layer | Framework | Location | Count |
 |-------|-----------|----------|-------|
-| Unit tests (backend) | pytest | `tests/unit/` | ~500+ tests across game, converter, app_manager, card, resolver |
+| Unit tests (backend) | pytest | `tests/unit/` | ~270 tests across game_core, resolver, converter, player, player_state, game_state, card, app_manager (8 test files) |
 | Integration tests (backend) | pytest | `tests/integration/` | API routes + full game flows |
-| Frontend tests | vitest | `src/frontend/tests/` | ~28 tests (API + UI components) |
+| Frontend tests | vitest | `src/frontend/tests/` | API client + UI component tests |
 | E2E tests | (future) | `tests/e2e/` | — |
 
 **TDD workflow** is the project standard — tests are written before implementation.
@@ -195,9 +213,11 @@ Register new AI version in registry.py
 2. **Pure AI models** — `ai/` has zero knowledge of game rules; all card↔tensor conversion lives in `app/converter.py`.
 3. **Split policy/value networks** (design/9) — avoids interference between the two heads.
 4. **Mask function as closure injection** — illegal action masking is defined in `AppManager` and passed into `model.forward()`.
-5. **Disk-based persistence** — `SessionStore` uses JSON files, no database.
-6. **Structured logging** — `StructuredLogger` emits machine-parseable log lines with traceId/threadId/processId for post-hoc analysis.
-7. **Breaking changes are acceptable** — new game versions drop backward compatibility for old saves, weights, and samples.
+5. **Typed game state snapshots** (design/19) — `GameState` + `PlayerState` dataclasses replace ad-hoc dicts; all fields use typed objects (CardType, PlayerStatus).
+6. **Four-phase round results** (design/17) — `RoundResult` captures `before`, `after_resolve`, `end_actions`, `after_end_actions` snapshots for unambiguous round lifecycle tracking.
+7. **Disk-based persistence** — `SessionStore` uses JSON files, no database.
+8. **Structured logging** — `StructuredLogger` emits machine-parseable log lines with traceId/threadId/processId for post-hoc analysis.
+9. **Breaking changes are acceptable** — new game versions drop backward compatibility for old saves, weights, and samples.
 
 ---
 

@@ -107,7 +107,7 @@ class GRUPolicyModel(nn.Module):
         gru_out, new_hidden = self.gru(x, hidden)
         gru_out = gru_out.squeeze(0)  # (1, 32)
 
-        policy_logits = self.fc_policy(gru_out)  # (1, 14)
+        policy_logits = self.fc_policy(gru_out)  # (1, 13)
         if mask_fn is not None:
             policy_logits = mask_fn(policy_logits)
 

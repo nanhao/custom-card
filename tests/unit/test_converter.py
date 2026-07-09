@@ -181,6 +181,37 @@ class TestBuildInputVector42D:
         for i in range(26, 40):
             assert vec[i] == 0.0
 
+    def test_none_discard_pile_raises(self):
+        """ValueError when discard_pile is None (design/27 D4)."""
+        from src.backend.game.game_state import PlayerState
+        state = make_game_state(
+            hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
+            discard_pile_2=[], draw_pile_2=[],
+        )
+        # Override PlayerState to set discard_pile=None directly
+        state.players["2"] = PlayerState(
+            hp=20, energy=0, statuses=[], hand=[CardType.ATTACK], history=[],
+            draw_pile=[], discard_pile=None,
+            draw_pile_count=0, discard_pile_count=0,
+        )
+        with pytest.raises(ValueError, match="discard_pile is None"):
+            Converter.build_input_vector(state, player_key="2")
+
+    def test_none_draw_pile_raises(self):
+        """ValueError when draw_pile is None (design/27 D4)."""
+        from src.backend.game.game_state import PlayerState
+        state = make_game_state(
+            hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
+            discard_pile_2=[], draw_pile_2=[],
+        )
+        state.players["2"] = PlayerState(
+            hp=20, energy=0, statuses=[], hand=[CardType.ATTACK], history=[],
+            draw_pile=None, discard_pile=[],
+            draw_pile_count=0, discard_pile_count=0,
+        )
+        with pytest.raises(ValueError, match="draw_pile is None"):
+            Converter.build_input_vector(state, player_key="2")
+
     def test_last_action_segment(self):
         """P2 played ATTACK, P1 played BUILD+DEFENSE."""
         state = make_game_state(
@@ -372,7 +403,7 @@ class TestInputSizeConstant:
 
 
 class TestActionToPolicyIndex:
-    """TC-AP: action_to_policy_index (unchanged from design/14)."""
+    """TC-AP-01~05: action_to_policy_index (unchanged from design/14)."""
 
     @pytest.mark.parametrize("card_type,expected", [
         (CardType.ATTACK, 1),
@@ -383,6 +414,7 @@ class TestActionToPolicyIndex:
         (CardType.FLEX, 11),
     ])
     def test_pure_play_actions(self, card_type, expected):
+        """Pure card plays map to odd indices."""
         assert Converter.action_to_policy_index(card_type, None) == expected
 
     @pytest.mark.parametrize("build_target,expected", [
@@ -395,23 +427,27 @@ class TestActionToPolicyIndex:
         (CardType.FLEX, 12),
     ])
     def test_build_actions(self, build_target, expected):
+        """Build + target map to even indices."""
         assert Converter.action_to_policy_index(CardType.BUILD, build_target) == expected
 
     def test_string_input_raises_valueerror(self):
+        """String input 'attack' raises ValueError (keys are CardType)."""
         with pytest.raises(ValueError):
             Converter.action_to_policy_index("attack", None)  # type: ignore[arg-type]
 
     def test_non_build_with_target_raises(self):
+        """ATTACK with build_target=DEFENSE is illegal."""
         with pytest.raises(ValueError):
             Converter.action_to_policy_index(CardType.ATTACK, CardType.DEFENSE)
 
     def test_build_without_target_raises(self):
+        """BUILD with build_target=None is illegal."""
         with pytest.raises(ValueError):
             Converter.action_to_policy_index(CardType.BUILD, None)
 
 
 class TestPolicyIndexToAction:
-    """TC-PI: policy_index_to_action (unchanged from design/14)."""
+    """TC-PI-01~04: policy_index_to_action (unchanged from design/14)."""
 
     @pytest.mark.parametrize("index,card_type", [
         (1, CardType.ATTACK),
@@ -422,6 +458,7 @@ class TestPolicyIndexToAction:
         (11, CardType.FLEX),
     ])
     def test_odd_indices_pure_play(self, index, card_type):
+        """Odd indices decode to (CardType, None)."""
         result = Converter.policy_index_to_action(index)
         assert result == (card_type, None)
 
@@ -435,18 +472,22 @@ class TestPolicyIndexToAction:
         (12, CardType.FLEX),
     ])
     def test_even_indices_build_action(self, index, build_target):
+        """Even indices decode to (BUILD, target)."""
         result = Converter.policy_index_to_action(index)
         assert result == (CardType.BUILD, build_target)
 
     def test_negative_index_raises(self):
+        """Index -1 raises IndexError."""
         with pytest.raises(IndexError):
             Converter.policy_index_to_action(-1)
 
     def test_index_13_raises(self):
+        """Index 13 (beyond max) raises IndexError."""
         with pytest.raises(IndexError):
             Converter.policy_index_to_action(13)
 
     def test_roundtrip_consistency(self):
+        """action_to_policy_index → policy_index_to_action is identity."""
         test_cases = [
             (CardType.ATTACK, None),
             (CardType.DEFENSE, None),

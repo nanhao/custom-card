@@ -65,18 +65,20 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
         statuses_2 = []
 
     def _build_player(hp, energy, statuses, hand, history, draw_pile, discard_pile):
-        """Build a PlayerState with optional draw/discard piles (design/27 D4)."""
-        dp = list(draw_pile) if draw_pile is not None else None
-        dcp = list(discard_pile) if discard_pile is not None else None
-        dp_count = len(draw_pile) if draw_pile is not None else 0
-        dcp_count = len(discard_pile) if discard_pile is not None else 0
+        """Build a PlayerState with draw/discard piles (design/27 D4).
+
+        Per design/27 D4: piles default to empty lists, never None,
+        since Converter.build_input_vector requires non-None piles.
+        """
+        dp = list(draw_pile) if draw_pile is not None else []
+        dcp = list(discard_pile) if discard_pile is not None else []
         return PlayerState(
             hp=hp, energy=energy,
             statuses=list(statuses),
             hand=list(hand), history=list(history),
             draw_pile=dp, discard_pile=dcp,
-            draw_pile_count=dp_count,
-            discard_pile_count=dcp_count,
+            draw_pile_count=len(dp),
+            discard_pile_count=len(dcp),
         )
 
     return GameState(
