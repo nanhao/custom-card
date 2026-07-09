@@ -21,9 +21,10 @@ A 2-player turn-based card game with simultaneous card resolution.
 
 ```
 src/backend/game/        Pure game logic (no UI, no I/O)
-  card.py                CardType enum + initial hand factory
+  card_type.py           CardType enum (7 values)
+  card_def.py            CardDef dataclass + per-card Resolver mapping
   player.py              Player state container
-  resolver.py            Card resolution engine (strategy pattern, per-effect Resolver subclasses + CardResolverRegistry)
+  resolver/              Card resolution engine (strategy pattern, per-effect Resolver subclasses)
   game_manager.py        Game state machine + round orchestration
   session_store.py       Disk-based game persistence (save/load/delete)
 

@@ -1,4 +1,7 @@
-"""Resolver subpackage — card effect resolution engine (design/21).
+"""Resolver subpackage — card effect resolution engine (design/22).
+
+Per design/22: CardResolverRegistry removed; card ⇄ resolver mapping
+now lives in CardDef.resolvers (card_def.py).
 
 Re-exports all public symbols so that external code can continue to use:
     from src.backend.game.resolver import CardResolver
@@ -11,7 +14,6 @@ from src.backend.game.resolver.base import (
     Resolver,
 )
 from src.backend.game.resolver.orchestrator import CardResolver
-from src.backend.game.resolver.registry import CardResolverRegistry
 
 # Individual resolver classes — for direct testing
 from src.backend.game.resolver.attack_damage_resolver import AttackDamageResolver

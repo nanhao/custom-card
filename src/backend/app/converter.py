@@ -12,7 +12,8 @@ All methods are stateless. No PyTorch dependency — pure data transformation.
 """
 
 from src.backend.ai.rnn_v1.model import INPUT_SIZE, POLICY_OUTPUT_SIZE
-from src.backend.game.card import CardType, get_card_def
+from src.backend.game.card_type import CardType
+from src.backend.game.card_def import get_card_def
 from src.backend.game.game_state import GameState
 from src.backend.game.player import PlayerHistoryItem
 

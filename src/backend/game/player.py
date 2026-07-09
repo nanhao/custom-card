@@ -9,7 +9,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 
 from dataclasses import dataclass, field
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.player_state import StatusType, PlayerStatus, has_active_status
 
 # Energy cap per design/11 intention §1

@@ -346,3 +346,7 @@ POLICY_OUTPUT_SIZE: int = 13 这两个常量定义不应该放在这里，应该
 应该为每一张卡封装一到多个 Resolver 子类，接收一个 context 实例和一个 ResolveDetails 实例作为参数。每个 Resolver 子类在里面调用 context 成员的 public 方法对游戏进行结算，并在 ResolveDetails 里面记录结算细节。
 同时，Resolver 应该暴露一个 get_priority() 方法，返回自身的优先级。
 还应该有一个 CardType -> list[Resolver] 的注册表，名字就叫 CardResolverRegistry 吧。
+
+# intention_id=22
+这是一个重构任务，删除 CardResolverRegistry，然后在 CardDef 里面定义 cardType -> list[resolver] 的对应关系。
+相应的引用代码也要同步修改，保证功能不受影响。

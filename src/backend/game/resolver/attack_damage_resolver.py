@@ -5,8 +5,6 @@ card_owner's history via CardResolver.get_consecutive_attack().
 Blocked by opponent DEFENSE status.
 """
 
-from src.backend.game.card import CardType
-from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.player_state import StatusType
 from src.backend.game.resolver.base import ResolveContext, ResolveDetails, Resolver
 

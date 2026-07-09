@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.player_state import PlayerStatus
 

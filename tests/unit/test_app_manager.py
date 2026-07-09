@@ -3,7 +3,7 @@
 import torch
 
 from src.backend.app.app_manager import AppManager
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 
 
 class TestMaskFn:

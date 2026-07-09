@@ -6,7 +6,7 @@ and design/14 test_cases.md §4-5 (TC-BH-02~04, TC-GS-01~04).
 
 import pytest
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.game_core import GameCore
 from src.backend.game.game_state import GameState
 from src.backend.game.player import PlayerHistoryItem

@@ -8,7 +8,7 @@ Per architecture D9, this module is pure data — no UI, no I/O.
 
 from dataclasses import dataclass, field
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.player_state import PlayerStatus
 
 

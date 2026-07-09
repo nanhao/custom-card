@@ -1,11 +1,14 @@
-"""Unit tests for resolver.py — Resolver strategy pattern (design/21).
+"""Unit tests for resolver.py — Resolver strategy pattern (design/22).
 
-Test cases per design/21 test_cases.md.
+Per design/22: CardResolverRegistry removed; card → CardType mapping
+now lives in CardDef.resolvers.
+Test cases per design/22 test_cases.md.
 """
 
 import pytest
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
+from src.backend.game.card_def import get_card_def
 from src.backend.game.game_core import GameCore
 from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
@@ -14,7 +17,6 @@ from src.backend.game.resolver import (
     ResolveContext,
     ResolutionResult,
     Resolver,
-    CardResolverRegistry,
     CardResolver,
     AttackDamageResolver,
     GrantDefenseResolver,
@@ -71,41 +73,47 @@ def _make_ctx(
 
 
 # =============================================================================
-# 1. CardResolverRegistry — TC-RG-01 ~ TC-RG-04
+# 1. CardDef.resolvers — replaces CardResolverRegistry (TC-RG-01 ~ TC-RG-03)
 # =============================================================================
 
 
-class TestCardResolverRegistry:
-    """TC-RG-01 ~ TC-RG-04: Registry correctness."""
+class TestCardDefResolvers:
+    """Per design/22: CardDef.resolvers replaces CardResolverRegistry."""
 
     def test_attack_has_one_resolver(self):
-        resolvers = CardResolverRegistry.get_resolvers(CardType.ATTACK)
-        assert len(resolvers) == 1
-        assert isinstance(resolvers[0], AttackDamageResolver)
+        """TC-RG-01: ATTACK has AttackDamageResolver."""
+        cd = get_card_def(CardType.ATTACK)
+        assert len(cd.resolvers) == 1
+        assert cd.resolvers[0] is AttackDamageResolver
 
     def test_defense_has_two_resolvers(self):
-        resolvers = CardResolverRegistry.get_resolvers(CardType.DEFENSE)
-        assert len(resolvers) == 2
-        types = {type(r) for r in resolvers}
-        assert types == {GrantDefenseResolver, GrantGuardResolver}
+        """TC-RG-02: DEFENSE has GrantDefenseResolver + GrantGuardResolver."""
+        cd = get_card_def(CardType.DEFENSE)
+        assert len(cd.resolvers) == 2
+        assert set(cd.resolvers) == {GrantDefenseResolver, GrantGuardResolver}
 
-    def test_all_card_types_registered(self):
+    def test_all_card_types_have_resolvers(self):
+        """TC-RG-03: every CardType has correct resolver counts."""
         expected = {CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 1,
                     CardType.COUNTER: 2, CardType.ENERGY: 1, CardType.BUILD: 1,
                     CardType.FLEX: 2}
         for ct, count in expected.items():
-            resolvers = CardResolverRegistry.get_resolvers(ct)
-            assert len(resolvers) == count, f"{ct.name} expected {count}, got {len(resolvers)}"
+            cd = get_card_def(ct)
+            assert len(cd.resolvers) == count, f"{ct.name}: expected {count}, got {len(cd.resolvers)}"
 
-    def test_register_appends(self):
-        before = len(CardResolverRegistry.get_resolvers(CardType.ATTACK))
-        dummy = BuildResolver()
-        CardResolverRegistry.register(CardType.ATTACK, dummy)
-        try:
-            after = len(CardResolverRegistry.get_resolvers(CardType.ATTACK))
-            assert after == before + 1
-        finally:
-            CardResolverRegistry._registry[CardType.ATTACK].pop()
+    def test_registry_file_deleted(self):
+        """TC-RG-03: registry.py no longer exists."""
+        from pathlib import Path
+        registry_path = Path(__file__).parent.parent.parent / \
+            "src" / "backend" / "game" / "resolver" / "registry.py"
+        assert not registry_path.exists(), "registry.py should be deleted"
+
+    def test_card_resolver_registry_cannot_be_imported(self):
+        """TC-RG-01, TC-RG-02: CardResolverRegistry is not importable."""
+        with pytest.raises(ImportError):
+            from src.backend.game.resolver import CardResolverRegistry  # noqa: F811
+        with pytest.raises(ImportError):
+            from src.backend.game.resolver.registry import CardResolverRegistry  # noqa: F811
 
 
 # =============================================================================

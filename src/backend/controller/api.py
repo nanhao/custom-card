@@ -43,7 +43,8 @@ from src.backend.controller.serializers import (
     round_result_to_dict,
     str_to_card,
 )
-from src.backend.game.card import CardType, get_card_def
+from src.backend.game.card_type import CardType
+from src.backend.game.card_def import get_card_def
 from src.backend.game.session_store import SessionStore
 
 # ---------------------------------------------------------------------------

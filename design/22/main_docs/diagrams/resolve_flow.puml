@@ -1,0 +1,57 @@
+@startuml resolve_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam classFontName Microsoft YaHei
+skinparam sequenceMessageAlign center
+
+title CardResolver.resolve() — Intention #22 (no CardResolverRegistry)
+
+participant "GameCore\nplay_round()" as GC
+participant "CardResolver\n(orchestrator)" as CR
+participant "card_def\n_get_card_def()" as CD
+participant "Resolver\nsubclass" as RS
+participant "ResolutionResult" as RR
+
+GC -> CR: resolve(player_1, player_2, cards_1, cards_2)
+
+== Player 1's cards ==
+
+loop for each card_type in cards_1
+    CR -> CD: get_card_def(card_type)
+    CD --> CR: CardDef (with resolvers tuple)
+    loop for each resolver_cls in card_def.resolvers
+        CR -> RS: resolver_cls()  # instantiate
+        CR -> CR: collect (resolver_instance, ctx)
+    end
+end
+
+== Player 2's cards ==
+
+loop for each card_type in cards_2
+    CR -> CD: get_card_def(card_type)
+    CD --> CR: CardDef (with resolvers tuple)
+    loop for each resolver_cls in card_def.resolvers
+        CR -> RS: resolver_cls()  # instantiate
+        CR -> CR: collect (resolver_instance, ctx)
+    end
+end
+
+== Sort by priority (descending: 12 > 11 > 10) ==
+
+CR -> CR: tasks.sort(key=lambda t: t[0].get_priority(), reverse=True)
+
+== Execute ==
+
+loop for each (resolver, ctx) in tasks
+    CR -> RS: resolver.resolve(ctx, details)
+    RS -> RS: modify Player state via ctx
+end
+
+CR --> GC: ResolutionResult(details)
+
+note over CR, CD
+    replaces: CardResolverRegistry.get_resolvers(card_type)
+    CardResolverRegistry class + registry.py file DELETED.
+end note
+
+@enduml

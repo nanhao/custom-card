@@ -1,12 +1,24 @@
-"""Unit tests for src/backend/game/card.py — CardType enum, CardDef, and get_initial_draw_pile().
+"""Unit tests for src/backend/game/card_type.py and card_def.py — CardType enum, CardDef, and get_initial_draw_pile().
 
-Test cases per design/11 test_cases.md §1 (TC-CD-01 ~ TC-CD-05).
+Per design/22: card.py split into card_type.py + card_def.py.
+Test cases per design/22 test_cases.md.
 """
 
 import pytest
 from dataclasses import FrozenInstanceError
 
-from src.backend.game.card import CardType, CardDef, get_card_def, get_initial_draw_pile
+from src.backend.game.card_type import CardType
+from src.backend.game.card_def import CardDef, get_card_def, get_initial_draw_pile
+from src.backend.game.resolver import (
+    AttackDamageResolver,
+    GrantDefenseResolver,
+    GrantGuardResolver,
+    HeavyDamageResolver,
+    ReflectResolver,
+    GainEnergyResolver,
+    FlexDamageResolver,
+    BuildResolver,
+)
 
 
 class TestCardType:
@@ -45,12 +57,13 @@ class TestGetCardDef:
             _ = cd.priority
 
     def test_card_def_fields(self):
-        """TC-CD-01: CardDef has card_type, build_cost, display_name, icon only."""
+        """TC-CD-04: CardDef has card_type, build_cost, display_name, icon, resolvers."""
         cd = get_card_def(CardType.ATTACK)
         assert cd.card_type == CardType.ATTACK
         assert cd.build_cost == 1
         assert cd.display_name
         assert cd.icon
+        assert cd.resolvers
 
     def test_build_cost_counter(self):
         """TC-CD-04: COUNTER → build_cost=2."""
@@ -115,10 +128,65 @@ class TestGetInitialDrawPile:
         assert pile2[0] == CardType.ATTACK
 
 
+class TestCardDefResolvers:
+    """Per design/22: CardDef.resolvers field tests (TC-CD-01 ~ TC-CD-10)."""
+
+    def test_resolvers_field_present(self):
+        """TC-CD-01: CardDef has resolvers field."""
+        cd = get_card_def(CardType.ATTACK)
+        assert cd.resolvers == (AttackDamageResolver,)
+
+    def test_resolvers_count_per_card_type(self):
+        """TC-CD-02: each CardType has correct number of resolvers."""
+        expected = {
+            CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 1,
+            CardType.COUNTER: 2, CardType.ENERGY: 1, CardType.BUILD: 1,
+            CardType.FLEX: 2,
+        }
+        for ct, count in expected.items():
+            cd = get_card_def(ct)
+            assert len(cd.resolvers) == count, f"{ct.name}: expected {count}, got {len(cd.resolvers)}"
+
+    def test_resolvers_types_per_card_type(self):
+        """TC-CD-03: each CardType's resolvers have correct types."""
+        expected = {
+            CardType.ATTACK: {AttackDamageResolver},
+            CardType.DEFENSE: {GrantDefenseResolver, GrantGuardResolver},
+            CardType.HEAVY: {HeavyDamageResolver},
+            CardType.COUNTER: {GrantDefenseResolver, ReflectResolver},
+            CardType.ENERGY: {GainEnergyResolver},
+            CardType.BUILD: {BuildResolver},
+            CardType.FLEX: {GrantDefenseResolver, FlexDamageResolver},
+        }
+        for ct, types_set in expected.items():
+            cd = get_card_def(ct)
+            actual = set(cd.resolvers)
+            assert actual == types_set, f"{ct.name}: expected {types_set}, got {actual}"
+
+    def test_resolvers_immutable(self):
+        """TC-CD-08: resolvers is an immutable tuple."""
+        cd = get_card_def(CardType.ATTACK)
+        with pytest.raises(TypeError):
+            cd.resolvers[0] = BuildResolver  # type: ignore[index]
+
+    def test_resolver_class_instantiable(self):
+        """TC-CD-09: resolver classes from CardDef can be instantiated."""
+        resolver_cls = get_card_def(CardType.ATTACK).resolvers[0]
+        instance = resolver_cls()
+        assert isinstance(instance, AttackDamageResolver)
+        assert instance.get_priority() == 10
+
+    def test_build_cost_preserved(self):
+        """TC-CD-10: build_cost unchanged after refactoring."""
+        assert get_card_def(CardType.COUNTER).build_cost == 2
+        assert get_card_def(CardType.FLEX).build_cost == 2
+        assert get_card_def(CardType.ATTACK).build_cost == 1
+
+
 class TestEffectTypeRemoved:
     """TC-CD-03: EffectType enum has been removed."""
 
     def test_effect_type_cannot_be_imported(self):
         """TC-CD-03: Importing EffectType raises ImportError."""
         with pytest.raises(ImportError):
-            from src.backend.game.card import EffectType  # noqa: F811
+            from src.backend.game.card_type import EffectType  # noqa: F811

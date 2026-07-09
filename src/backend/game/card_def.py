@@ -1,56 +1,53 @@
-"""Card type definitions for the custom card game v2 (design/11, design/21).
+"""CardDef dataclass and static card metadata table (design/22).
 
-This module defines the CardType enum (7 values) and the CardDef dataclass
-holding per-card static metadata (build_cost, display_name, icon).
+Per design/22: CardDef gains a `resolvers` field that stores Resolver
+subclass references. CardResolverRegistry has been deleted — the mapping
+is now defined inline in _CARD_DEFS.
 
-Per design/21: EffectType enum and CardDef.effects/priority fields removed.
-Effect logic is encapsulated in resolver.py Resolver subclasses.
-
-Per architecture D1, CardType serves as identifier only; CardDef carries
-card metadata. Effect specifications moved to CardResolverRegistry.
+CardType was extracted to card_type.py to break the circular dependency
+with resolver/.
 """
 
 from dataclasses import dataclass
-from enum import Enum
 
-
-class CardType(Enum):
-    """Seven card types available in the v2 game (design/11 §7).
-
-    Values are short string identifiers used for serialization and display.
-    """
-
-    ATTACK = "attack"
-    DEFENSE = "defense"
-    HEAVY = "heavy"
-    COUNTER = "counter"
-    ENERGY = "energy"
-    BUILD = "build"
-    FLEX = "flex"
+from src.backend.game.card_type import CardType
+from src.backend.game.resolver.attack_damage_resolver import AttackDamageResolver
+from src.backend.game.resolver.build_resolver import BuildResolver
+from src.backend.game.resolver.flex_damage_resolver import FlexDamageResolver
+from src.backend.game.resolver.gain_energy_resolver import GainEnergyResolver
+from src.backend.game.resolver.grant_defense_resolver import GrantDefenseResolver
+from src.backend.game.resolver.grant_guard_resolver import GrantGuardResolver
+from src.backend.game.resolver.heavy_damage_resolver import HeavyDamageResolver
+from src.backend.game.resolver.reflect_resolver import ReflectResolver
 
 
 @dataclass(frozen=True)
 class CardDef:
-    """Per-card static metadata (design/21).
+    """Per-card static metadata (design/22).
 
     Per design/21: effects and priority fields removed — effect logic
-    encapsulated in Resolver subclasses via CardResolverRegistry.
+    encapsulated in Resolver subclasses.
+    Per design/22: resolvers field added — Resolver subclass references
+    replace the deleted CardResolverRegistry.
 
     Attributes:
         card_type: The CardType enum member this definition belongs to.
         build_cost: Energy cost (1 or 2) to construct this card via BUILD.
         display_name: Human-readable Chinese name for UI display.
         icon: Emoji icon for UI display.
+        resolvers: Resolver classes for this card, in registration order.
     """
 
     card_type: CardType
     build_cost: int
     display_name: str
     icon: str
+    resolvers: tuple[type, ...]
 
 
 # ---------------------------------------------------------------------------
 # Static card metadata table — one CardDef per CardType.
+# resolvers field replaces CardResolverRegistry (design/22).
 # ---------------------------------------------------------------------------
 
 _CARD_DEFS: dict[CardType, CardDef] = {
@@ -58,43 +55,50 @@ _CARD_DEFS: dict[CardType, CardDef] = {
         card_type=CardType.ATTACK,
         build_cost=1,
         display_name="攻击",
-        icon="⚔️",
+        icon="\u2694\ufe0f",  # ⚔️
+        resolvers=(AttackDamageResolver,),
     ),
     CardType.DEFENSE: CardDef(
         card_type=CardType.DEFENSE,
         build_cost=1,
         display_name="防御",
-        icon="🛡️",
+        icon="\U0001f6e1\ufe0f",  # 🛡️
+        resolvers=(GrantDefenseResolver, GrantGuardResolver),
     ),
     CardType.HEAVY: CardDef(
         card_type=CardType.HEAVY,
         build_cost=1,
         display_name="重击",
-        icon="💥",
+        icon="\U0001f4a5",  # 💥
+        resolvers=(HeavyDamageResolver,),
     ),
     CardType.COUNTER: CardDef(
         card_type=CardType.COUNTER,
         build_cost=2,
         display_name="反击",
-        icon="↩️",
+        icon="\u21a9\ufe0f",  # ↩️
+        resolvers=(GrantDefenseResolver, ReflectResolver),
     ),
     CardType.ENERGY: CardDef(
         card_type=CardType.ENERGY,
         build_cost=1,
         display_name="聚能",
-        icon="⚡",
+        icon="\u26a1",  # ⚡
+        resolvers=(GainEnergyResolver,),
     ),
     CardType.BUILD: CardDef(
         card_type=CardType.BUILD,
         build_cost=1,
         display_name="构建",
-        icon="🔨",
+        icon="\U0001f528",  # 🔨
+        resolvers=(BuildResolver,),
     ),
     CardType.FLEX: CardDef(
         card_type=CardType.FLEX,
         build_cost=2,
         display_name="攻守兼备",
-        icon="⚖️",
+        icon="\u2696\ufe0f",  # ⚖️
+        resolvers=(GrantDefenseResolver, FlexDamageResolver),
     ),
 }
 
@@ -107,11 +111,15 @@ _CARD_DEFS: dict[CardType, CardDef] = {
 def get_card_def(card_type: CardType) -> CardDef:
     """Return the CardDef for a given CardType.
 
+    Per design/22: the returned CardDef includes resolver class references
+    in the `resolvers` field, replacing the deleted CardResolverRegistry.
+
     Args:
         card_type: Any of the 7 CardType enum members.
 
     Returns:
-        Immutable CardDef with card_type, build_cost, display_name, icon.
+        Immutable CardDef with card_type, build_cost, display_name, icon,
+        resolvers.
     """
     return _CARD_DEFS[card_type]
 

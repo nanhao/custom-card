@@ -22,7 +22,7 @@ from src.backend.ai.rnn_v1.model import HIDDEN_SIZE, INPUT_SIZE, POLICY_OUTPUT_S
 from src.backend.app.converter import Converter
 from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.app.selfplay_runner import SelfPlayRunner
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.game_core import GameCore
 from src.backend.game.game_state import GameState
 from src.backend.game.session_store import SessionStore

@@ -6,7 +6,7 @@ and utility functions for reading test output files.
 
 import json
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.game_state import GameState, PlayerState
 from src.backend.game.player import PlayerHistoryItem
 

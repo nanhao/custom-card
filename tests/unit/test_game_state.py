@@ -5,7 +5,7 @@ Test cases per design/19 test_cases.md §1-3 (TC-PS-01~05, TC-GS-01~03, TC-TD-01
 
 import pytest
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.game_core import RoundResult, BeforeResolve, AfterResolve, EndActions, AfterEndActions
 from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus

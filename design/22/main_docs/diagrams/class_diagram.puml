@@ -1,0 +1,92 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam classFontName Microsoft YaHei
+
+title CardType & CardDef & Resolver — Intention #22
+
+package "game/card_type.py" as card_type {
+    enum CardType {
+        ATTACK = attack
+        DEFENSE = defense
+        HEAVY = heavy
+        COUNTER = counter
+        ENERGY = energy
+        BUILD = build
+        FLEX = flex
+    }
+}
+
+package "game/card_def.py" as card_def {
+    class CardDef <<dataclass, frozen>> {
+        card_type: CardType
+        build_cost: int
+        display_name: str
+        icon: str
+        resolvers: tuple[type[Resolver], ...]
+    }
+}
+
+package "game/resolver/" as resolver {
+    abstract class Resolver {
+        +get_priority(): int
+        +resolve(ctx: ResolveContext, details: ResolveDetails): None
+    }
+
+    class AttackDamageResolver
+    class GrantDefenseResolver
+    class GrantGuardResolver
+    class HeavyDamageResolver
+    class ReflectResolver
+    class GainEnergyResolver
+    class FlexDamageResolver
+    class BuildResolver
+
+    AttackDamageResolver --|> Resolver
+    GrantDefenseResolver --|> Resolver
+    GrantGuardResolver --|> Resolver
+    HeavyDamageResolver --|> Resolver
+    ReflectResolver --|> Resolver
+    GainEnergyResolver --|> Resolver
+    FlexDamageResolver --|> Resolver
+    BuildResolver --|> Resolver
+
+    class CardResolver {
+        +get_consecutive_attack(history): int
+        +resolve(player_1, player_2, cards_1, cards_2): ResolutionResult
+    }
+
+    class ResolveDetails <<dataclass>> {
+        details: list[str]
+        +add(detail: str): None
+    }
+
+    class ResolveContext <<dataclass>> {
+        card_owner: Player
+        opponent: Player
+        card_played_by_owner: CardType
+        card_played_by_opponent: CardType
+    }
+
+    class ResolutionResult <<dataclass>> {
+        details: list[str]
+    }
+}
+
+card_type::CardType <.. card_def::CardDef : uses
+card_def::CardDef --> resolver::Resolver : resolvers field
+resolver::CardResolver ..> card_def::CardDef : reads resolvers\nvia get_card_def()
+resolver::CardResolver ..> resolver::Resolver : instantiates and calls
+resolver::CardResolver ..> resolver::ResolutionResult : returns
+resolver::CardResolver ..> resolver::ResolveDetails : builds
+resolver::CardResolver ..> resolver::ResolveContext : builds
+resolver::Resolver --> resolver::ResolveContext : uses
+resolver::Resolver --> resolver::ResolveDetails : uses
+
+note as N1
+    resolvers stores Resolver subclass
+    references, not instances.
+    CardResolverRegistry deleted.
+end note
+
+@enduml

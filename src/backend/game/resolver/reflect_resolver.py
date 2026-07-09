@@ -3,7 +3,7 @@
 Reflects 1 damage if opponent played ATTACK or HEAVY.
 """
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.resolver.base import ResolveContext, ResolveDetails, Resolver
 
 

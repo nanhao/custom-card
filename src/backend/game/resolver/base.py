@@ -7,7 +7,7 @@ Resolver abstract base class that all effect resolvers implement.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.player import Player
 from src.backend.game.player_state import StatusType
 

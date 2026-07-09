@@ -1,10 +1,12 @@
 """CardResolver — priority-layered resolution orchestrator.
 
-Queries CardResolverRegistry for each card's resolvers, builds a
-ResolveContext per card, sorts by priority, and delegates to each Resolver.
+Per design/22: queries get_card_def(card_type).resolvers instead of
+CardResolverRegistry.get_resolvers(card_type).
+get_card_def is imported lazily to avoid circular dependency
+with card_def.py → resolver/__init__.py → orchestrator.py.
 """
 
-from src.backend.game.card import CardType
+from src.backend.game.card_type import CardType
 from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.resolver.base import (
     ResolveContext,
@@ -12,7 +14,6 @@ from src.backend.game.resolver.base import (
     ResolutionResult,
     Resolver,
 )
-from src.backend.game.resolver.registry import CardResolverRegistry
 
 
 class CardResolver:
@@ -37,6 +38,10 @@ class CardResolver:
         cards_2: list[CardType],
     ) -> ResolutionResult:
         """Orchestrate resolution of both players' cards."""
+        # Lazy import avoids circular dependency:
+        # card_def.py → resolver/__init__.py → orchestrator.py → card_def.py
+        from src.backend.game.card_def import get_card_def  # noqa: F811
+
         details = ResolveDetails()
 
         tasks: list[tuple[Resolver, ResolveContext]] = []
@@ -48,8 +53,9 @@ class CardResolver:
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_2[0],
             )
-            for resolver in CardResolverRegistry.get_resolvers(card_type):
-                tasks.append((resolver, ctx))
+            card_def = get_card_def(card_type)
+            for resolver_cls in card_def.resolvers:
+                tasks.append((resolver_cls(), ctx))
 
         for card_type in cards_2:
             ctx = ResolveContext(
@@ -58,8 +64,9 @@ class CardResolver:
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_1[0],
             )
-            for resolver in CardResolverRegistry.get_resolvers(card_type):
-                tasks.append((resolver, ctx))
+            card_def = get_card_def(card_type)
+            for resolver_cls in card_def.resolvers:
+                tasks.append((resolver_cls(), ctx))
 
         tasks.sort(key=lambda t: t[0].get_priority(), reverse=True)
 
