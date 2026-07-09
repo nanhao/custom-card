@@ -200,7 +200,7 @@ class AppManager:
         new_h_val_list = new_h_val.squeeze(1).squeeze(0).tolist()
         value_float = float(value.item())
 
-        return card_str, build_target, new_h_pol_list, log_prob, value_float, new_h_val_list
+        return card_type, build_target, new_h_pol_list, log_prob, value_float, new_h_val_list
 
     # ------------------------------------------------------------------
     # Model loading and caching
