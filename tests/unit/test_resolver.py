@@ -380,28 +380,111 @@ class TestFlexDamageResolver:
 
 
 # =============================================================================
-# 10. BuildResolver
+# 10. ResolveContext — build_target field (design/25)
+# =============================================================================
+
+
+class TestResolveContextBuildTarget:
+    """TC-CTX-01 ~ TC-CTX-02: ResolveContext build_target field."""
+
+    def test_build_target_defaults_to_none(self):
+        """TC-CTX-01: default value is None when not specified."""
+        gm, ctx = _make_ctx(source="1")
+        assert ctx.build_target is None
+
+    def test_build_target_explicitly_set(self):
+        """TC-CTX-02: can explicitly set build_target."""
+        gm, ctx = _make_ctx(
+            source="1",
+            owner_card=CardType.BUILD,
+        )
+        ctx.build_target = CardType.HEAVY
+        assert ctx.build_target == CardType.HEAVY
+
+
+# =============================================================================
+# 11. BuildResolver
 # =============================================================================
 
 
 class TestBuildResolver:
-    def test_no_state_change(self):
-        gm, ctx = _make_ctx(hp_1=20, hp_2=20, energy_1=0, source="1")
+    """TC-BLD-01 ~ TC-BLD-06: BuildResolver settlement logic (design/25)."""
+
+    def test_build_attack_cost_1(self):
+        """TC-BLD-01: BUILD ATTACK (cost=1), energy 2 -> 1, card added to discard."""
+        gm, ctx = _make_ctx(
+            hp_1=20, energy_1=2, source="1",
+            owner_card=CardType.BUILD,
+        )
+        ctx.build_target = CardType.ATTACK
+        gm.player_1.discard_pile = []
         details = ResolveDetails()
         BuildResolver().resolve(ctx, details)
-        assert gm.player_1.hp == 20
-        assert gm.player_2.hp == 20
+        assert gm.player_1.energy == 1
+        assert CardType.ATTACK in gm.player_1.discard_pile
+        assert len(gm.player_1.discard_pile) == 1
+        assert any("BUILD attack (cost 1)" in d for d in details.details)
+
+    def test_build_heavy_cost_2(self):
+        """TC-BLD-02: BUILD HEAVY (cost=2), energy 2 -> 0, card added to discard."""
+        gm, ctx = _make_ctx(
+            hp_1=20, energy_1=2, source="1",
+            owner_card=CardType.BUILD,
+        )
+        ctx.build_target = CardType.HEAVY
+        gm.player_1.discard_pile = []
+        details = ResolveDetails()
+        BuildResolver().resolve(ctx, details)
         assert gm.player_1.energy == 0
-        assert gm.player_1.statuses == []
-        assert gm.player_2.statuses == []
+        assert CardType.HEAVY in gm.player_1.discard_pile
+        assert any("BUILD heavy (cost 2)" in d for d in details.details)
+
+    def test_build_flex_with_existing_discard(self):
+        """TC-BLD-03: BUILD FLEX (cost=2) with existing discard, energy 5 -> 3."""
+        gm, ctx = _make_ctx(
+            hp_1=20, energy_1=5, source="1",
+            owner_card=CardType.BUILD,
+        )
+        ctx.build_target = CardType.FLEX
+        gm.player_1.discard_pile = [CardType.ATTACK]
+        details = ResolveDetails()
+        BuildResolver().resolve(ctx, details)
+        assert gm.player_1.energy == 3
+        assert gm.player_1.discard_pile == [CardType.ATTACK, CardType.FLEX]
+
+    def test_build_target_none_is_noop(self):
+        """TC-BLD-04: build_target is None -> no state changes (defensive)."""
+        gm, ctx = _make_ctx(
+            hp_1=20, energy_1=2, source="1",
+            owner_card=CardType.BUILD,
+        )
+        ctx.build_target = None
+        gm.player_1.discard_pile = []
+        details = ResolveDetails()
+        BuildResolver().resolve(ctx, details)
+        assert gm.player_1.energy == 2
+        assert gm.player_1.discard_pile == []
+
+    def test_build_energy_detail_recorded(self):
+        """TC-BLD-05: detail message includes target card and cost."""
+        gm, ctx = _make_ctx(
+            hp_1=20, energy_1=3, source="1",
+            owner_card=CardType.BUILD,
+        )
+        ctx.build_target = CardType.ENERGY
+        details = ResolveDetails()
+        BuildResolver().resolve(ctx, details)
         assert len(details.details) == 1
+        assert "BUILD" in details.details[0]
+        assert "cost 1" in details.details[0]
 
     def test_get_priority_returns_10(self):
+        """TC-BLD-06: priority is 10."""
         assert BuildResolver().get_priority() == 10
 
 
 # =============================================================================
-# 11. Priority Ordering
+# 12. Priority Ordering
 # =============================================================================
 
 
@@ -431,7 +514,7 @@ class TestPriorityOrdering:
 
 
 # =============================================================================
-# 12. CardResolver Orchestration
+# 13. CardResolver Orchestration
 # =============================================================================
 
 
@@ -491,7 +574,7 @@ class TestCardResolverOrchestration:
 
 
 # =============================================================================
-# 13. GrantFragileResolver — design/24
+# 14. GrantFragileResolver — design/24
 # =============================================================================
 
 
@@ -536,7 +619,7 @@ class TestGrantFragileResolver:
 
 
 # =============================================================================
-# 14. FRAGILE blocks DEFENSE/ GUARD — design/24
+# 15. FRAGILE blocks DEFENSE/ GUARD — design/24
 # =============================================================================
 
 
@@ -591,7 +674,7 @@ class TestFragileBlocksGuard:
 
 
 # =============================================================================
-# 15. Priority interaction — design/24 D1
+# 16. Priority interaction — design/24 D1
 # =============================================================================
 
 

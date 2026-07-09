@@ -1,0 +1,77 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title 类图 — BuildResolver 结算逻辑迁移 (design #25)
+
+package "game.resolver" {
+    abstract class Resolver {
+        + get_priority(): int
+        + resolve(ctx: ResolveContext, details: ResolveDetails): void
+    }
+
+    class ResolveContext <<dataclass>> {
+        + card_owner: Player
+        + opponent: Player
+        + card_played_by_owner: CardType
+        + card_played_by_opponent: CardType
+        + build_target: Optional[CardType] = None
+    }
+
+    class ResolveDetails <<dataclass>> {
+        + details: list
+        + add(detail: str): void
+    }
+
+    class BuildResolver {
+        + get_priority(): int
+        + resolve(ctx: ResolveContext, details: ResolveDetails): void
+    }
+
+    class CardResolver {
+        + resolve(tasks): ResolutionResult
+    }
+
+    Resolver <|-- BuildResolver
+    CardResolver ..> Resolver : 调度
+    CardResolver ..> ResolveContext : 使用
+    Resolver ..> ResolveContext : 使用
+    Resolver ..> ResolveDetails : 使用
+}
+
+package "game" {
+    class GameCore {
+        + play_round(cards_1, cards_2, build_target_1=None, build_target_2=None): RoundResult
+        - _validate(cards_1, cards_2, build_target_1, build_target_2): void
+    }
+
+    class CardDef <<dataclass>> {
+        + card_type: CardType
+        + build_cost: int
+        + display_name: str
+        + resolvers: tuple
+    }
+
+    GameCore ..> CardResolver : 调用 resolve()
+    GameCore ..> CardDef : 通过 get_card_def() 获取 resolvers
+    GameCore ..> ResolveContext : 创建
+    BuildResolver ..> CardDef : 通过 get_card_def() 获取 build_cost
+}
+
+note right of ResolveContext
+  新增字段 build_target
+  仅 BUILD 卡时非 None
+end note
+
+note bottom of BuildResolver
+  变更前：空实现
+  变更后：扣除能量 + 添加卡牌到弃牌堆
+end note
+
+note bottom of GameCore
+  变更前：_process_build() 单独处理 BUILD
+  变更后：_process_build() 已删除
+end note
+
+@enduml

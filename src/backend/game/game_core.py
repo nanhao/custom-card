@@ -34,6 +34,7 @@ class GameCore:
     - _start_cycle() handles deck shuffling and card drawing.
     - Cycle-end HP bleed: both players lose 1 HP after round 5.
     - build_target parameter for BUILD card construction.
+    - BUILD settlement handled by BuildResolver (design/25).
     """
 
     ROUNDS_PER_CYCLE = 5
@@ -87,14 +88,13 @@ class GameCore:
 
         Flow:
         1. Validate (game not over, cards in hand, BUILD energy check).
-        2. Resolve card effects via CardResolver.
-        3. Apply damage, energy, statuses.
-        4. Process BUILD construction if applicable.
-        5. Discard played cards.
-        6. Record history.
-        7. Check cycle end (round 5 → bleed + new cycle).
-        8. Check game end (HP=0).
-        9. Return RoundResult.
+        2. Build resolver tasks with build_target passed via ResolveContext.
+        3. Resolve card effects via CardResolver.
+        4. Discard played cards.
+        5. Record history.
+        6. Check cycle end (round 5 → bleed + new cycle).
+        7. Check game end (HP=0).
+        8. Return RoundResult.
 
         Args:
             cards_1: Cards played by Player 1 (expects exactly 1).
@@ -125,6 +125,7 @@ class GameCore:
 
         # Step 2: Build resolver tasks from CardDef.resolvers (design/22).
         # GameCore owns the mapping lookup; CardResolver only orchestrates.
+        # Per design/25: build_target passed via ResolveContext for BUILD cards.
         tasks: list[tuple[Resolver, ResolveContext]] = []
 
         for card_type in cards_1:
@@ -133,6 +134,7 @@ class GameCore:
                 opponent=self.player_2,
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_2[0],
+                build_target=build_target_1 if card_type == CardType.BUILD else None,
             )
             for resolver_cls in get_card_def(card_type).resolvers:
                 tasks.append((resolver_cls(), ctx))
@@ -143,29 +145,26 @@ class GameCore:
                 opponent=self.player_1,
                 card_played_by_owner=card_type,
                 card_played_by_opponent=cards_1[0],
+                build_target=build_target_2 if card_type == CardType.BUILD else None,
             )
             for resolver_cls in get_card_def(card_type).resolvers:
                 tasks.append((resolver_cls(), ctx))
 
         resolution = CardResolver.resolve(tasks)
 
-        # Steps 4-5 removed: damage, energy, and statuses applied directly by Resolvers.
+        # Step 3 removed: BUILD construction now handled by BuildResolver (design/25).
 
-        # Step 6: Process BUILD construction
-        self._process_build(cards_1[0], build_target_1, self.player_1)
-        self._process_build(cards_2[0], build_target_2, self.player_2)
-
-        # Step 7: Discard played cards from hands (to discard_pile)
+        # Step 4: Discard played cards from hands (to discard_pile)
         self.player_1.play_cards(cards_1)
         self.player_2.play_cards(cards_2)
         self.player_1.discard_pile.extend(cards_1)
         self.player_2.discard_pile.extend(cards_2)
 
-        # Step 8: Record history as PlayerHistoryItem (design/16 D3)
+        # Step 5: Record history as PlayerHistoryItem (design/16 D3)
         self.player_1.history.append(PlayerHistoryItem(cards_1[0], build_target_1))
         self.player_2.history.append(PlayerHistoryItem(cards_2[0], build_target_2))
 
-        # Step 9: after_resolve — snapshot after card resolution, before round-end.
+        # Step 6: after_resolve — snapshot after card resolution, before round-end.
         after_resolve = AfterResolve(
             statuses_1=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_1.statuses],
             statuses_2=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_2.statuses],
@@ -176,7 +175,7 @@ class GameCore:
             details=resolution.details,
         )
 
-        # Step 10: Check game end from damage
+        # Step 7: Check game end from damage
         is_over, winner = self._check_game_end()
         if is_over:
             # Game ended during card resolution — after_end_actions copies after_resolve state.
@@ -207,7 +206,7 @@ class GameCore:
             self.round_log.append(result)
             return result
 
-        # Step 11: Phase 2 — Round-end actions
+        # Step 8: Phase 2 — Round-end actions
         # a) Status lifetime tick (every round)
         self._tick_status_lifetimes()
 
@@ -227,11 +226,11 @@ class GameCore:
             bleed_over = False
             bleed_winner = None
 
-        # Step 12: Advance round
+        # Step 9: Advance round
         self.round_number += 1
         self.round_in_cycle += 1
 
-        # Step 13: after_end_actions — final state after all processing.
+        # Step 10: after_end_actions — final state after all processing.
         after_end_actions = AfterEndActions(
             is_game_over=bleed_over,
             winner=bleed_winner,
@@ -433,25 +432,6 @@ class GameCore:
                     f"Cannot build {build_target_2.value}: "
                     f"cost {build_cost} > energy {self.player_2.energy}."
                 )
-
-    def _process_build(
-        self,
-        card: CardType,
-        build_target: CardType | None,
-        player: Player,
-    ) -> None:
-        """Process BUILD card effect: deduct energy and add built card to discard.
-
-        Args:
-            card: The card played (should be BUILD for this to take effect).
-            build_target: The card type to construct.
-            player: The player who played the build card.
-        """
-        if card != CardType.BUILD or build_target is None:
-            return
-        cost = get_card_def(build_target).build_cost
-        player.energy = max(0, player.energy - cost)
-        player.discard_pile.append(build_target)
 
     def _check_game_end(self) -> tuple[bool, str | None]:
         """Evaluate game-end conditions: HP=0 only (no round limit in v2).

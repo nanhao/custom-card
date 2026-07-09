@@ -1,0 +1,53 @@
+@startuml build_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title BUILD 卡牌结算流程
+
+actor Caller
+participant "GameCore" as GC
+participant "CardDef" as CD
+participant "CardResolver" as CR
+participant "BuildResolver" as BR
+
+== 1. 校验 ==
+Caller -> GC: play_round([BUILD], [ATTACK],\nbuild_target_1=ATTACK)
+activate GC
+GC -> GC: ① _validate():\n energy>0, build_target 不为 None,\n cost<=energy
+
+== 2. 构建解析任务 ==
+GC -> GC: ② 遍历 cards_1, cards_2
+GC -> GC: ③ 创建 ResolveContext\n(BUILD 卡传入 build_target=ATTACK)
+
+GC -> CD: ④ get_card_def(card_type).resolvers
+CD --> GC: [BuildResolver, ...]
+
+== 3. 调度解析 ==
+GC -> CR: ⑤ resolve(tasks)
+activate CR
+CR -> CR: ⑥ 按 priority 降序排序 (12>11>10)
+
+loop 每个 (resolver, ctx)
+    CR -> BR: ⑦ resolve(ctx, details)
+    activate BR
+    BR -> CD: ⑧ get_card_def(ctx.build_target)
+    CD --> BR: CardDef(build_cost=1)
+    BR -> BR: ⑨ card_owner.energy -= build_cost
+    BR -> BR: ⑩ card_owner.discard_pile\n.append(build_target)
+    BR -> BR: ⑪ details.add("BUILD ATTACK (cost 1)")
+    deactivate BR
+end
+
+CR --> GC: ResolutionResult(details)
+deactivate CR
+
+== 4. 收尾 ==
+GC -> GC: ⑫ 弃置已打出卡牌
+GC -> GC: ⑬ 记录 PlayerHistoryItem\n(BUILD, build_target=ATTACK)
+GC -> GC: ⑭ 处理回合结束
+GC --> Caller: RoundResult
+
+deactivate GC
+
+@enduml

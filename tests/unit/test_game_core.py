@@ -701,3 +701,133 @@ class TestFragileMultiRound:
             ps.status_type == StatusType.DEFENSE
             for ps in result.after_resolve.statuses_1
         )
+
+
+# =============================================================================
+# BUILD settlement via BuildResolver — design/25 TC-GC-BLD-01 ~ TC-GC-BLD-09
+# =============================================================================
+
+
+class TestBuildResolverIntegration:
+    """TC-GC-BLD-01 ~ TC-GC-BLD-09: BUILD settlement via BuildResolver."""
+
+    def test_build_attack_via_play_round(self):
+        """TC-GC-BLD-01: BUILD ATTACK via play_round consumes energy, adds card."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 2
+        gm.player_1.hand = [CardType.BUILD, CardType.ATTACK]
+        gm.player_2.hand = [CardType.ATTACK]
+        result = gm.play_round(
+            [CardType.BUILD], [CardType.ATTACK],
+            build_target_1=CardType.ATTACK,
+        )
+        assert gm.player_1.energy == 1
+        assert CardType.ATTACK in gm.player_1.discard_pile
+        assert result is not None
+
+    def test_build_heavy_via_play_round(self):
+        """TC-GC-BLD-02: BUILD HEAVY (cost=2), P2 DEFENSE unaffected."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 2
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.DEFENSE]
+        result = gm.play_round(
+            [CardType.BUILD], [CardType.DEFENSE],
+            build_target_1=CardType.HEAVY,
+        )
+        assert gm.player_1.energy == 0
+        assert CardType.HEAVY in gm.player_1.discard_pile
+        # P2 should have gained DEFENSE (not affected by BUILD)
+        assert any(
+            ps.status_type == StatusType.DEFENSE
+            for ps in result.after_resolve.statuses_2
+        )
+
+    def test_build_energy_zero_raises(self):
+        """TC-GC-BLD-03: BUILD with energy=0 raises ValueError."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 0
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.ATTACK]
+        with pytest.raises(ValueError, match="energy is 0"):
+            gm.play_round([CardType.BUILD], [CardType.ATTACK])
+
+    def test_build_missing_target_raises(self):
+        """TC-GC-BLD-04: BUILD without build_target raises ValueError."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 1
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.ATTACK]
+        with pytest.raises(ValueError, match="build_target_1 is required"):
+            gm.play_round([CardType.BUILD], [CardType.ATTACK])
+
+    def test_build_cost_exceeds_energy_raises(self):
+        """TC-GC-BLD-05: BUILD HEAVY with energy=1 raises ValueError."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 1
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.ATTACK]
+        with pytest.raises(ValueError, match="cost 2 > energy 1"):
+            gm.play_round(
+                [CardType.BUILD], [CardType.ATTACK],
+                build_target_1=CardType.HEAVY,
+            )
+
+    def test_non_build_card_ignores_build_target(self):
+        """TC-GC-BLD-06: ATTACK with build_target=HEAVY — build_target ignored."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 5
+        gm.player_1.hand = [CardType.ATTACK]
+        gm.player_2.hand = [CardType.DEFENSE]
+        # Should not raise — build_target is ignored for non-BUILD cards
+        gm.play_round(
+            [CardType.ATTACK], [CardType.DEFENSE],
+            build_target_1=CardType.HEAVY,
+        )
+        assert gm.player_1.energy == 5
+
+    def test_process_build_method_deleted(self):
+        """TC-GC-BLD-07: _process_build method no longer exists."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        with pytest.raises(AttributeError):
+            _ = gm._process_build
+
+    def test_build_history_records_correctly(self):
+        """TC-GC-BLD-08: BUILD records PlayerHistoryItem with build_target."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 2
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.ATTACK]
+        gm.play_round(
+            [CardType.BUILD], [CardType.ATTACK],
+            build_target_1=CardType.ATTACK,
+        )
+        assert gm.player_1.history[-1] == PlayerHistoryItem(
+            CardType.BUILD, CardType.ATTACK,
+        )
+
+    def test_both_players_build_simultaneously(self):
+        """TC-GC-BLD-09: both players BUILD simultaneously."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.energy = 2
+        gm.player_2.energy = 2
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.BUILD]
+        gm.play_round(
+            [CardType.BUILD], [CardType.BUILD],
+            build_target_1=CardType.ATTACK,
+            build_target_2=CardType.DEFENSE,
+        )
+        assert gm.player_1.energy == 1
+        assert CardType.ATTACK in gm.player_1.discard_pile
+        assert gm.player_2.energy == 1
+        assert CardType.DEFENSE in gm.player_2.discard_pile

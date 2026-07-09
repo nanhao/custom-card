@@ -38,12 +38,14 @@ class ResolveContext:
     """All context needed by a Resolver to settle one card's effects.
 
     Passed directly to resolve() — no GameCore indirection needed.
+    Per design/25: build_target added for BUILD card construction.
     """
 
     card_owner: Player
     opponent: Player
     card_played_by_owner: CardType
     card_played_by_opponent: CardType
+    build_target: CardType | None = None
 
 
 class Resolver(ABC):
