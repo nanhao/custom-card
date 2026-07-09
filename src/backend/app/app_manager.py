@@ -308,6 +308,11 @@ class AppManager:
                 if not can_build or Converter.build_cost(card_type) > energy:
                     masked[0, build_idx] = float('-inf')
 
+            # Safety: if ALL actions are masked (e.g. empty hand, energy=0),
+            # unmask everything to avoid NaN from softmax of all -inf.
+            if torch.all(masked == float('-inf')):
+                return logits
+
             return masked
 
         return mask_fn
