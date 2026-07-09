@@ -77,7 +77,7 @@ Pure game logic. The only module that knows game rules.
 | File | Responsibility |
 |------|---------------|
 | `card_type.py` | `CardType` enum (7 values) |
-| `card_def.py` | `CardDef` dataclass (build_cost, display_name, icon, resolvers mapping) |
+| `card_def.py` | `CardDef` dataclass (build_cost, display_name, resolvers mapping) |
 | `player.py` | `Player` class: HP, energy, statuses, draw/discard piles, hand, history |
 | `resolver/` | `CardResolver` — priority-layered effect resolution engine (strategy pattern, 8 Resolver subclasses) |
 | `game_core.py` | `GameCore` — game state machine (create, play_round, cycle management, end detection) + `RoundResult` dataclass |

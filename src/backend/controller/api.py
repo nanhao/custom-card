@@ -180,7 +180,7 @@ def _register_routes(app: Flask) -> None:
     def list_cards():
         """Return metadata for all card types.
 
-        Success: 200 OK with {"cards": [{"type": "attack", "display_name": "\u653b\u51fb", ...}]}
+        Success: 200 OK with {"cards": [{"type": "attack", "display_name": "攻击", ...}]}
         """
         cards = []
         for ct in CardType:
@@ -188,7 +188,6 @@ def _register_routes(app: Flask) -> None:
             cards.append({
                 "type": ct.value,
                 "display_name": cd.display_name,
-                "icon": cd.icon,
                 "build_cost": cd.build_cost,
             })
         return jsonify({"cards": cards}), 200

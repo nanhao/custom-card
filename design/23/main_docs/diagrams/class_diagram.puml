@@ -1,0 +1,50 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam classFontName Microsoft YaHei
+
+title CardDef & Frontend Icons — Intention #23
+
+package "backend/game/card_def.py" as card_def {
+    class CardDef <<dataclass, frozen>> {
+        card_type: CardType
+        build_cost: int
+        display_name: str
+        resolvers: tuple[type[Resolver], ...]
+    }
+    note right of CardDef
+        design/23: icon field removed.
+        display_name kept for API response.
+    end note
+}
+
+package "backend/controller/api.py" as api {
+    class list_cards <<route>> {
+        GET /api/cards
+    }
+    note right of list_cards
+        Response no longer includes icon.
+        Returns: type, display_name, build_cost.
+    end note
+}
+
+package "frontend/src/GameBoard.jsx" as frontend {
+    class GameBoard <<JSX>> {
+        renderHandArea()
+        renderStatusBar()
+        renderLog()
+    }
+    
+    note right of GameBoard
+        CARD_ICONS (local constant):
+        attack->⚔️, defense->🛡️,
+        heavy->💥, counter->↩️,
+        energy->⚡, build->🔨,
+        flex->⚖️
+    end note
+}
+
+card_def::CardDef --> api::list_cards : supplies data
+api::list_cards ..> frontend::GameBoard : REST JSON (no icon)
+
+@enduml

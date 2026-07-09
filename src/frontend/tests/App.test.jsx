@@ -5,13 +5,13 @@ import userEvent from '@testing-library/user-event';
 import App from '../src/App.jsx';
 
 const MOCK_CARDS = [
-  { type: 'attack', display_name: 'Attack', icon: 'A', build_cost: 1 },
-  { type: 'defense', display_name: 'Defense', icon: 'D', build_cost: 1 },
-  { type: 'heavy', display_name: 'Heavy', icon: 'H', build_cost: 1 },
-  { type: 'counter', display_name: 'Counter', icon: 'C', build_cost: 2 },
-  { type: 'energy', display_name: 'Energy', icon: 'E', build_cost: 1 },
-  { type: 'build', display_name: 'Build', icon: 'B', build_cost: 1 },
-  { type: 'flex', display_name: 'Flex', icon: 'F', build_cost: 2 },
+  { type: 'attack', display_name: 'Attack', build_cost: 1 },
+  { type: 'defense', display_name: 'Defense', build_cost: 1 },
+  { type: 'heavy', display_name: 'Heavy', build_cost: 1 },
+  { type: 'counter', display_name: 'Counter', build_cost: 2 },
+  { type: 'energy', display_name: 'Energy', build_cost: 1 },
+  { type: 'build', display_name: 'Build', build_cost: 1 },
+  { type: 'flex', display_name: 'Flex', build_cost: 2 },
 ];
 
 vi.mock('../src/api.js', () => ({

@@ -77,8 +77,8 @@ export async function listAis() {
 }
 
 /**
- * Fetch card type metadata (names, icons, costs, etc.).
- * @returns {{ cards: Array<{type: string, display_name: string, icon: string, build_cost: number}> }}
+ * Fetch card type metadata (display names, build costs).
+ * @returns {{ cards: Array<{type: string, display_name: string, build_cost: number}> }}
  */
 export async function fetchCards() {
   const resp = await fetch(`${API_BASE}/cards`);

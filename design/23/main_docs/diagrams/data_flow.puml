@@ -1,0 +1,36 @@
+@startuml data_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei
+skinparam sequenceMessageFontName Microsoft YaHei
+
+title Card Display Data Flow — Intention #23
+
+participant "GET /api/cards" as API
+participant "App.jsx\n(cardMeta state)" as App
+participant "GameBoard.jsx\n(CARD_ICONS constant)" as Board
+participant "Browser\n(DOM)" as DOM
+
+== Startup ==
+App -> API : ① fetchCards()
+API -> App : ② [{type, display_name, build_cost}]\n(no icon)
+App -> Board : ③ cardMeta prop
+
+== Rendering ==
+Board -> Board : ④ buildLookups(cardMeta)
+note right of Board
+  names: {attack: "攻击", ...}
+  costs: {attack: 1, ...}
+  
+  + CARD_ICONS (local constant):
+  {attack: "⚔️", defense: "🛡️", ...}
+end note
+
+Board -> Board : renderHandArea()
+Board -> DOM : <button>⚔️ 攻击 ×2</button>
+note right of DOM
+  Icon from local CARD_ICONS
+  Name from API display_name
+  Count from state.players[N].hand
+end note
+
+@enduml

@@ -11,14 +11,27 @@
 import './App.css';
 
 // =========================================================================
+// Icon mapping per card type — maintained on frontend (design/23).
+// =========================================================================
+
+const CARD_ICONS = {
+  attack: '\u2694\ufe0f',
+  defense: '\ud83d\udee1\ufe0f',
+  heavy: '\ud83d\udca5',
+  counter: '\u21a9\ufe0f',
+  energy: '\u26a1',
+  build: '\ud83d\udd28',
+  flex: '\u2696\ufe0f',
+};
+
+// =========================================================================
 // Helper — build derived lookup tables from cardMeta (from API)
 // =========================================================================
 
 function buildLookups(cardMeta) {
-  if (!cardMeta) return { names: {}, icons: {}, order: [], costs: {} };
+  if (!cardMeta) return { names: {}, order: [], costs: {} };
   return {
     names: Object.fromEntries(cardMeta.map(c => [c.type, c.display_name])),
-    icons: Object.fromEntries(cardMeta.map(c => [c.type, c.icon])),
     order: cardMeta.map(c => c.type),
     costs: Object.fromEntries(cardMeta.map(c => [c.type, c.build_cost])),
   };
@@ -62,7 +75,7 @@ export default function GameBoard({
   if (!state) return null;
 
   // Derive lookup tables from API metadata (or use fallback order)
-  const { names: CARD_NAMES, icons: CARD_ICONS, order: apiOrder, costs: CARD_COSTS } = buildLookups(cardMeta);
+  const { names: CARD_NAMES, order: apiOrder, costs: CARD_COSTS } = buildLookups(cardMeta);
   const cardOrder = apiOrder.length > 0 ? apiOrder : FALLBACK_ORDER;
 
   // =========================================================================

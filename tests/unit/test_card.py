@@ -1,7 +1,8 @@
 """Unit tests for src/backend/game/card_type.py and card_def.py — CardType enum, CardDef, and get_initial_draw_pile().
 
 Per design/22: card.py split into card_type.py + card_def.py.
-Test cases per design/22 test_cases.md.
+Per design/23: CardDef.icon field removed — display logic moved to frontend.
+Test cases per design/22 and design/23 test_cases.md.
 """
 
 import pytest
@@ -57,13 +58,14 @@ class TestGetCardDef:
             _ = cd.priority
 
     def test_card_def_fields(self):
-        """TC-CD-04: CardDef has card_type, build_cost, display_name, icon, resolvers."""
+        """TC-CD-04 (design/23): CardDef has card_type, build_cost, display_name, resolvers. No icon."""
         cd = get_card_def(CardType.ATTACK)
         assert cd.card_type == CardType.ATTACK
         assert cd.build_cost == 1
         assert cd.display_name
-        assert cd.icon
         assert cd.resolvers
+        # Per design/23: icon field removed.
+        assert "icon" not in CardDef.__dataclass_fields__
 
     def test_build_cost_counter(self):
         """TC-CD-04: COUNTER → build_cost=2."""
@@ -92,11 +94,12 @@ class TestGetCardDef:
             cd = get_card_def(ct)
             assert cd.display_name, f"Missing display_name for {ct.name}"
 
-    def test_icon_set(self):
-        """Verify each CardDef has a non-empty icon."""
+    def test_icon_removed(self):
+        """Design/23 TC-CD-02: accessing icon raises AttributeError."""
         for ct in CardType:
             cd = get_card_def(ct)
-            assert cd.icon, f"Missing icon for {ct.name}"
+            with pytest.raises(AttributeError):
+                _ = cd.icon
 
 
 class TestGetInitialDrawPile:
