@@ -162,6 +162,7 @@ export default function GameBoard({
 
   // =========================================================================
   // Hand Area — v2: 7 card types, BUILD target selector
+  // Per design/27: opponent hand is always visible (no more face-down cards).
   // =========================================================================
   const renderHandArea = () => {
     if (!state || phase === 'gameover') return null;
@@ -201,8 +202,8 @@ export default function GameBoard({
 
     // P2 select shown only in PVP pass screen.
     const showP2Select = mode === 'pvp' && phase === 'pvp_pass' && !state.is_over;
-    // Opponent hidden cards shown during select phase.
-    const showOppHidden = mode === 'pve' || (mode === 'pvp' && phase === 'select' && buildPhase === null);
+    // Per design/27: opponent hand always visible — show real card grid.
+    const showOppHand = (mode === 'pve' || mode === 'pvp') && phase !== 'pvp_pass' && buildPhase === null;
     const oppLabel = mode === 'pve' ? `AI (${aiName})'s Hand` : `Player 2's Hand`;
 
     return (
@@ -233,15 +234,22 @@ export default function GameBoard({
             </div>
           </div>
         )}
-        {showOppHidden && (
-          <div className="opp-hand-area">
-            <div className="opp-hand-title">{oppLabel} ({pO.hand.length} cards)</div>
-            <div className="opp-card-grid">
-              {pO.hand.length > 0
-                ? Array.from({ length: pO.hand.length }, (_, i) => (
-                    <div key={i} className="opp-card-back">🂠</div>
-                  ))
-                : <span style={{ color: 'var(--muted)' }}>No cards left</span>}
+        {showOppHand && (
+          <div className="hand-area" style={{ marginTop: 12 }}>
+            <div className="hand-title" style={{ color: 'var(--defense)' }}>
+              {oppLabel} ({pO.hand.length} cards)
+            </div>
+            <div className="card-grid">
+              {cardOrder.map(card => {
+                const cnt = countInHand(pO.hand, card);
+                return (
+                  <div key={card} className={`card-btn card-${card}`} style={{ opacity: 0.7, cursor: 'default' }}>
+                    <span className="icon">{CARD_ICONS[card]}</span>
+                    <span>{CARD_NAMES[card]}</span>
+                    <span className="count">×{cnt}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -276,7 +284,7 @@ export default function GameBoard({
             Player 2 — pick your card above
           </div>
           <div className="pass-hint">
-            Both selections are hidden until both players have chosen.
+            Both players can see each other's hands.
           </div>
         </div>
       );

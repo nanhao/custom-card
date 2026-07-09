@@ -1,8 +1,12 @@
-"""Bidirectional conversion between game state and AI model tensors (design/14).
+"""Bidirectional conversion between game state and AI model tensors (design/14, design/27).
 
 Per design/14: 15-d input vector with metadata (HP, energy, round, cycle)
 at the front, card counts in the middle, and policy-index-encoded last
 actions at the tail. Policy output is 13-d interleaved (build/play pairs).
+
+Per design/27: INPUT_SIZE expanded to 42-d — adds opponent hand counts (7 dims),
+status lifetimes for both players (6 dims), own discard pile counts (7 dims),
+and own draw pile counts (7 dims).
 
 Per design/20: _CARD_MAP uses CardType enum instead of string literals;
 INPUT_SIZE/POLICY_OUTPUT_SIZE imported from ai.rnn_v1.model;
@@ -16,13 +20,18 @@ from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def
 from src.backend.game.game_state import GameState
 from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.player_state import StatusType, PlayerStatus
 
 
 class Converter:
     """Bidirectional conversion between game state and model tensors.
 
-    Per design/14:
-    - Input: 15-d (HP×2, energy×2, round, cycle, card counts×7, last_action×2)
+    Per design/14, design/27:
+    - Input: 42-d (HP×2, energy×2, round, cycle,
+              own_hand×7, opp_hand×7,
+              own_status×3, opp_status×3,
+              own_discard×7, own_draw×7,
+              last_action×2)
     - Policy output: 13-d interleaved (even=build+target, odd=pure play)
     - Last action encoded as policy index, -1 when no history.
 
@@ -97,18 +106,18 @@ class Converter:
 
     @staticmethod
     def build_input_vector(state: GameState, player_key: str = "2") -> list[float]:
-        """Build the 15-d input vector from a GameState.
+        """Build the 42-d input vector from a GameState.
 
         Per design/19 D6: accepts GameState directly instead of dict.
-        Per design/20: _CARD_TYPE_ORDER uses CardType keys, so hand
-        CardType values are used directly without .value conversion.
+        Per design/27: 42-d format — own/opponent hand, status lifetimes,
+        own discard/draw pile counts, last actions.
 
         Args:
             state: GameState from GameCore.get_state().
             player_key: Which player's perspective — "1" or "2".
 
         Returns:
-            list[float] of length 15.
+            list[float] of length 42.
 
         Raises:
             ValueError: If player_key is not "1" or "2".
@@ -123,46 +132,73 @@ class Converter:
         opp_player = state.players[opponent_key]
 
         # Metadata (indices 0-5): HP, energy, round, cycle
-        this_hp = float(this_player.hp)
-        opp_hp = float(opp_player.hp)
-        this_energy = float(this_player.energy)
-        opp_energy = float(opp_player.energy)
-        round_in_cycle = float(state.round_in_cycle)
-        cycle = float(state.cycle)
+        metadata = [
+            float(this_player.hp),
+            float(opp_player.hp),
+            float(this_player.energy),
+            float(opp_player.energy),
+            float(state.round_in_cycle),
+            float(state.cycle),
+        ]
 
-        # Card counts (indices 6-12): count each type in hand.
-        # Per design/20: _CARD_TYPE_ORDER uses CardType keys, so we use
-        # card directly (hand is list[CardType]).
-        counts = [0.0] * Converter.NUM_CARD_TYPES
-        for card in this_player.hand:
-            idx = Converter._CARD_TYPE_ORDER.get(card)
-            if idx is not None:
-                counts[idx] += 1.0
+        # Own hand counts (indices 6-12)
+        own_hand_counts = Converter._count_by_card_type(this_player.hand)
 
-        # Last action indices (13-14): compute from PlayerHistoryItem in state.
+        # Opponent hand counts (indices 13-19)
+        opp_hand_counts = Converter._count_by_card_type(opp_player.hand)
+
+        # Own status lifetimes (indices 20-22): DEFENSE, GUARD, FRAGILE
+        own_status = [
+            Converter._extract_status_lifetime(this_player.statuses, StatusType.DEFENSE),
+            Converter._extract_status_lifetime(this_player.statuses, StatusType.GUARD),
+            Converter._extract_status_lifetime(this_player.statuses, StatusType.FRAGILE),
+        ]
+
+        # Opponent status lifetimes (indices 23-25)
+        opp_status = [
+            Converter._extract_status_lifetime(opp_player.statuses, StatusType.DEFENSE),
+            Converter._extract_status_lifetime(opp_player.statuses, StatusType.GUARD),
+            Converter._extract_status_lifetime(opp_player.statuses, StatusType.FRAGILE),
+        ]
+
+        # Own discard pile counts (indices 26-32)
+        own_discard = (
+            Converter._count_by_card_type(this_player.discard_pile)
+            if this_player.discard_pile is not None
+            else [0.0] * Converter.NUM_CARD_TYPES
+        )
+
+        # Own draw pile counts (indices 33-39)
+        own_draw = (
+            Converter._count_by_card_type(this_player.draw_pile)
+            if this_player.draw_pile is not None
+            else [0.0] * Converter.NUM_CARD_TYPES
+        )
+
+        # Last action indices (40-41): compute from PlayerHistoryItem
         this_last = -1.0
         opp_last = -1.0
 
         if this_player.history:
-            last_item = this_player.history[-1]
             this_last = float(
-                Converter._action_item_to_index(last_item)
+                Converter._action_item_to_index(this_player.history[-1])
             )
 
         if opp_player.history:
-            last_item = opp_player.history[-1]
             opp_last = float(
-                Converter._action_item_to_index(last_item)
+                Converter._action_item_to_index(opp_player.history[-1])
             )
 
-        # Build new-order vector per design/14:
-        #   [HP_own, HP_opp, energy_own, energy_opp, round, cycle]
-        #   + card_counts + [last_own, last_opp]
-        return [
-            this_hp, opp_hp,
-            this_energy, opp_energy,
-            round_in_cycle, cycle,
-        ] + counts + [this_last, opp_last]
+        return (
+            metadata
+            + own_hand_counts
+            + opp_hand_counts
+            + own_status
+            + opp_status
+            + own_discard
+            + own_draw
+            + [this_last, opp_last]
+        )
 
     # ------------------------------------------------------------------
     # Action encoding/decoding
@@ -258,6 +294,46 @@ class Converter:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _count_by_card_type(cards: list[CardType]) -> list[float]:
+        """Count occurrences of each CardType in a card list (design/27).
+
+        Returns a 7-element float list in _CARD_TYPE_ORDER sequence
+        (attack, defense, heavy, counter, energy, build, flex).
+
+        Args:
+            cards: List of CardType values to count.
+
+        Returns:
+            list[float] of length 7 — count per card type.
+        """
+        counts = [0.0] * Converter.NUM_CARD_TYPES
+        for card in cards:
+            idx = Converter._CARD_TYPE_ORDER[card]
+            counts[idx] += 1.0
+        return counts
+
+    @staticmethod
+    def _extract_status_lifetime(
+        statuses: list[PlayerStatus], status_type: StatusType,
+    ) -> float:
+        """Extract remaining lifetime for a specific status type (design/27).
+
+        Searches the statuses list for a PlayerStatus matching status_type
+        and returns its lifetime. If the status type is not present, returns 0.0.
+
+        Args:
+            statuses: List of PlayerStatus instances to search.
+            status_type: The status type to look for (DEFENSE, GUARD, FRAGILE).
+
+        Returns:
+            Lifetime as float, or 0.0 if the status type is not found.
+        """
+        for ps in statuses:
+            if ps.status_type == status_type:
+                return float(ps.lifetime)
+        return 0.0
 
     @staticmethod
     def _action_item_to_index(item: PlayerHistoryItem) -> int:

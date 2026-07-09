@@ -1,0 +1,66 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title Converter.build_input_vector() — 42-d Input 构造流程
+
+actor "调用方\n(SelfPlayRunner/AppManager)" as Caller
+participant "Converter" as C
+participant "GameState" as GS
+participant "PlayerState\n(我方)" as Me
+participant "PlayerState\n(对方)" as Opp
+
+Caller -> C: ① build_input_vector(state, player_key="2")
+C -> GS: ② 读取 round_in_cycle, cycle
+GS --> C: round_in_cycle=2, cycle=3
+C -> Me: ③ 读取 hp, energy
+Me --> C: hp=15, energy=3
+C -> Opp: ④ 读取 hp, energy
+Opp --> C: hp=8, energy=1
+note right of C: 索引 0-5 完成\n[15.0, 8.0, 3.0, 1.0, 2.0, 3.0]
+
+C -> Me: ⑤ 读取 hand
+Me --> C: [attack, attack, defense]
+C -> C: ⑥ _count_by_card_type(hand)
+note right of C: [2.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]\n索引 6-12 完成
+
+C -> Opp: ⑦ 读取 hand
+Opp --> C: [defense, heavy]
+C -> C: ⑧ _count_by_card_type(hand)
+note right of C: [0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0]\n索引 13-19 完成
+
+C -> Me: ⑨ 读取 statuses
+Me --> C: [PlayerStatus(DEFENSE, 2)]
+C -> C: ⑩ _extract_status_lifetime(statuses, DEFENSE)
+C -> C: _extract_status_lifetime(statuses, GUARD)
+C -> C: _extract_status_lifetime(statuses, FRAGILE)
+note right of C: [2.0, 0.0, 0.0]\n索引 20-22 完成
+
+C -> Opp: ⑪ 读取 statuses
+Opp --> C: [PlayerStatus(GUARD, 1)]
+C -> C: ⑫ _extract_status_lifetime × 3
+note right of C: [0.0, 1.0, 0.0]\n索引 23-25 完成
+
+C -> Me: ⑬ 读取 discard_pile
+Me --> C: [attack, defense, defense]
+C -> C: ⑭ _count_by_card_type(discard_pile)
+note right of C: [1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0]\n索引 26-32 完成
+
+C -> Me: ⑮ 读取 draw_pile
+Me --> C: [energy, energy, build]
+C -> C: ⑯ _count_by_card_type(draw_pile)
+note right of C: [0.0, 0.0, 0.0, 0.0, 2.0, 1.0, 0.0]\n索引 33-39 完成
+
+C -> Me: ⑰ 读取 history[-1]
+Me --> C: PlayerHistoryItem(ATTACK, None)
+C -> C: ⑱ action_to_policy_index(ATTACK, None) → 1
+C -> Opp: ⑲ 读取 history[-1]
+Opp --> C: PlayerHistoryItem(BUILD, DEFENSE)
+C -> C: ⑳ action_to_policy_index(BUILD, DEFENSE) → 4
+note right of C: 索引 40=1.0, 41=4.0 完成
+
+C --> Caller: ㉑ 返回 42-d list[float]
+
+@enduml

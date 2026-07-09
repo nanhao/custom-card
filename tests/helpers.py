@@ -27,7 +27,9 @@ def read_sample_file(path):
 def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
                     history_1=None, history_2=None, round_num=1,
                     energy_1=0, energy_2=0, statuses_1=None, statuses_2=None,
-                    cycle=1, round_in_cycle=1):
+                    cycle=1, round_in_cycle=1,
+                    draw_pile_1=None, draw_pile_2=None,
+                    discard_pile_1=None, discard_pile_2=None):
     """Build a minimal GameState instance for testing.
 
     Per design/19: returns a typed GameState, not a dict.
@@ -43,6 +45,8 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
         statuses_1, statuses_2: Current statuses (list of PlayerStatus).
         cycle: Current cycle number.
         round_in_cycle: Position within cycle.
+        draw_pile_1, draw_pile_2: Draw piles (list of CardType). Default None.
+        discard_pile_1, discard_pile_2: Discard piles (list of CardType). Default None.
 
     Returns:
         GameState instance matching GameCore.get_state() output format.
@@ -60,21 +64,30 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
     if statuses_2 is None:
         statuses_2 = []
 
+    def _build_player(hp, energy, statuses, hand, history, draw_pile, discard_pile):
+        """Build a PlayerState with optional draw/discard piles (design/27 D4)."""
+        dp = list(draw_pile) if draw_pile is not None else None
+        dcp = list(discard_pile) if discard_pile is not None else None
+        dp_count = len(draw_pile) if draw_pile is not None else 0
+        dcp_count = len(discard_pile) if discard_pile is not None else 0
+        return PlayerState(
+            hp=hp, energy=energy,
+            statuses=list(statuses),
+            hand=list(hand), history=list(history),
+            draw_pile=dp, discard_pile=dcp,
+            draw_pile_count=dp_count,
+            discard_pile_count=dcp_count,
+        )
+
     return GameState(
         round=round_num,
         cycle=cycle,
         round_in_cycle=round_in_cycle,
         players={
-            "1": PlayerState(
-                hp=hp_1, energy=energy_1,
-                statuses=list(statuses_1),
-                hand=list(hand_1), history=list(history_1),
-            ),
-            "2": PlayerState(
-                hp=hp_2, energy=energy_2,
-                statuses=list(statuses_2),
-                hand=list(hand_2), history=list(history_2),
-            ),
+            "1": _build_player(hp_1, energy_1, statuses_1, hand_1, history_1,
+                              draw_pile_1, discard_pile_1),
+            "2": _build_player(hp_2, energy_2, statuses_2, hand_2, history_2,
+                              draw_pile_2, discard_pile_2),
         },
         is_over=False,
         winner=None,

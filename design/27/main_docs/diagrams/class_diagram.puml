@@ -1,0 +1,97 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+package "game" {
+  class GameState {
+    +round: int
+    +cycle: int
+    +round_in_cycle: int
+    +players: dict[str, PlayerState]
+    +is_over: bool
+    +winner: str | None
+    +mode: str
+    +round_log: list[RoundResult]
+  }
+
+  class PlayerState {
+    +hp: int
+    +energy: int
+    +statuses: list[PlayerStatus]
+    +hand: list[CardType]
+    +history: list[PlayerHistoryItem]
+    +draw_pile: list[CardType] | None
+    +discard_pile: list[CardType] | None
+    +draw_pile_count: int
+    +discard_pile_count: int
+  }
+
+  class PlayerStatus {
+    +status_type: StatusType
+    +lifetime: int
+  }
+
+  enum StatusType {
+    DEFENSE
+    GUARD
+    FRAGILE
+  }
+
+  enum CardType {
+    ATTACK
+    DEFENSE
+    HEAVY
+    COUNTER
+    ENERGY
+    BUILD
+    FLEX
+  }
+}
+
+package "app" {
+  class Converter {
+    +{static} NUM_CARD_TYPES: int = 7
+    +{static} ALL_CARD_TYPES: frozenset[CardType]
+    -{static} _CARD_MAP: list[tuple]
+    -{static} _CARD_TYPE_ORDER: dict[CardType, int]
+    +{static} build_input_vector(state: GameState, player_key: str) -> list[float]
+    -{static} _count_by_card_type(cards: list[CardType]) -> list[float]
+    -{static} _extract_status_lifetime(statuses: list[PlayerStatus], status_type: StatusType) -> float
+    +{static} action_to_policy_index(card: CardType, build_target: CardType | None) -> int
+    +{static} policy_index_to_action(index: int) -> tuple[CardType, CardType | None]
+    +{static} build_cost(card_type: CardType) -> int
+  }
+}
+
+package "ai.rnn_v1" {
+  class GRUPolicyModel {
+    +{static} INITIAL_HIDDEN_STATE: list[float]
+    +{static} INPUT_SIZE: int = 42
+    -gru: GRU
+    -fc_policy: Linear
+    +forward(x, hidden, mask_fn, temperature) -> tuple[Tensor, Tensor, Tensor]
+  }
+
+  class GRUValueModel {
+    +{static} INITIAL_HIDDEN_STATE: list[float]
+    +{static} INPUT_SIZE: int = 42
+    -gru: GRU
+    -fc_value: Linear
+    +forward(x, hidden) -> tuple[Tensor, Tensor]
+  }
+}
+
+GameState *-- PlayerState : "players['1'|'2']"
+PlayerState *-- PlayerStatus : statuses
+PlayerStatus --> StatusType
+PlayerState --> CardType : hand/draw_pile/discard_pile
+
+Converter ..> GameState : reads
+Converter ..> PlayerState : reads
+Converter ..> StatusType : uses
+GRUPolicyModel ..> Converter : INPUT_SIZE
+GRUValueModel ..> Converter : INPUT_SIZE
+
+@enduml

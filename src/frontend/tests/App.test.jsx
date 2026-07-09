@@ -68,9 +68,10 @@ describe('PVP flow', () => {
     const user = userEvent.setup();
     render(<App />);
     await goPVP(user);
-    expect(screen.getByText('Energy')).toBeInTheDocument();
-    expect(screen.getByText('Build')).toBeInTheDocument();
-    expect(screen.getByText('Flex')).toBeInTheDocument();
+    // Per design/27: both hands visible, use getAllByText
+    expect(screen.getAllByText('Energy').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Build').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Flex').length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -98,7 +99,9 @@ describe('PVE flow', () => {
     const user = userEvent.setup();
     render(<App />);
     await goPVE(user);
-    await user.click(screen.getByText('Attack'));
+    // Per design/27: both hands visible — scope to P1 hand area
+    const p1HandArea = screen.getByText(/Your Hand/).closest('.hand-area');
+    await user.click(within(p1HandArea).getByText('Attack'));
     await waitFor(() => { expect(screen.getByText(/Next Round/)).toBeInTheDocument(); });
   });
 });
@@ -127,7 +130,9 @@ describe('Game over', () => {
     const user = userEvent.setup();
     render(<App />);
     await goPVE(user);
-    await user.click(screen.getByText('Attack'));
+    // Per design/27: both hands visible — scope to P1 hand area
+    const p1HandArea2 = screen.getByText(/Your Hand/).closest('.hand-area');
+    await user.click(within(p1HandArea2).getByText('Attack'));
     await waitFor(() => { expect(screen.getByText(/Player 1 Wins!/)).toBeInTheDocument(); });
   });
 });
@@ -152,7 +157,9 @@ describe('Next round', () => {
     const user = userEvent.setup();
     render(<App />);
     await goPVP(user);
-    await user.click(screen.getByText('Attack'));
+    // Per design/27: both hands visible — scope to P1 hand area
+    const p1HandArea3 = screen.getByText(/Your Hand/).closest('.hand-area');
+    await user.click(within(p1HandArea3).getByText('Attack'));
     await waitFor(() => expect(screen.getByText('Player 1 has selected a card.')).toBeInTheDocument());
     const p2area = screen.getByText(/Player 2's Hand/).closest('.hand-area');
     await user.click(within(p2area).getByText('Defense'));
