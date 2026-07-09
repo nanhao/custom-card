@@ -1,0 +1,44 @@
+@startuml
+title Training Loop — Sequence Batching Optimization
+
+participant "TrainingRunner" as Runner
+participant "GRUValueModel" as ValueGRU
+participant "GRUPolicyModel" as PolicyGRU
+database "GPU" as GPU
+
+== Phase 1: Value Training (per perspective) ==
+group Before: step-by-step
+  loop for t in range(T)
+    Runner -> GPU: torch.tensor(states[t])
+    GPU -> ValueGRU: x=(1,1,42), h
+    ValueGRU -> GPU: val=(1,1), new_h
+  end
+  Runner -> Runner: torch.stack(new_vals) → (T,)
+end
+
+group After: full sequence
+  Runner -> GPU: torch.tensor(states).view(T,1,42)
+  GPU -> ValueGRU: x=(T,1,42), h_init
+  ValueGRU -> GPU: gru_out=(T,1,32)
+  Runner -> Runner: fc_value.squeeze → (T,)
+end
+
+== Phase 3: Policy Training (per perspective) ==
+group Before: step-by-step
+  loop for t in range(T)
+    Runner -> GPU: torch.tensor(states[t])
+    GPU -> PolicyGRU: x=(1,1,42), h
+    PolicyGRU -> GPU: probs(1,14), log_probs(1,14), new_h
+    Runner -> Runner: collect log_probs[0,action], probs
+  end
+  Runner -> Runner: torch.stack(new_log_probs) → (T,)
+end
+
+group After: full sequence
+  Runner -> GPU: torch.tensor(states).view(T,1,42)
+  GPU -> PolicyGRU: x=(T,1,42), h_init
+  PolicyGRU -> GPU: gru_out=(T,1,32)
+  Runner -> Runner: fc_policy → log_softmax → index extract → (T,)
+end
+
+@enduml

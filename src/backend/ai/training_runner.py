@@ -392,22 +392,18 @@ class TrainingRunner:
             old_values, rewards, config.gamma, config.gae_lambda,
         )
 
-        # Value forward pass — keep tensors on computation graph
-        new_vals: list[torch.Tensor] = []
+        # Value forward pass — full sequence at once for GPU efficiency
+        x = torch.tensor(
+            states_15d, dtype=torch.float32, device=device,
+        ).view(T, 1, INPUT_SIZE)  # (T, 1, 42)
         h = torch.tensor(
             GRUValueModel.INITIAL_HIDDEN_STATE,
             dtype=torch.float32, device=device,
         ).view(1, 1, HIDDEN_SIZE)
+        gru_out, _ = value_model.gru(x, h)  # (T, 1, 32) — GRU unrolls all timesteps
+        v_new = value_model.fc_value(gru_out.squeeze(1)).squeeze()  # (T,) with grad
 
-        for t in range(T):
-            x = torch.tensor(
-                states_15d[t], dtype=torch.float32, device=device,
-            ).view(1, 1, INPUT_SIZE)
-            val, h = value_model(x, h)
-            new_vals.append(val.squeeze())  # (1,) tensor with grad
-
-        # MSE loss — concatenate tensors to preserve computation graph
-        v_new = torch.stack(new_vals)  # (T,) with grad
+        # MSE loss
         v_target = torch.tensor(value_targets, dtype=torch.float32, device=device)
         value_loss = config.value_coef * nn.functional.mse_loss(v_new, v_target)
 
@@ -438,19 +434,18 @@ class TrainingRunner:
                 T = len(steps)
 
                 rewards = [s["reward"] for s in steps]
-                new_values: list[float] = []
 
+                # Full sequence forward pass — GPU-efficient single GRU call
+                inputs = [s["input"] for s in steps]
+                x = torch.tensor(
+                    inputs, dtype=torch.float32, device=device,
+                ).view(T, 1, INPUT_SIZE)  # (T, 1, 42)
                 h = torch.tensor(
                     GRUValueModel.INITIAL_HIDDEN_STATE,
                     dtype=torch.float32, device=device,
                 ).view(1, 1, HIDDEN_SIZE)
-
-                for t in range(T):
-                    x = torch.tensor(
-                        steps[t]["input"], dtype=torch.float32, device=device,
-                    ).view(1, 1, INPUT_SIZE)
-                    val, h = value_model(x, h)
-                    new_values.append(float(val.item()))
+                gru_out, _ = value_model.gru(x, h)  # (T, 1, 32)
+                new_values = value_model.fc_value(gru_out.squeeze(1)).squeeze().tolist()  # (T,)
 
                 # GAE with trained value network
                 advantages, value_targets = self._compute_gae(
@@ -567,30 +562,27 @@ class TrainingRunner:
             actions.append(step["action"])  # already an integer (design/14)
             old_log_probs.append(step["log_prob"])
 
-        # Policy forward pass — keep tensors on computation graph
-        new_log_probs_tensors: list[torch.Tensor] = []
-        all_probs: list[torch.Tensor] = []
-
+        # Policy forward pass — full sequence at once for GPU efficiency
+        x = torch.tensor(
+            states_15d, dtype=torch.float32, device=device,
+        ).view(T, 1, INPUT_SIZE)  # (T, 1, 42)
         h = torch.tensor(
             GRUPolicyModel.INITIAL_HIDDEN_STATE,
             dtype=torch.float32, device=device,
         ).view(1, 1, HIDDEN_SIZE)
+        # Direct GRU → fc_policy bypassing model.forward (which only handles single step)
+        gru_out, _ = policy_model.gru(x, h)  # (T, 1, 32)
+        policy_logits = policy_model.fc_policy(gru_out.squeeze(1))  # (T, 14)
+        log_probs = torch.log_softmax(policy_logits, dim=-1)  # (T, 14)
+        probs = torch.exp(log_probs)  # (T, 14)
 
-        for t in range(T):
-            x = torch.tensor(
-                states_15d[t], dtype=torch.float32, device=device,
-            ).view(1, 1, INPUT_SIZE)
-            probs, log_probs, h = policy_model(x, h, mask_fn=None, temperature=1.0)
-            action_idx = actions[t]  # already an integer policy index (design/14)
-            # Extract single scalar with grad preserved
-            new_log_probs_tensors.append(log_probs[0, action_idx])
-            all_probs.append(probs)
+        # Extract log_probs for taken actions
+        action_indices = torch.tensor(actions, dtype=torch.long, device=device)  # (T,)
+        new_log = log_probs[torch.arange(T, device=device), action_indices]  # (T,) with grad
 
-        # PPO clipped loss — use stacked tensors with grad
-        device_t = all_probs[0].device
-        old_log = torch.tensor(old_log_probs, dtype=torch.float32, device=device_t)
-        new_log = torch.stack(new_log_probs_tensors)  # (T,) with grad
-        adv = torch.tensor(advantages, dtype=torch.float32, device=device_t)
+        # PPO clipped loss
+        old_log = torch.tensor(old_log_probs, dtype=torch.float32, device=device)
+        adv = torch.tensor(advantages, dtype=torch.float32, device=device)
 
         ratio = torch.exp(new_log - old_log)
         clipped_ratio = torch.clamp(
@@ -598,12 +590,9 @@ class TrainingRunner:
         )
         policy_loss = -torch.min(ratio * adv, clipped_ratio * adv).mean()
 
-        # Entropy
-        entropy_sum = torch.tensor(0.0, device=device_t)
-        for probs in all_probs:
-            p = probs.clamp(min=1e-8)
-            entropy_sum = entropy_sum - (p * torch.log(p)).sum()
-        entropy = entropy_sum / T
+        # Entropy — compute from single (T, 14) tensor
+        p = probs.clamp(min=1e-8)
+        entropy = -(p * torch.log(p)).sum(dim=-1).mean()  # scalar
 
         if torch.isnan(policy_loss) or torch.isnan(entropy):
             return None
