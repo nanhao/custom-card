@@ -350,3 +350,6 @@ POLICY_OUTPUT_SIZE: int = 13 这两个常量定义不应该放在这里，应该
 # intention_id=22
 这是一个重构任务，删除 CardResolverRegistry，然后在 CardDef 里面定义 cardType -> list[resolver] 的对应关系。
 相应的引用代码也要同步修改，保证功能不受影响。
+
+# intention_id=23
+这是一个重构任务，目前 cardDef 里面定义了 icon，但这是显示逻辑。icon 应该由前端维护
