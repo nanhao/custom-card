@@ -484,3 +484,6 @@ Value:  Input(42) ─┬─→ GRU(42→32) ─┐
                     └────────────────┘
 
 目的：手牌、HP、能量等即时特征绕过 GRU 压缩瓶颈，直接让 head 看到，解决当前 v1 网络"不关注手牌"的问题。
+
+# intention_id=32
+train.py 增加一个参数： value_epoch。用于指定训练 value 网络的 epoc 数。之前的 epoch 参数改名为 policy_epoch

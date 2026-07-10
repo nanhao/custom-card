@@ -2,15 +2,15 @@
 
 Per design/9 interfaces.md §3 and design/10: immutable frozen dataclass
 with validation in __post_init__. Supports split policy/value networks
-with separate learning rates and unified epoch count.
+with separate learning rates and independent epoch counts (design/32).
 
 Attributes:
     sample_path: File path or directory. If directory, all .json files
                  inside are loaded as training samples.
     output_dir: Directory to save policy.pth and value.pth.
     model: AI registry name to train (e.g. "rnn_v2.1").
-    epoch: Number of training epochs for both value (Phase 1)
-           and policy (Phase 3) phases (>=1).
+    policy_epoch: Number of training epochs for policy Phase 3 (>=1).
+    value_epoch: Number of training epochs for value Phase 1 (>=1).
     policy_lr: Learning rate for policy optimizer (>0).
     value_lr: Learning rate for value optimizer (>0).
     weight_decay: Weight decay coefficient for AdamW (>=0).
@@ -34,7 +34,8 @@ class TrainingConfig:
     sample_path: str
     output_dir: str
     model: str
-    epoch: int
+    policy_epoch: int
+    value_epoch: int
     policy_lr: float
     value_lr: float
     weight_decay: float
@@ -53,8 +54,10 @@ class TrainingConfig:
             ValueError: If any field fails its validation constraint.
         """
         # Validate integer fields
-        if self.epoch < 1:
-            raise ValueError("epoch must be >= 1")
+        if self.policy_epoch < 1:
+            raise ValueError("policy_epoch must be >= 1")
+        if self.value_epoch < 1:
+            raise ValueError("value_epoch must be >= 1")
         if self.batch_size < 1:
             raise ValueError("batch_size must be >= 1")
 

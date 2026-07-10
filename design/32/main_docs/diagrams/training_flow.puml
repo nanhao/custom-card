@@ -1,0 +1,54 @@
+@startuml training_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title PPO Training Flow — Split Policy/Value Epoch (intention #32)
+
+actor User
+
+User -> "train.py" : 1: --policy-epoch N --value-epoch M (optional)
+
+activate "train.py"
+
+"train.py" -> "train.py" : 2: value_epoch = M if M else N
+"train.py" -> "TrainingConfig" : 3: create(policy_epoch=N, value_epoch=value_epoch)
+
+activate "TrainingConfig"
+"TrainingConfig" -> "TrainingConfig" : 4: validate policy_epoch >= 1
+"TrainingConfig" -> "TrainingConfig" : 5: validate value_epoch >= 1
+deactivate "TrainingConfig"
+
+"train.py" -> "TrainingRunnerFactory" : 6: create(model_name)
+
+activate "TrainingRunnerFactory"
+"TrainingRunnerFactory" -> "train.py" : 7: V1TrainingRunner or V2TrainingRunner
+deactivate "TrainingRunnerFactory"
+
+"train.py" -> "BaseTrainingRunner" : 8: run(config)
+
+activate "BaseTrainingRunner"
+
+"BaseTrainingRunner" -> "BaseTrainingRunner" : 9: _build_models(model)
+"BaseTrainingRunner" -> "BaseTrainingRunner" : 10: _load_samples(sample_path)
+
+loop value_epoch times
+    "BaseTrainingRunner" -> "BaseTrainingRunner" : 11: _train_value_epoch()
+    note right: Phase 1: Value Training\n(共 value_epoch 轮)
+end
+
+"BaseTrainingRunner" -> "BaseTrainingRunner" : 12: _recompute_advantages()
+note right: Phase 2: Advantage Re-computation
+
+loop policy_epoch times
+    "BaseTrainingRunner" -> "BaseTrainingRunner" : 13: _train_policy_epoch()
+    note right: Phase 3: Policy Training\n(共 policy_epoch 轮)
+end
+
+"BaseTrainingRunner" -> "BaseTrainingRunner" : 14: _save_weights(policy.pth, value.pth)
+"BaseTrainingRunner" -> "training_utils" : 15: save_split_training_artifacts(phase_records)
+
+deactivate "BaseTrainingRunner"
+deactivate "train.py"
+
+@enduml

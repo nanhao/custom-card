@@ -85,7 +85,8 @@ def training_config(sample_file, output_dir):
         sample_path=sample_file,
         output_dir=output_dir,
         model="rnn_v1.1",
-        epoch=1,
+        policy_epoch=1,
+        value_epoch=1,
         policy_lr=0.001,
         value_lr=0.001,
         weight_decay=0.0,
@@ -322,7 +323,8 @@ class TestTrainingErrorHandling:
                     sample_path=os.path.join(td, "nonexistent.json"),
                     output_dir=td,
                     model="rnn_v1.1",
-                    epoch=1,
+                    policy_epoch=1,
+                    value_epoch=1,
                     policy_lr=0.001,
                     value_lr=0.001,
                     weight_decay=0.0,
@@ -335,18 +337,19 @@ class TestTrainingErrorHandling:
                     batch_size=2,
                 )
 
-    def test_epoch_must_be_positive(self):
-        """TrainingConfig should reject epoch <= 0."""
+    def test_policy_epoch_must_be_positive(self):
+        """TrainingConfig should reject policy_epoch <= 0."""
         with tempfile.TemporaryDirectory() as td:
             sample_path = os.path.join(td, "dummy.json")
             with open(sample_path, "w") as f:
                 json.dump([], f)
-            with pytest.raises(ValueError, match="epoch must be >= 1"):
+            with pytest.raises(ValueError, match="policy_epoch must be >= 1"):
                 TrainingConfig(
                     sample_path=sample_path,
                     output_dir=td,
                     model="rnn_v1.1",
-                    epoch=0,
+                    policy_epoch=0,
+                    value_epoch=1,
                     policy_lr=0.001,
                     value_lr=0.001,
                     weight_decay=0.0,
@@ -431,7 +434,8 @@ class TestV2TrainingSmoke:
                 sample_path=str(sample_path),
                 output_dir=str(output_dir),
                 model="rnn_v2.1",
-                epoch=1,
+                policy_epoch=1,
+                value_epoch=1,
                 policy_lr=0.001,
                 value_lr=0.001,
                 weight_decay=0.0,

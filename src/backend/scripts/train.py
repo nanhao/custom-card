@@ -1,15 +1,16 @@
 """Split PPO Training CLI — thin wrapper around TrainingRunner.run().
 
-Per design/9 D3 and design/10 D3, this script contains NO business logic —
-only argument parsing, config loading, and delegation. Training logic in
-training_runner.py.
+Per design/9 D3, design/10 D3, and design/32: this script contains NO business
+logic — only argument parsing, config loading, and delegation. Training logic
+in training_runner.py.
 
 Usage:
     python src/backend/scripts/train.py ^
         --sample-path samples/rnn_v2_self_play.json ^
         --output-dir src/backend/ai/rnn_v1/gen2 ^
         --model rnn_v2.1 ^
-        --epoch 10
+        --policy-epoch 10 ^
+        --value-epoch 5
 """
 
 import argparse
@@ -44,8 +45,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="AI registry name to train (e.g. rnn_v2.1)",
     )
     parser.add_argument(
-        "--epoch", type=int, required=True,
-        help="Number of training epochs for both value and policy phases",
+        "--policy-epoch", type=int, required=True,
+        help="Number of training epochs for policy network (Phase 3)",
+    )
+    parser.add_argument(
+        "--value-epoch", type=int, default=None,
+        help="Number of training epochs for value network (Phase 1). "
+             "Defaults to --policy-epoch if not specified.",
     )
     return parser
 
@@ -101,11 +107,14 @@ def main() -> None:
 
     training_cfg = _load_training_config()
 
+    value_epoch = args.value_epoch if args.value_epoch is not None else args.policy_epoch
+
     config = TrainingConfig(
         sample_path=args.sample_path,
         output_dir=args.output_dir,
         model=args.model,
-        epoch=args.epoch,
+        policy_epoch=args.policy_epoch,
+        value_epoch=value_epoch,
         policy_lr=training_cfg["policy_lr"],
         value_lr=training_cfg["value_lr"],
         weight_decay=training_cfg["weight_decay"],

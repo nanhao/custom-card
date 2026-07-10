@@ -1,0 +1,90 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title Class Diagram — Training Epoch Split (intention #32)
+
+package "ai/training_config.py" {
+    class TrainingConfig {
+        + sample_path: str
+        + output_dir: str
+        + model: str
+        + policy_epoch: int
+        + value_epoch: int
+        + policy_lr: float
+        + value_lr: float
+        + weight_decay: float
+        + gamma: float
+        + gae_lambda: float
+        + clip_eps: float
+        + max_grad_norm: float
+        + value_coef: float
+        + entropy_coef: float
+        + batch_size: int
+    }
+    note right of TrainingConfig::policy_epoch
+        (changed) 原 epoch
+        控制 Phase 3 轮数
+    end note
+    note right of TrainingConfig::value_epoch
+        (new) 控制 Phase 1 轮数
+    end note
+}
+
+package "ai/training_runner.py" {
+    abstract class BaseTrainingRunner {
+        + run(config: TrainingConfig)
+        # _build_models(model_name: str)
+        # _load_samples(sample_path: str)
+        # _train_value_epoch(...)
+        # _train_policy_epoch(...)
+        # _compute_gae(...)
+        # _save_weights(...)
+        # {abstract} _recompute_advantages(...)
+        # {abstract} _process_value_perspective(...)
+        # {abstract} _process_policy_perspective(...)
+    }
+}
+
+package "ai/rnn_v1/v1_training_runner.py" {
+    class V1TrainingRunner {
+        # _process_value_perspective(...)
+        # _process_policy_perspective(...)
+        # _recompute_advantages(...)
+    }
+}
+
+package "ai/rnn_v2/v2_training_runner.py" {
+    class V2TrainingRunner {
+        + _forward_value_sequence(...)
+        + _forward_policy_sequence(...)
+        # _process_value_perspective(...)
+        # _process_policy_perspective(...)
+        # _recompute_advantages(...)
+    }
+}
+
+package "ai/training_factory.py" {
+    class TrainingRunnerFactory {
+        + {static} create(model_name: str): BaseTrainingRunner
+    }
+}
+
+package "scripts/train.py" {
+    class "train.py (CLI)" as train_cli {
+        + --policy-epoch (required)
+        + --value-epoch (optional)
+    }
+}
+
+BaseTrainingRunner <|-- V1TrainingRunner
+BaseTrainingRunner <|-- V2TrainingRunner
+BaseTrainingRunner --> TrainingConfig : uses
+V1TrainingRunner --> TrainingConfig : uses
+V2TrainingRunner --> TrainingConfig : uses
+train_cli --> TrainingConfig : creates
+train_cli --> TrainingRunnerFactory : uses
+TrainingRunnerFactory --> V1TrainingRunner : creates
+TrainingRunnerFactory --> V2TrainingRunner : creates
+
+@enduml

@@ -54,7 +54,7 @@ src/backend/controller/  REST API adapter (thin, no business logic)
 src/backend/scripts/     Entry points
   run.py                 Start Flask server (python src/backend/scripts/run.py)
   selfplay.py            AI self-play (python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1)
-  train.py               PPO training (python src/backend/scripts/train.py --sample-path ... --output-dir ... --model rnn_v1.1 --epoch 10)
+  train.py               PPO training (python src/backend/scripts/train.py --sample-path ... --output-dir ... --model rnn_v1.1 --policy-epoch 10)
 
 src/frontend/            React SPA (Vite + React 19)
   src/api.js             REST API client
@@ -146,16 +146,16 @@ python src/backend/scripts/train.py ^
     --sample-path samples/rnn_v2_self_play.json ^
     --output-dir src/backend/ai/rnn_v1/gen2 ^
     --model rnn_v1.1 ^
-    --epoch 10
+    --policy-epoch 10
 
 # Train on all JSON files in a directory
 python src/backend/scripts/train.py ^
     --sample-path data/samples/ ^
     --output-dir src/backend/ai/rnn_v1/gen2 ^
     --model rnn_v1.1 ^
-    --epoch 10
+    --policy-epoch 10
 
-python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/backend/ai/rnn_v1/gen2 --model rnn_v1.1 --epoch 100
+python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/backend/ai/rnn_v1/gen2 --model rnn_v1.1 --policy-epoch 100
 ```
 
 **Training Outputs:** After training, two weight files are saved
@@ -168,7 +168,8 @@ python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/ba
 | `--sample-path` | `str` | *(required)* | File path or directory of JSON sample files |
 | `--output-dir` | `str` | *(required)* | Directory to save `policy.pth` and `value.pth` |
 | `--model` | `str` | *(required)* | AI registry name to train (e.g. `rnn_v1.1`) |
-| `--epoch` | `int` | *(required)* | Number of training epochs for both value and policy phases |
+| `--policy-epoch` | `int` | *(required)* | Number of training epochs for policy network (Phase 3) |
+| `--value-epoch` | `int` | *(optional)* | Number of training epochs for value network (Phase 1). Defaults to `--policy-epoch`. |
 
 **Hyperparameters** (in `config/backend.json` -> `training`):
 

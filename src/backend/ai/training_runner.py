@@ -64,7 +64,7 @@ class BaseTrainingRunner(abc.ABC):
         phase_records: list[dict] = []
 
         # Phase 1: Value Training
-        for epoch in range(1, config.epoch + 1):
+        for epoch in range(1, config.value_epoch + 1):
             random.shuffle(all_perspectives)
             metrics = self._train_value_epoch(
                 all_perspectives, value_model, policy_model,
@@ -80,7 +80,7 @@ class BaseTrainingRunner(abc.ABC):
                 "value_grad_norm": metrics["avg_grad_norm"],
             })
             print(
-                f"[Value] Epoch {epoch}/{config.epoch} | "
+                f"[Value] Epoch {epoch}/{config.value_epoch} | "
                 f"value_loss: {metrics['avg_value_loss']:.4f} | "
                 f"grad_norm: {metrics['avg_grad_norm']:.4f}"
             )
@@ -91,7 +91,7 @@ class BaseTrainingRunner(abc.ABC):
         )
 
         # Phase 3: Policy Training
-        for epoch in range(1, config.epoch + 1):
+        for epoch in range(1, config.policy_epoch + 1):
             random.shuffle(all_perspectives)
             metrics = self._train_policy_epoch(
                 all_perspectives, policy_model, value_model,
@@ -107,7 +107,7 @@ class BaseTrainingRunner(abc.ABC):
                 "value_grad_norm": float("nan"),
             })
             print(
-                f"[Policy] Epoch {epoch}/{config.epoch} | "
+                f"[Policy] Epoch {epoch}/{config.policy_epoch} | "
                 f"policy_loss: {metrics['avg_policy_loss']:.4f} | "
                 f"entropy: {metrics['avg_entropy']:.4f} | "
                 f"grad_norm: {metrics['avg_grad_norm']:.4f}"
