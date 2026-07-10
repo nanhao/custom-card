@@ -9,7 +9,6 @@ Subclasses:
 
 import abc
 import importlib
-import json
 import math
 import os
 import random
@@ -20,11 +19,7 @@ import torch.nn as nn
 import torch.nn.utils as nn_utils
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.ai.rnn_v1.model import (
-    HIDDEN_SIZE,
-    INPUT_SIZE,
-    POLICY_OUTPUT_SIZE,
-)
+from src.backend.ai.sample_loader import SampleLoader
 from src.backend.ai.training_config import TrainingConfig
 from src.backend.ai.training_utils import (
     compute_grad_norm,
@@ -166,99 +161,8 @@ class BaseTrainingRunner(abc.ABC):
     # -- Sample loading --
 
     def _load_samples(self, sample_path: str) -> list[dict]:
-        """Load perspectives from sample file(s). Directory loads all .json.
-
-        Raises RuntimeError if no valid samples found.
-        """
-        json_files: list[str] = []
-        if os.path.isfile(sample_path):
-            json_files = [sample_path]
-        elif os.path.isdir(sample_path):
-            for entry in sorted(os.listdir(sample_path)):
-                if entry.lower().endswith(".json"):
-                    json_files.append(os.path.join(sample_path, entry))
-
-        all_perspectives: list[dict] = []
-        for file_path in json_files:
-            print(f"Loading {file_path}...")
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    games = json.load(f)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(
-                    f"Failed to parse sample file {file_path!r}: {exc}"
-                ) from exc
-
-            print(f"  Parsed {len(games)} games, validating steps...")
-            total_games = len(games)
-            for game_idx, game in enumerate(games):
-                # Print progress every 10% of games
-                if game_idx % max(1, total_games // 10) == 0:
-                    pct = int(game_idx / total_games * 100)
-                    print(f"  Validating... {pct}% ({game_idx}/{total_games} games)")
-                for p_idx, perspective in enumerate(game.get("perspectives", [])):
-                    for s_idx, step in enumerate(perspective.get("steps", [])):
-                        for key in ("input", "action", "reward", "value"):
-                            if key not in step:
-                                raise RuntimeError(
-                                    f"Step {s_idx} in perspective {p_idx} "
-                                    f"of game {game.get('game_id', '?')} "
-                                    f"in {file_path!r} is missing required key {key!r}"
-                                )
-                        try:
-                            float(step["reward"])
-                            float(step["value"])
-                            log_prob_raw = step.get("log_prob")
-                            float(log_prob_raw) if log_prob_raw is not None else 0.0
-                            # Validate action is an integer policy index (design/14)
-                            action = step["action"]
-                            if not isinstance(action, int) or action < 0 or action >= POLICY_OUTPUT_SIZE:
-                                raise RuntimeError(
-                                    f"Step {s_idx} in perspective {p_idx} "
-                                    f"of game {game.get('game_id', '?')} "
-                                    f"in {file_path!r}: action must be int in [0, {POLICY_OUTPUT_SIZE - 1}], "
-                                    f"got {action!r}"
-                                )
-                        except (ValueError, TypeError) as exc:
-                            raise RuntimeError(
-                                f"Step {s_idx} in perspective {p_idx} "
-                                f"of game {game.get('game_id', '?')} "
-                                f"in {file_path!r}: invalid numeric value — {exc}"
-                            ) from exc
-                        if len(step["input"]) != INPUT_SIZE:
-                            raise RuntimeError(
-                                f"Step {s_idx} in perspective {p_idx} "
-                                f"of game {game.get('game_id', '?')} "
-                                f"in {file_path!r}: input has {len(step['input'])} elements, "
-                                f"expected {INPUT_SIZE}"
-                            )
-                        # Deep-copy perspective
-                        all_perspectives.append({
-                            "steps": [
-                                {
-                                    "input": list(step["input"]),
-                                    "action": step["action"],
-                                    "reward": float(step["reward"]),
-                                    "value": float(step["value"]),
-                                    "log_prob": (
-                                        float(step["log_prob"])
-                                        if step.get("log_prob") is not None
-                                        else 0.0
-                                    ),
-                                    "build_target": step.get("build_target"),
-                                }
-                                for step in perspective["steps"]
-                            ],
-                        })
-
-        if not all_perspectives:
-            raise RuntimeError(
-                f"no valid training samples found in {sample_path!r}"
-            )
-
-        total_steps = sum(len(p["steps"]) for p in all_perspectives)
-        print(f"  Loaded {len(all_perspectives)} perspectives ({total_steps} steps)")
-        return all_perspectives
+        """Load perspectives from sample file(s). Delegates to SampleLoader."""
+        return SampleLoader.load(sample_path)
 
     # -- Phase 1: Value Training (batching loop) --
 
