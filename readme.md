@@ -148,6 +148,14 @@ python src/backend/scripts/train.py ^
     --model rnn_v1.1 ^
     --policy-epoch 10
 
+# Train with different epoch counts for policy and value networks
+python src/backend/scripts/train.py ^
+    --sample-path samples/rnn_v2_self_play.json ^
+    --output-dir src/backend/ai/rnn_v1/gen2 ^
+    --model rnn_v1.1 ^
+    --policy-epoch 10 ^
+    --value-epoch 5
+
 # Train on all JSON files in a directory
 python src/backend/scripts/train.py ^
     --sample-path data/samples/ ^

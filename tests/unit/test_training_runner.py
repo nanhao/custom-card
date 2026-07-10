@@ -308,6 +308,110 @@ class TestLoadProgressOutput:
 
 
 # ---------------------------------------------------------------------------
+# TC-RUN: Epoch loop count verification (design/32)
+# ---------------------------------------------------------------------------
+
+
+class TestEpochLoopCount:
+    """TC-RUN-01 through TC-RUN-03: verify independent epoch loops."""
+
+    def test_value_epoch_controls_phase1_loop_count(
+        self, runner, sample_file, output_dir, capsys,
+    ):
+        """TC-RUN-01: value_epoch=3 → Phase 1 prints 3 rounds."""
+        random.seed(42)
+        torch.manual_seed(42)
+        config = TrainingConfig(
+            sample_path=sample_file,
+            output_dir=output_dir,
+            model="rnn_v1.1",
+            policy_epoch=1,
+            value_epoch=3,
+            policy_lr=0.001,
+            value_lr=0.001,
+            weight_decay=0.0,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_eps=0.2,
+            max_grad_norm=0.5,
+            value_coef=0.5,
+            entropy_coef=0.01,
+            batch_size=2,
+        )
+        runner.run(config)
+        captured = capsys.readouterr().out
+        assert "[Value] Epoch 1/3" in captured
+        assert "[Value] Epoch 2/3" in captured
+        assert "[Value] Epoch 3/3" in captured
+        assert "[Value] Epoch 4/" not in captured
+
+    def test_policy_epoch_controls_phase3_loop_count(
+        self, runner, sample_file, output_dir, capsys,
+    ):
+        """TC-RUN-02: policy_epoch=3 → Phase 3 prints 3 rounds."""
+        random.seed(42)
+        torch.manual_seed(42)
+        config = TrainingConfig(
+            sample_path=sample_file,
+            output_dir=output_dir,
+            model="rnn_v1.1",
+            policy_epoch=3,
+            value_epoch=1,
+            policy_lr=0.001,
+            value_lr=0.001,
+            weight_decay=0.0,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_eps=0.2,
+            max_grad_norm=0.5,
+            value_coef=0.5,
+            entropy_coef=0.01,
+            batch_size=2,
+        )
+        runner.run(config)
+        captured = capsys.readouterr().out
+        assert "[Policy] Epoch 1/3" in captured
+        assert "[Policy] Epoch 2/3" in captured
+        assert "[Policy] Epoch 3/3" in captured
+        assert "[Policy] Epoch 4/" not in captured
+
+    def test_phase_records_has_correct_total_length(
+        self, runner, sample_file, output_dir, capsys,
+    ):
+        """TC-RUN-03: value_epoch=3, policy_epoch=5 → 8 total records."""
+        random.seed(42)
+        torch.manual_seed(42)
+        config = TrainingConfig(
+            sample_path=sample_file,
+            output_dir=output_dir,
+            model="rnn_v1.1",
+            policy_epoch=5,
+            value_epoch=3,
+            policy_lr=0.001,
+            value_lr=0.001,
+            weight_decay=0.0,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_eps=0.2,
+            max_grad_norm=0.5,
+            value_coef=0.5,
+            entropy_coef=0.01,
+            batch_size=2,
+        )
+        runner.run(config)
+        captured = capsys.readouterr().out
+        # Verify phase record count: 3 value + 5 policy = 8
+        value_epoch_count = captured.count("[Value] Epoch")
+        policy_epoch_count = captured.count("[Policy] Epoch")
+        assert value_epoch_count == 3, (
+            f"Expected 3 value epochs, got {value_epoch_count}"
+        )
+        assert policy_epoch_count == 5, (
+            f"Expected 5 policy epochs, got {policy_epoch_count}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
 
