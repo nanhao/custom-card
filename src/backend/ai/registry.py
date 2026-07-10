@@ -29,7 +29,7 @@ _REGISTRY: list[dict] = [
     },
     {
         "name": "rnn_v1.2",
-        "description": "Split policy/value, random weights (gen1)",
+        "description": "Split policy/value (gen2)",
         "policy": {
             "weight_path": "src/backend/ai/rnn_v1/gen2/policy.pth",
             "module": "src.backend.ai.rnn_v1.model",
@@ -43,7 +43,7 @@ _REGISTRY: list[dict] = [
     },
     {
         "name": "rnn_v1.3",
-        "description": "Split policy/value, random weights (gen2)",
+        "description": "Split policy/value (gen3)",
         "policy": {
             "weight_path": "src/backend/ai/rnn_v1/gen3/policy.pth",
             "module": "src.backend.ai.rnn_v1.model",
@@ -57,7 +57,7 @@ _REGISTRY: list[dict] = [
     },
     {
         "name": "rnn_v1.4",
-        "description": "Split policy/value, random weights (gen3)",
+        "description": "Split policy/value (gen4)",
         "policy": {
             "weight_path": "src/backend/ai/rnn_v1/gen4/policy.pth",
             "module": "src.backend.ai.rnn_v1.model",
@@ -65,6 +65,62 @@ _REGISTRY: list[dict] = [
         },
         "value": {
             "weight_path": "src/backend/ai/rnn_v1/gen4/value.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUValueModel",
+        },
+    },
+    {
+        "name": "rnn_v1.5",
+        "description": "Split policy/value (gen5)",
+        "policy": {
+            "weight_path": "src/backend/ai/rnn_v1/gen5/policy.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUPolicyModel",
+        },
+        "value": {
+            "weight_path": "src/backend/ai/rnn_v1/gen5/value.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUValueModel",
+        },
+    },
+    {
+        "name": "rnn_v1.6",
+        "description": "Split policy/value (gen6)",
+        "policy": {
+            "weight_path": "src/backend/ai/rnn_v1/gen6/policy.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUPolicyModel",
+        },
+        "value": {
+            "weight_path": "src/backend/ai/rnn_v1/gen6/value.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUValueModel",
+        },
+    },
+    {
+        "name": "rnn_v1.7",
+        "description": "Split policy/value (gen7)",
+        "policy": {
+            "weight_path": "src/backend/ai/rnn_v1/gen7/policy.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUPolicyModel",
+        },
+        "value": {
+            "weight_path": "src/backend/ai/rnn_v1/gen7/value.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUValueModel",
+        },
+    },
+    {
+        "name": "rnn_v1.8",
+        "description": "Split policy/value (gen8)",
+        "policy": {
+            "weight_path": "src/backend/ai/rnn_v1/gen8/policy.pth",
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUPolicyModel",
+        },
+        "value": {
+            "weight_path": "src/backend/ai/rnn_v1/gen8/value.pth",
             "module": "src.backend.ai.rnn_v1.model",
             "class": "GRUValueModel",
         },
