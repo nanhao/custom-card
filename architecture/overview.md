@@ -99,7 +99,7 @@ Pure ML — no knowledge of game rules.
 
 | File | Responsibility |
 |------|---------------|
-| `registry.py` | Declarative AI registry — maps AI names to model classes and weight paths |
+| `registry.py` | Declarative AI registry — declares architectures (model classes); weight paths derived by `name.gen` convention (design/30) |
 | `training_config.py` | `TrainingConfig` dataclass — PPO hyperparameters |
 | `training_runner.py` | PPO training loop — GAE computation, policy/value loss, gradient accumulation (three-phase) |
 | `training_utils.py` | Training artifact generation — CSV loss/grad logging + PNG charts |
@@ -180,7 +180,7 @@ Self-play (AI vs AI)
 Train policy network (PPO clip loss)
 Train value network (MSE on returns)
     ↓  update weights in gen{N}/ directory
-Register new AI version in registry.py
+New gen directories auto-discovered by filesystem scanning (design/30)
 ```
 
 **Sample format** (design/7, 8, 10): Hierarchical JSON — each game contains two player perspectives, each perspective contains an array of (input, action, log_prob, reward, value) steps.

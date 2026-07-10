@@ -1,0 +1,65 @@
+@startuml registry_flow
+skinparam backgroundColor white
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+
+title AI Name Parsing and Weight Path Derivation Flow
+
+actor "Caller" as Caller
+participant "registry.py" as Registry
+participant "Filesystem" as FS
+database "gen directory" as GenDir
+
+== parse_ai_name() ==
+
+Caller -> Registry : get_ai_info("rnn_v1.3")
+Registry -> Registry : parse_ai_name("rnn_v1.3")
+note right
+  split by "."
+  check exactly 2 parts
+  check gen is int and >= 1
+  return ("rnn_v1", 3)
+end note
+
+Registry -> Registry : lookup "rnn_v1" in _REGISTRY
+note right
+  find entry with
+  module and class
+end note
+
+Registry -> Registry : _derive_weight_path("rnn_v1", 3, "policy")
+note right
+  "src/backend/ai/rnn_v1/gen3/policy.pth"
+end note
+
+Registry -> Registry : _derive_weight_path("rnn_v1", 3, "value")
+note right
+  "src/backend/ai/rnn_v1/gen3/value.pth"
+end note
+
+Registry --> Caller : { name, description, policy: {weight_path, module, class}, value: {weight_path, module, class} }
+
+== list_ais() ==
+
+Caller -> Registry : list_ais()
+loop for each name in _REGISTRY
+    Registry -> FS : scan "src/backend/ai/{name}/" for gen{i}
+    FS --> Registry : ["gen1", "gen3", "gen5"]
+end
+
+Registry -> Registry : sort by name then gen
+Registry --> Caller : [{name: "rnn_v1.1", ...}, {name: "rnn_v1.3", ...}, {name: "rnn_v1.5", ...}]
+
+== AppManager._load_model() ==
+
+Caller -> Registry : _get_policy_model("rnn_v1.3")
+Registry -> Registry : parse + derive weight_path
+Registry -> Registry : _load_model(module, class, weight_path)
+note right
+  importlib.import_module(module)
+  getattr(module, class)()
+  torch.load(weight_path)
+  model.eval()
+end note
+Registry --> Caller : nn.Module
+
+@enduml

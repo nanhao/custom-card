@@ -1,0 +1,96 @@
+@startuml class_diagram
+skinparam backgroundColor white
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+
+title Class Diagram — Registry Simplification
+
+package "ai/registry.py" {
+    class registry <<module>> {
+        + _REGISTRY : list[dict]
+        + parse_ai_name(ai_name: str) : tuple[str, int]
+        + _derive_weight_path(name: str, gen: int, suffix: str) : str
+        + list_ais() : list[dict]
+        + get_ai_info(ai_name: str) : dict
+    }
+}
+
+package "app/app_manager.py" {
+    class AppManager {
+        - _session_store : SessionStore
+        - _policy_models : dict[str, nn.Module]
+        - _value_models : dict[str, nn.Module]
+        + __init__(session_store: SessionStore)
+        + create_game(mode: str, ai_name: str | None) : tuple[str, GameState]
+        + ai_select_action(state: GameState, hidden_state: list[float], ai_name: str) : tuple[CardType, CardType | None, list[float]]
+        + ai_sample_action(state: GameState, h_pol: list[float], h_val: list[float], ai_name: str, temperature: float, player_key: str) : tuple
+        + run_selfplay(config: SelfPlayConfig) : SelfPlayResult
+        - _load_model(module_name: str, class_name: str, weight_path: str) : nn.Module
+    }
+}
+
+package "ai/training_runner.py" {
+    class TrainingRunner {
+        + run(config: TrainingConfig) : None
+        - _build_models(model_name: str) : tuple[nn.Module, nn.Module, torch.device]
+        - _load_samples(sample_path: str) : list[dict]
+        - _train_value_phase(...)
+        - _recompute_advantages(...)
+        - _train_policy_phase(...)
+    }
+}
+
+package "ai/training_config.py" {
+    class TrainingConfig <<dataclass>> {
+        + sample_path : str
+        + output_dir : str
+        + model : str
+        + epoch : int
+        + policy_lr : float
+        + value_lr : float
+        + weight_decay : float
+        + gamma : float
+        + gae_lambda : float
+        + clip_eps : float
+        + max_grad_norm : float
+        + value_coef : float
+        + entropy_coef : float
+        + batch_size : int
+    }
+}
+
+package "controller/api.py" {
+    class api <<module>> {
+        + list_ai_opponents()
+        + create_game()
+        + get_game()
+        + play_round()
+        + delete_game()
+    }
+}
+
+AppManager --> registry : calls get_ai_info()
+TrainingRunner --> registry : calls get_ai_info()
+api --> registry : calls list_ais()
+AppManager --> AppManager : _load_model(module_name, class_name, weight_path)
+TrainingRunner --> TrainingConfig : uses
+
+note top of registry
+  New functions:
+  - parse_ai_name(): splits "name.gen"
+  - _derive_weight_path(): convention-based
+  - list_ais(): filesystem scanning
+  - get_ai_info(): returns derived weight_path
+end note
+
+note top of AppManager
+  _load_model() signature changed:
+  now receives weight_path as explicit parameter
+end note
+
+note top of TrainingRunner
+  _build_models() changed:
+  uses parse_ai_name() + _derive_weight_path()
+  instead of reading weight_path from registry
+end note
+
+@enduml

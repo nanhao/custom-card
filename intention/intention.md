@@ -432,3 +432,41 @@ policy 网络的输出 vector 的维度应该调整为14维，且每一维都对
 
 # intention_id=29
 现在训练很慢，需要做一次性能优化
+
+# intention_id=30
+现在 registry 的注册太繁琐了，需要优化一下。
+改为只需注册网络架构，但无需注册权重文件，举个例子，注册之后内容应该像这样：
+```json
+{
+    {
+        "name": "rnn_v1",
+        "description": "gru hidden-state=32, level=2",
+        "policy": {
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUPolicyModel",
+        },
+        "value": {
+            "module": "src.backend.ai.rnn_v1.model",
+            "class": "GRUValueModel",
+        },
+    },
+    {
+        "name": "rnn_v2",
+        "description": "gru hidden-state=64, level=3",
+        "policy": {
+            "module": "src.backend.ai.rnn_v2.model",
+            "class": "GRUPolicyModelV2",
+        },
+        "value": {
+            "module": "src.backend.ai.rnn_v2.model",
+            "class": "GRUValueModelV2",
+        },
+    },
+}
+```
+项目的功能不变。
+移除 gen 的注册之后，如何确定权重文件的 path？答案是，通过固定的规则来确定。ai1、 ai2、model 等参数都会传递 “rnn_v1.1” 这样结构的字符串。"."之前的部分解析为 name， "." 后面的部分解析为 gen。权重的 path 拼接规则：
+value_path = {project_root}/src/backend/ai/{model_name}/gen{i}/value.pth
+policy_path = {project_root}/src/backend/ai/{model_name}/gen{i}/policy.pth
+
+而 pve 模式要渲染一个 ai 列表，那个列表首先找到已经注册的 model_name，然后看 {project_root}/src/backend/ai/{model_name}/ 目录下有多少个 gen{i} 格式的目录，提取里面的 i 进行拼接，形成 ai 列表
