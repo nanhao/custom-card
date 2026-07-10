@@ -19,7 +19,7 @@ from src.backend.ai.rnn_v1.model import (
     POLICY_OUTPUT_SIZE,
 )
 from src.backend.ai.training_config import TrainingConfig
-from src.backend.ai.training_runner import TrainingRunner
+from src.backend.ai.rnn_v1.v1_training_runner import V1TrainingRunner
 
 
 # ---------------------------------------------------------------------------
@@ -101,8 +101,8 @@ def training_config(sample_file, output_dir):
 
 @pytest.fixture
 def runner():
-    """Create a fresh TrainingRunner instance."""
-    return TrainingRunner()
+    """Create a fresh V1TrainingRunner instance."""
+    return V1TrainingRunner()
 
 
 # ---------------------------------------------------------------------------

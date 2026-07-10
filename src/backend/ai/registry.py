@@ -46,6 +46,18 @@ _REGISTRY: list[dict] = [
             "class": "GRUValueModel",
         },
     },
+    {
+        "name": "rnn_v2",
+        "description": "gru skip-connection 74->64->32 head, level=3",
+        "policy": {
+            "module": "src.backend.ai.rnn_v2.model",
+            "class": "GRUPolicyModelV2",
+        },
+        "value": {
+            "module": "src.backend.ai.rnn_v2.model",
+            "class": "GRUValueModelV2",
+        },
+    },
 ]
 
 

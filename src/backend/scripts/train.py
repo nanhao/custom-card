@@ -23,7 +23,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.backend.ai.training_config import TrainingConfig
-from src.backend.ai.training_runner import TrainingRunner
+from src.backend.ai.training_factory import TrainingRunnerFactory
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -118,7 +118,7 @@ def main() -> None:
         batch_size=training_cfg["batch_size"],
     )
 
-    runner = TrainingRunner()
+    runner = TrainingRunnerFactory.create(config.model)
     runner.run(config)
 
 

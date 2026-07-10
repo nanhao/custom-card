@@ -470,3 +470,17 @@ value_path = {project_root}/src/backend/ai/{model_name}/gen{i}/value.pth
 policy_path = {project_root}/src/backend/ai/{model_name}/gen{i}/policy.pth
 
 而 pve 模式要渲染一个 ai 列表，那个列表首先找到已经注册的 model_name，然后看 {project_root}/src/backend/ai/{model_name}/ 目录下有多少个 gen{i} 格式的目录，提取里面的 i 进行拼接，形成 ai 列表
+
+# intention-31
+新增 v2 版本模型。
+网络架构：
+GRU 不变（Input(42)→GRU(32, 1 layer)）。input 增加一条 skip connection 绕过 GRU 直接拼入 head：
+
+Policy: Input(42) ─┬─→ GRU(42→32) ─┐
+                    │                ├→ Concat(74)→Linear(64)→ReLU→Linear(32)→ReLU→Linear(14)→softmax
+                    └────────────────┘
+Value:  Input(42) ─┬─→ GRU(42→32) ─┐
+                    │                ├→ Concat(74)→Linear(64)→ReLU→Linear(32)→ReLU→Linear(1)
+                    └────────────────┘
+
+目的：手牌、HP、能量等即时特征绕过 GRU 压缩瓶颈，直接让 head 看到，解决当前 v1 网络"不关注手牌"的问题。

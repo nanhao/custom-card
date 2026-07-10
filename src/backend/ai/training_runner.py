@@ -1,16 +1,13 @@
-"""Split PPO training orchestrator — three-phase training.
+"""Base PPO training runner — shared logic for v1/v2 (design/31 D7).
 
-Per design/9 architecture: trains policy and value networks independently
-through sequential phases to eliminate gradient interference.
+Phase 1: value training, Phase 2: advantage re-computation, Phase 3: policy training.
 
-Phase 1: Value Training — train GRUValueModel (epoch).
-Phase 2: Advantage Re-computation — GAE with trained value network (no_grad).
-Phase 3: Policy Training — train GRUPolicyModel using Phase 2 advantages.
-
-Public interface (per design/9 interfaces.md §4):
-    TrainingRunner.run(config: TrainingConfig) -> None
+Subclasses:
+    V1TrainingRunner: rnn_v1/v1_training_runner.py (GRU bypass)
+    V2TrainingRunner: rnn_v2/v2_training_runner.py (skip-connection forward)
 """
 
+import abc
 import importlib
 import json
 import math
@@ -24,8 +21,6 @@ import torch.nn.utils as nn_utils
 
 from src.backend.ai.registry import get_ai_info
 from src.backend.ai.rnn_v1.model import (
-    GRUPolicyModel,
-    GRUValueModel,
     HIDDEN_SIZE,
     INPUT_SIZE,
     POLICY_OUTPUT_SIZE,
@@ -42,11 +37,12 @@ from src.backend.ai.training_utils import (
 # ---------------------------------------------------------------------------
 
 
-class TrainingRunner:
-    """Three-phase split PPO training orchestrator.
+class BaseTrainingRunner(abc.ABC):
+    """Abstract base class for three-phase split PPO training.
 
-    Public method:
-        run(config: TrainingConfig) -> None
+    Shared: run(), _build_models(), _load_samples(), _compute_gae(), _save_weights(),
+            _train_value_epoch(), _train_policy_epoch().
+    Abstract: _recompute_advantages(), _process_value_perspective(), _process_policy_perspective().
     """
 
     # ------------------------------------------------------------------
@@ -55,15 +51,10 @@ class TrainingRunner:
 
     def run(self, config: TrainingConfig) -> None:
         """Execute three-phase split PPO training."""
-        random.seed(0)  # Reproducible shuffle ordering
-
-        # --- Build models ---
+        random.seed(0)
         policy_model, value_model, device = self._build_models(config.model)
-
-        # --- Load samples ---
         all_perspectives = self._load_samples(config.sample_path)
 
-        # --- Create separate AdamW optimizers (D5) ---
         policy_optimizer = torch.optim.AdamW(
             policy_model.parameters(),
             lr=config.policy_lr,
@@ -75,12 +66,9 @@ class TrainingRunner:
             weight_decay=config.weight_decay,
         )
 
-        # Accumulate artifact records across all phases
         phase_records: list[dict] = []
 
-        # ==============================================================
-        # Phase 1: Value Training (epoch)
-        # ==============================================================
+        # Phase 1: Value Training
         for epoch in range(1, config.epoch + 1):
             random.shuffle(all_perspectives)
             metrics = self._train_value_epoch(
@@ -102,16 +90,12 @@ class TrainingRunner:
                 f"grad_norm: {metrics['avg_grad_norm']:.4f}"
             )
 
-        # ==============================================================
-        # Phase 2: Advantage Re-computation (no gradient updates)
-        # ==============================================================
+        # Phase 2: Advantage Re-computation
         self._recompute_advantages(
             all_perspectives, value_model, config, device,
         )
 
-        # ==============================================================
-        # Phase 3: Policy Training (epoch)
-        # ==============================================================
+        # Phase 3: Policy Training
         for epoch in range(1, config.epoch + 1):
             random.shuffle(all_perspectives)
             metrics = self._train_policy_epoch(
@@ -134,33 +118,20 @@ class TrainingRunner:
                 f"grad_norm: {metrics['avg_grad_norm']:.4f}"
             )
 
-        # --- Save weights and artifacts ---
-        # Per design/10 D3: weights saved to {output_dir}/policy.pth
-        # and {output_dir}/value.pth.
         policy_path = os.path.join(config.output_dir, "policy.pth")
         value_path = os.path.join(config.output_dir, "value.pth")
         self._save_weights(policy_model, policy_path)
         self._save_weights(value_model, value_path)
         save_split_training_artifacts(phase_records, output_dir=None)
 
-    # ------------------------------------------------------------------
-    # Model building
-    # ------------------------------------------------------------------
+    # -- Model building --
 
     def _build_models(
         self, model_name: str
     ) -> tuple[nn.Module, nn.Module, torch.device]:
-        """Resolve split-format registry entry, instantiate both networks.
-
-        Returns (policy_model, value_model, device) tuple.
-        Both models in training mode, moved to detected device.
-
-        Raises:
-            ValueError: If model_name not in registry.
-        """
+        """Resolve registry entry, instantiate both networks, move to device."""
         info = get_ai_info(model_name)
 
-        # --- Policy model ---
         policy_info = info["policy"]
         policy_module = importlib.import_module(policy_info["module"])
         policy_class = getattr(policy_module, policy_info["class"])
@@ -170,7 +141,6 @@ class TrainingRunner:
         )
         policy_model.load_state_dict(policy_state)
 
-        # --- Value model ---
         value_info = info["value"]
         value_module = importlib.import_module(value_info["module"])
         value_class = getattr(value_module, value_info["class"])
@@ -180,7 +150,6 @@ class TrainingRunner:
         )
         value_model.load_state_dict(value_state)
 
-        # --- Device ---
         if torch.cuda.is_available():
             device = torch.device("cuda")
         else:
@@ -194,9 +163,7 @@ class TrainingRunner:
 
         return policy_model, value_model, device
 
-    # ------------------------------------------------------------------
-    # Sample loading
-    # ------------------------------------------------------------------
+    # -- Sample loading --
 
     def _load_samples(self, sample_path: str) -> list[dict]:
         """Load perspectives from sample file(s). Directory loads all .json.
@@ -293,9 +260,7 @@ class TrainingRunner:
         print(f"  Loaded {len(all_perspectives)} perspectives ({total_steps} steps)")
         return all_perspectives
 
-    # ------------------------------------------------------------------
-    # Phase 1: Value Training
-    # ------------------------------------------------------------------
+    # -- Phase 1: Value Training (batching loop) --
 
     def _train_value_epoch(
         self,
@@ -367,6 +332,7 @@ class TrainingRunner:
             "avg_grad_norm": sum(all_grad_norms) / len(all_grad_norms),
         }
 
+    @abc.abstractmethod
     def _process_value_perspective(
         self,
         perspective: dict,
@@ -374,47 +340,15 @@ class TrainingRunner:
         config: TrainingConfig,
         device: torch.device,
     ) -> torch.Tensor | None:
-        """Compute value MSE loss for one perspective. Returns None if NaN."""
-        steps = perspective["steps"]
-        T = len(steps)
+        """Compute value MSE loss for one perspective. Returns None if NaN.
 
-        old_values: list[float] = []
-        rewards: list[float] = []
-        states_15d: list[list[float]] = []
+        Must be implemented by subclass — forward strategy differs per version.
+        """
+        raise NotImplementedError
 
-        for step in steps:
-            states_15d.append(step["input"])
-            old_values.append(step["value"])
-            rewards.append(step["reward"])
+    # -- Phase 2: Advantage Re-computation (abstract) --
 
-        # GAE from sample old_values → V_targets
-        _advantages, value_targets = self._compute_gae(
-            old_values, rewards, config.gamma, config.gae_lambda,
-        )
-
-        # Value forward pass — full sequence at once for GPU efficiency
-        x = torch.tensor(
-            states_15d, dtype=torch.float32, device=device,
-        ).view(T, 1, INPUT_SIZE)  # (T, 1, 42)
-        h = torch.tensor(
-            GRUValueModel.INITIAL_HIDDEN_STATE,
-            dtype=torch.float32, device=device,
-        ).view(1, 1, HIDDEN_SIZE)
-        gru_out, _ = value_model.gru(x, h)  # (T, 1, 32) — GRU unrolls all timesteps
-        v_new = value_model.fc_value(gru_out.squeeze(1)).squeeze()  # (T,) with grad
-
-        # MSE loss
-        v_target = torch.tensor(value_targets, dtype=torch.float32, device=device)
-        value_loss = config.value_coef * nn.functional.mse_loss(v_new, v_target)
-
-        if torch.isnan(value_loss):
-            return None
-        return value_loss
-
-    # ------------------------------------------------------------------
-    # Phase 2: Advantage Re-computation
-    # ------------------------------------------------------------------
-
+    @abc.abstractmethod
     def _recompute_advantages(
         self,
         perspectives: list[dict],
@@ -425,40 +359,11 @@ class TrainingRunner:
         """Re-compute GAE advantages using trained value network (no_grad).
 
         Stores new_advantages and new_value_targets in each perspective dict.
+        Must be implemented by subclass — forward strategy differs per version.
         """
-        print(f"[Phase 2] Recomputing advantages for {len(perspectives)} perspectives...")
-        total = len(perspectives)
-        with torch.no_grad():
-            for i, perspective in enumerate(perspectives):
-                steps = perspective["steps"]
-                T = len(steps)
+        raise NotImplementedError
 
-                rewards = [s["reward"] for s in steps]
-
-                # Full sequence forward pass — GPU-efficient single GRU call
-                inputs = [s["input"] for s in steps]
-                x = torch.tensor(
-                    inputs, dtype=torch.float32, device=device,
-                ).view(T, 1, INPUT_SIZE)  # (T, 1, 42)
-                h = torch.tensor(
-                    GRUValueModel.INITIAL_HIDDEN_STATE,
-                    dtype=torch.float32, device=device,
-                ).view(1, 1, HIDDEN_SIZE)
-                gru_out, _ = value_model.gru(x, h)  # (T, 1, 32)
-                new_values = value_model.fc_value(gru_out.squeeze(1)).squeeze().tolist()  # (T,)
-
-                # GAE with trained value network
-                advantages, value_targets = self._compute_gae(
-                    new_values, rewards, config.gamma, config.gae_lambda,
-                )
-
-                # Store in perspective for Phase 3
-                perspective["new_advantages"] = advantages
-                perspective["new_value_targets"] = value_targets
-
-    # ------------------------------------------------------------------
-    # Phase 3: Policy Training
-    # ------------------------------------------------------------------
+    # -- Phase 3: Policy Training (batching loop) --
 
     def _train_policy_epoch(
         self,
@@ -540,6 +445,7 @@ class TrainingRunner:
             "avg_grad_norm": sum(all_grad_norms) / len(all_grad_norms),
         }
 
+    @abc.abstractmethod
     def _process_policy_perspective(
         self,
         perspective: dict,
@@ -547,59 +453,13 @@ class TrainingRunner:
         config: TrainingConfig,
         device: torch.device,
     ) -> tuple | None:
-        """Compute PPO policy loss for one perspective. Returns None if NaN."""
-        steps = perspective["steps"]
-        T = len(steps)
-        advantages = perspective["new_advantages"]
+        """Compute PPO policy loss for one perspective. Returns None if NaN.
 
-        # Load old data from sample
-        old_log_probs: list[float] = []
-        states_15d: list[list[float]] = []
-        actions: list[int] = []
+        Must be implemented by subclass — forward strategy differs per version.
+        """
+        raise NotImplementedError
 
-        for step in steps:
-            states_15d.append(step["input"])
-            actions.append(step["action"])  # already an integer (design/14)
-            old_log_probs.append(step["log_prob"])
-
-        # Policy forward pass — full sequence at once for GPU efficiency
-        x = torch.tensor(
-            states_15d, dtype=torch.float32, device=device,
-        ).view(T, 1, INPUT_SIZE)  # (T, 1, 42)
-        h = torch.tensor(
-            GRUPolicyModel.INITIAL_HIDDEN_STATE,
-            dtype=torch.float32, device=device,
-        ).view(1, 1, HIDDEN_SIZE)
-        # Direct GRU → fc_policy bypassing model.forward (which only handles single step)
-        gru_out, _ = policy_model.gru(x, h)  # (T, 1, 32)
-        policy_logits = policy_model.fc_policy(gru_out.squeeze(1))  # (T, 14)
-        log_probs = torch.log_softmax(policy_logits, dim=-1)  # (T, 14)
-
-        # Extract log_probs for taken actions
-        action_indices = torch.tensor(actions, dtype=torch.long, device=device)  # (T,)
-        new_log = log_probs[torch.arange(T, device=device), action_indices]  # (T,) with grad
-
-        # PPO clipped loss
-        old_log = torch.tensor(old_log_probs, dtype=torch.float32, device=device)
-        adv = torch.tensor(advantages, dtype=torch.float32, device=device)
-
-        ratio = torch.exp(new_log - old_log)
-        clipped_ratio = torch.clamp(
-            ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps,
-        )
-        policy_loss = -torch.min(ratio * adv, clipped_ratio * adv).mean()
-
-        # Entropy: H = -sum(p * log(p)) = -sum(exp(log_p) * log_p).
-        # nan_to_num handles p=0 case (exp(-inf)=0, 0*inf=NaN → 0).
-        entropy = -(torch.exp(log_probs) * log_probs).nan_to_num(0.0).sum(dim=-1).mean()
-
-        if torch.isnan(policy_loss) or torch.isnan(entropy):
-            return None
-        return policy_loss, entropy
-
-    # ------------------------------------------------------------------
-    # GAE computation (shared by Phase 1 and Phase 2)
-    # ------------------------------------------------------------------
+    # -- GAE computation (shared) --
 
     def _compute_gae(
         self,
@@ -626,9 +486,7 @@ class TrainingRunner:
 
         return advantages, value_targets
 
-    # ------------------------------------------------------------------
-    # Weight saving
-    # ------------------------------------------------------------------
+    # -- Weight saving --
 
     def _save_weights(self, model: nn.Module, output_path: str) -> None:
         """Save model weights, creating parent directories if needed."""

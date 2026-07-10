@@ -1,0 +1,81 @@
+@startuml rnn_v2_class_diagram
+skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title rnn_v2 Class Diagram — Skip-Connection Models + Registry
+
+package "ai.rnn_v2" #LightYellow {
+    class GRUPolicyModelV2 <<nn.Module>> {
+        + INITIAL_HIDDEN_STATE: list[float]
+        - gru: nn.GRU(42, 32, num_layers=1)
+        - fc1: nn.Linear(74, 64)
+        - fc2: nn.Linear(64, 32)
+        - fc_policy: nn.Linear(32, 14)
+        --
+        + forward(x, hidden, mask_fn, temperature): tuple
+    }
+
+    class GRUValueModelV2 <<nn.Module>> {
+        + INITIAL_HIDDEN_STATE: list[float]
+        - gru: nn.GRU(42, 32, num_layers=1)
+        - fc1: nn.Linear(74, 64)
+        - fc2: nn.Linear(64, 32)
+        - fc_value: nn.Linear(32, 1)
+        --
+        + forward(x, hidden): tuple
+    }
+}
+
+package "ai" {
+    class TrainingRunner {
+        + run(config): None
+        - _build_models(model_name): tuple
+        - _train_value_epoch(...): dict
+        - _train_policy_epoch(...): dict
+        - _recompute_advantages(...): None
+    }
+
+    class Registry <<module>> {
+        + _REGISTRY: list[dict]
+        + get_ai_info(ai_name): dict
+        + list_ais(): list[dict]
+        + parse_ai_name(ai_name): tuple
+    }
+}
+
+package "app" {
+    class AppManager {
+        - _load_model(module, class, weight_path): nn.Module
+        + ai_sample_action(state, ai_name): dict
+    }
+
+    class Converter {
+        + build_input_vector(state, player_key): list[float]
+        + action_to_policy_index(card, build_target): int
+        + policy_index_to_action(index): tuple
+    }
+}
+
+TrainingRunner --> GRUPolicyModelV2 : creates/trains
+TrainingRunner --> GRUValueModelV2 : creates/trains
+TrainingRunner ..> Registry : get_ai_info
+AppManager --> GRUPolicyModelV2 : loads
+AppManager --> GRUValueModelV2 : loads
+AppManager ..> Registry : get_ai_info
+AppManager ..> Converter : build_input_vector
+
+note right of Registry
+    rnn_v2 entry:
+    module: src.backend.ai.rnn_v2.model
+    policy class: GRUPolicyModelV2
+    value class: GRUValueModelV2
+end note
+
+note bottom of Converter
+    Unchanged — INPUT_SIZE=42
+    POLICY_OUTPUT_SIZE=14
+    v1/v2 共享同一个 Converter
+end note
+
+@enduml

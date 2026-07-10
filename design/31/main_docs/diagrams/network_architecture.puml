@@ -1,0 +1,63 @@
+@startuml rnn_v2_architecture
+skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam nodesep 60
+skinparam ranksep 50
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title rnn_v2 Skip-Connection Architecture\nGRUPolicyModelV2 (~10.5K params) + GRUValueModelV2 (~10.5K params) = ~21K total
+
+package "Input Layer" as InputLayer {
+    [42-dim feature vector\n(1,1,42)] as Input
+}
+
+package "GRU (shared by both heads)" as GRUBlock #LightGray {
+    [GRU(42→32)\nnum_layers=1] as GRU
+}
+
+package "Policy Head" as PolicyHead #LightYellow {
+    [Concat(32+42=74)] as PolicyConcat
+    [Linear(74→64) + ReLU] as PolicyFC1
+    [Linear(64→32) + ReLU] as PolicyFC2
+    [Linear(32→14) + softmax] as PolicyFC3
+}
+
+package "Value Head" as ValueHead #LightBlue {
+    [Concat(32+42=74)] as ValueConcat
+    [Linear(74→64) + ReLU] as ValueFC1
+    [Linear(64→32) + ReLU] as ValueFC2
+    [Linear(32→1)] as ValueFC3
+}
+
+Input -down-> GRU
+Input -down-> PolicyConcat : skip connection
+Input -down-> ValueConcat : skip connection
+
+GRU -down-> PolicyConcat : gru_out(1,32)
+GRU -down-> ValueConcat : gru_out(1,32)
+
+PolicyConcat -down-> PolicyFC1
+PolicyFC1 -down-> PolicyFC2
+PolicyFC2 -down-> PolicyFC3
+
+ValueConcat -down-> ValueFC1
+ValueFC1 -down-> ValueFC2
+ValueFC2 -down-> ValueFC3
+
+note right of PolicyFC3
+    Output: (probs, log_probs, new_hidden)
+    mask_fn + temperature supported
+end note
+
+note right of ValueFC3
+    Output: (value, new_hidden)
+    No mask_fn, no temperature
+    No tanh — value unbounded
+end note
+
+note bottom of Input
+    Skip connection 目的：手牌、HP、能量等即时特征
+    绕过 GRU 压缩瓶颈，直接让 head 感知
+end note
+
+@enduml
