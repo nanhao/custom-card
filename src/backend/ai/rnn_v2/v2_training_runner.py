@@ -19,16 +19,40 @@ from src.backend.ai.training_runner import BaseTrainingRunner
 
 
 class V2TrainingRunner(BaseTrainingRunner):
-    """Three-phase split PPO training with v2 skip-connection forward strategy.
-
-    Inherits all shared logic from BaseTrainingRunner.
-    Overrides only the three phase methods that differ in forward strategy.
-    The v2 head has skip connection + 3-layer MLP, requiring concat of
-    GRU output with raw input before the head layers.
-    """
+    """Three-phase split PPO training with v2 skip-connection forward strategy."""
 
     # ------------------------------------------------------------------
-    # Phase 1: Value Training — v2 skip-connection forward
+    # Shared forward helpers (eliminate duplicate skip-connection logic)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _forward_value_sequence(
+        value_model: nn.Module, x: torch.Tensor, h: torch.Tensor,
+    ) -> torch.Tensor:
+        """Batch value forward: GRU → concat(input) → fc1→ReLU→fc2→ReLU→fc_value."""
+        gru_out, _ = value_model.gru(x, h)  # (T, 1, 32)
+        combined = torch.cat(
+            [gru_out.squeeze(1), x.squeeze(1)], dim=-1,
+        )  # (T, 74)
+        h1 = torch.relu(value_model.fc1(combined))   # (T, 64)
+        h2 = torch.relu(value_model.fc2(h1))          # (T, 32)
+        return value_model.fc_value(h2).squeeze()     # (T,)
+
+    @staticmethod
+    def _forward_policy_sequence(
+        policy_model: nn.Module, x: torch.Tensor, h: torch.Tensor,
+    ) -> torch.Tensor:
+        """Batch policy forward: GRU → concat(input) → fc1→ReLU→fc2→ReLU→fc_policy."""
+        gru_out, _ = policy_model.gru(x, h)  # (T, 1, 32)
+        combined = torch.cat(
+            [gru_out.squeeze(1), x.squeeze(1)], dim=-1,
+        )  # (T, 74)
+        h1 = torch.relu(policy_model.fc1(combined))   # (T, 64)
+        h2 = torch.relu(policy_model.fc2(h1))          # (T, 32)
+        return policy_model.fc_policy(h2)              # (T, 14)
+
+    # ------------------------------------------------------------------
+    # Phase 1: Value Training
     # ------------------------------------------------------------------
 
     def _process_value_perspective(
@@ -62,20 +86,12 @@ class V2TrainingRunner(BaseTrainingRunner):
         # Full sequence GRU → skip-connection → MLP head
         x = torch.tensor(states, dtype=torch.float32, device=device).view(
             T, 1, INPUT_SIZE,
-        )  # (T, 1, 42)
+        )
         h = torch.tensor(
             GRUValueModelV2.INITIAL_HIDDEN_STATE,
             dtype=torch.float32, device=device,
         ).view(1, 1, HIDDEN_SIZE)
-
-        gru_out, _ = value_model.gru(x, h)  # (T, 1, 32)
-        # Skip connection: concat GRU output with raw input per timestep
-        combined = torch.cat(
-            [gru_out.squeeze(1), x.squeeze(1)], dim=-1,
-        )  # (T, 74)
-        h1 = torch.relu(value_model.fc1(combined))   # (T, 64)
-        h2 = torch.relu(value_model.fc2(h1))          # (T, 32)
-        v_new = value_model.fc_value(h2).squeeze()    # (T,)
+        v_new = self._forward_value_sequence(value_model, x, h)
 
         v_target = torch.tensor(value_targets, dtype=torch.float32, device=device)
         value_loss = config.value_coef * nn.functional.mse_loss(v_new, v_target)
@@ -114,14 +130,9 @@ class V2TrainingRunner(BaseTrainingRunner):
                     GRUValueModelV2.INITIAL_HIDDEN_STATE,
                     dtype=torch.float32, device=device,
                 ).view(1, 1, HIDDEN_SIZE)
-
-                gru_out, _ = value_model.gru(x, h)  # (T, 1, 32)
-                combined = torch.cat(
-                    [gru_out.squeeze(1), x.squeeze(1)], dim=-1,
-                )  # (T, 74)
-                h1 = torch.relu(value_model.fc1(combined))   # (T, 64)
-                h2 = torch.relu(value_model.fc2(h1))          # (T, 32)
-                new_values = value_model.fc_value(h2).squeeze().tolist()  # (T,)
+                new_values = self._forward_value_sequence(
+                    value_model, x, h,
+                ).tolist()
 
                 advantages, value_targets = self._compute_gae(
                     new_values, rewards, config.gamma, config.gae_lambda,
@@ -167,14 +178,7 @@ class V2TrainingRunner(BaseTrainingRunner):
             GRUPolicyModelV2.INITIAL_HIDDEN_STATE,
             dtype=torch.float32, device=device,
         ).view(1, 1, HIDDEN_SIZE)
-
-        gru_out, _ = policy_model.gru(x, h)  # (T, 1, 32)
-        combined = torch.cat(
-            [gru_out.squeeze(1), x.squeeze(1)], dim=-1,
-        )  # (T, 74)
-        h1 = torch.relu(policy_model.fc1(combined))   # (T, 64)
-        h2 = torch.relu(policy_model.fc2(h1))          # (T, 32)
-        policy_logits = policy_model.fc_policy(h2)     # (T, 14)
+        policy_logits = self._forward_policy_sequence(policy_model, x, h)
         log_probs = torch.log_softmax(policy_logits, dim=-1)
 
         action_indices = torch.tensor(actions, dtype=torch.long, device=device)
