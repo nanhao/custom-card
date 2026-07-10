@@ -487,3 +487,6 @@ Value:  Input(42) ─┬─→ GRU(42→32) ─┐
 
 # intention_id=32
 train.py 增加一个参数： value_epoch。用于指定训练 value 网络的 epoc 数。之前的 epoch 参数改名为 policy_epoch
+
+# intention_id=33
+训练时，为 value 网络的训练增加 valiladtion-set 机制，默认 0.1 的样本作为验证集，打印信息和曲线图中增加 validation-set loss

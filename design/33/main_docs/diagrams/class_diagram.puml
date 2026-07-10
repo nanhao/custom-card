@@ -1,0 +1,77 @@
+@startuml class_diagram
+title Class Relationships — Validation Set for Value Training
+
+class TrainingConfig {
+    + sample_path: str
+    + output_dir: str
+    + model: str
+    + policy_epoch: int
+    + value_epoch: int
+    + validation_split: float = 0.1
+    ..
+    + __post_init__()
+}
+
+class BaseTrainingRunner {
+    + run(config: TrainingConfig)
+    - _build_models(model_name)
+    - _load_samples(sample_path)
+    + _split_train_val(perspectives, validation_split)
+    + _train_value_epoch(perspectives, val_perspectives, ...)
+    + _compute_val_loss(val_perspectives, ...)
+    + {abstract} _process_value_perspective(perspective, ...)
+    + _recompute_advantages(perspectives, ...)
+    + _train_policy_epoch(perspectives, ...)
+    + {abstract} _process_policy_perspective(perspective, ...)
+    + _compute_gae(values, rewards, gamma, gae_lambda)
+    - _save_weights(model, output_path)
+}
+
+class SampleLoader {
+    + {static} load(sample_path): list[dict]
+    - {static} _collect_json_files(sample_path)
+    - {static} _parse_json(file_path)
+    - {static} _extract_perspectives(games, file_path)
+    - {static} _validate_perspective(perspective, ...)
+    - {static} _validate_step(step, ...)
+}
+
+class V1TrainingRunner {
+    + _process_value_perspective(perspective, ...)
+    + _process_policy_perspective(perspective, ...)
+    + _recompute_advantages(perspectives, ...)
+}
+
+class V2TrainingRunner {
+    + _process_value_perspective(perspective, ...)
+    + _process_policy_perspective(perspective, ...)
+    + _recompute_advantages(perspectives, ...)
+}
+
+class TrainingRunnerFactory {
+    + {static} create(model_name): BaseTrainingRunner
+}
+
+class save_split_training_artifacts <<function>> {
+    + save_split_training_artifacts(phase_records, output_dir)
+}
+
+BaseTrainingRunner <|-- V1TrainingRunner
+BaseTrainingRunner <|-- V2TrainingRunner
+BaseTrainingRunner ..> TrainingConfig : uses
+BaseTrainingRunner ..> SampleLoader : uses
+BaseTrainingRunner ..> save_split_training_artifacts : calls
+TrainingRunnerFactory ..> BaseTrainingRunner : creates
+
+note bottom of SampleLoader
+  _extract_perspectives 变更：
+  每个 perspective dict 新增 "game_id" 键
+end note
+
+note bottom of BaseTrainingRunner
+  run() 新增：调用 _split_train_val 划分 train/val
+  _train_value_epoch() 变更：新增 val_perspectives 参数
+  新增 _compute_val_loss() 方法
+end note
+
+@enduml

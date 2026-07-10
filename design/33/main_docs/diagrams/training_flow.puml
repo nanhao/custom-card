@@ -1,0 +1,62 @@
+@startuml training_flow
+title Three-Phase PPO Training with Validation Set
+
+actor User
+participant "train.py" as CLI
+participant "TrainingConfig" as Config
+participant "BaseTrainingRunner" as Runner
+participant "SampleLoader" as Loader
+participant "ValueModel" as VModel
+
+User -> CLI: --sample-path, --model, --validation-split
+CLI -> Config: create(sample_path, model, ..., validation_split)
+Config --> CLI: config
+
+CLI -> Runner: run(config)
+
+== Load & Split ==
+Runner -> Loader: load(sample_path)
+Loader --> Runner: perspectives (with game_id)
+Runner -> Runner: _split_train_val(perspectives, validation_split)
+note right
+  按 game_id 分组后随机划分
+  固定划分，整趟训练不变
+end note
+
+== Phase 1: Value Training ==
+loop each value_epoch
+    Runner -> Runner: shuffle(train_perspectives)
+    Runner -> Runner: process batches with gradient accumulation
+    note right: 训练 — 仅使用 train 集
+
+    Runner -> Runner: _compute_val_loss(val_perspectives, value_model)
+    note right
+      model.eval(), no_grad
+      复用 _process_value_perspective
+      计算后恢复 model.train()
+    end note
+
+    Runner -> Runner: record value_loss + val_value_loss
+    Runner -> User: print "[Value] Epoch X/Y | value_loss: ... | val_value_loss: ... | grad_norm: ..."
+end
+
+== Phase 2: Advantage Re-computation ==
+Runner -> VModel: forward all perspectives (no_grad)
+Runner -> Runner: re-compute GAE advantages
+note right: 使用完整 perspectives（train+val）
+
+== Phase 3: Policy Training ==
+loop each policy_epoch
+    Runner -> Runner: shuffle(all perspectives), train policy
+    Runner -> User: print "[Policy] Epoch X/Y | policy_loss: ... | entropy: ... | grad_norm: ..."
+end
+
+== Save Artifacts ==
+Runner -> Runner: save weights (policy.pth, value.pth)
+Runner -> Runner: save_split_training_artifacts(phase_records)
+note right
+  loss.csv 新增 val_value_loss 列
+  loss.png 新增验证 loss 曲线
+end note
+
+@enduml

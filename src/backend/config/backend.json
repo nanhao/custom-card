@@ -13,6 +13,7 @@
     "max_grad_norm": 0.5,
     "value_coef": 0.5,
     "entropy_coef": 0.1,
-    "batch_size": 64
+    "batch_size": 64,
+    "validation_split": 0.1
   }
 }

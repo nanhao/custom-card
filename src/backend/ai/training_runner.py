@@ -50,6 +50,16 @@ class BaseTrainingRunner(abc.ABC):
         policy_model, value_model, device = self._build_models(config.model)
         all_perspectives = self._load_samples(config.sample_path)
 
+        # Split train/val by game_id (design/33)
+        train_perspectives, val_perspectives = self._split_train_val(
+            all_perspectives, config.validation_split,
+        )
+        if val_perspectives:
+            print(
+                f"Split: {len(train_perspectives)} train, "
+                f"{len(val_perspectives)} val perspectives"
+            )
+
         policy_optimizer = torch.optim.AdamW(
             policy_model.parameters(),
             lr=config.policy_lr,
@@ -65,9 +75,10 @@ class BaseTrainingRunner(abc.ABC):
 
         # Phase 1: Value Training
         for epoch in range(1, config.value_epoch + 1):
-            random.shuffle(all_perspectives)
+            random.shuffle(train_perspectives)
             metrics = self._train_value_epoch(
-                all_perspectives, value_model, policy_model,
+                train_perspectives, val_perspectives,
+                value_model, policy_model,
                 value_optimizer, config, device,
             )
             phase_records.append({
@@ -75,13 +86,20 @@ class BaseTrainingRunner(abc.ABC):
                 "epoch": epoch,
                 "policy_loss": float("nan"),
                 "value_loss": metrics["avg_value_loss"],
+                "val_value_loss": metrics["val_value_loss"],
                 "entropy": float("nan"),
                 "policy_grad_norm": float("nan"),
                 "value_grad_norm": metrics["avg_grad_norm"],
             })
+            val_str = (
+                f"val_value_loss: {metrics['val_value_loss']:.4f} | "
+                if not math.isnan(metrics["val_value_loss"])
+                else ""
+            )
             print(
                 f"[Value] Epoch {epoch}/{config.value_epoch} | "
                 f"value_loss: {metrics['avg_value_loss']:.4f} | "
+                f"{val_str}"
                 f"grad_norm: {metrics['avg_grad_norm']:.4f}"
             )
 
@@ -102,6 +120,7 @@ class BaseTrainingRunner(abc.ABC):
                 "epoch": epoch,
                 "policy_loss": metrics["avg_policy_loss"],
                 "value_loss": float("nan"),
+                "val_value_loss": float("nan"),
                 "entropy": metrics["avg_entropy"],
                 "policy_grad_norm": metrics["avg_grad_norm"],
                 "value_grad_norm": float("nan"),
@@ -164,11 +183,104 @@ class BaseTrainingRunner(abc.ABC):
         """Load perspectives from sample file(s). Delegates to SampleLoader."""
         return SampleLoader.load(sample_path)
 
+    # -- Train/val split --
+
+    @staticmethod
+    def _split_train_val(
+        perspectives: list[dict],
+        validation_split: float,
+    ) -> tuple[list[dict], list[dict]]:
+        """Split perspectives into train/val by game_id.
+
+        Groups perspectives by game_id, randomly shuffles game IDs,
+        then assigns the first (validation_split * num_games) games to val.
+        At least 1 game is kept in train when possible.
+
+        Args:
+            perspectives: List of perspective dicts, each with "game_id" key.
+            validation_split: Fraction of games for validation (0 <= split < 1).
+
+        Returns:
+            (train_perspectives, val_perspectives) tuple.
+        """
+        # Group perspectives by game_id
+        game_groups: dict[str, list[dict]] = {}
+        for p in perspectives:
+            gid = str(p.get("game_id", "unknown"))
+            if gid not in game_groups:
+                game_groups[gid] = []
+            game_groups[gid].append(p)
+
+        game_ids = list(game_groups.keys())
+
+        # validation_split=0 or only 1 game: all to train
+        if validation_split <= 0 or len(game_ids) <= 1:
+            return list(perspectives), []
+
+        random.shuffle(game_ids)
+        n_val = max(1, int(len(game_ids) * validation_split))
+        # Ensure at least 1 game in train
+        n_val = min(n_val, len(game_ids) - 1)
+        val_gids = set(game_ids[:n_val])
+
+        train: list[dict] = []
+        val: list[dict] = []
+        for gid, perps in game_groups.items():
+            if gid in val_gids:
+                val.extend(perps)
+            else:
+                train.extend(perps)
+        return train, val
+
+    # -- Validation loss --
+
+    def _compute_val_loss(
+        self,
+        val_perspectives: list[dict],
+        value_model: nn.Module,
+        config: TrainingConfig,
+        device: torch.device,
+    ) -> float:
+        """Compute validation loss on val set (no gradient).
+
+        Sets model to eval mode, computes MSE loss for each perspective
+        via _process_value_perspective, then restores train mode.
+
+        Args:
+            val_perspectives: Validation perspectives.
+            value_model: Value network to evaluate.
+            config: Training configuration.
+            device: Torch device.
+
+        Returns:
+            Average val value loss, or NaN if val set is empty.
+        """
+        if not val_perspectives:
+            return float("nan")
+
+        value_model.eval()
+        total_loss = 0.0
+        count = 0
+        with torch.no_grad():
+            for perspective in val_perspectives:
+                value_loss = self._process_value_perspective(
+                    perspective, value_model, config, device,
+                )
+                if value_loss is not None:
+                    total_loss += value_loss.item()
+                    count += 1
+        value_model.train()
+
+        if count == 0:
+            return float("nan")
+        return total_loss / count
+
     # -- Phase 1: Value Training (batching loop) --
 
     def _train_value_epoch(
         self,
         perspectives: list[dict],
+        val_perspectives: list[dict],
         value_model: nn.Module,
         policy_model: nn.Module,
         optimizer: torch.optim.Optimizer,
@@ -178,7 +290,8 @@ class BaseTrainingRunner(abc.ABC):
         """Run one value-training epoch with gradient accumulation.
 
         Only value_model is updated. policy_model is unused (frozen).
-        Returns dict with avg_value_loss and avg_grad_norm.
+        After training, computes validation loss on val_perspectives.
+        Returns dict with avg_value_loss, val_value_loss, and avg_grad_norm.
         """
         all_value_losses: list[float] = []
         all_grad_norms: list[float] = []
@@ -229,11 +342,21 @@ class BaseTrainingRunner(abc.ABC):
             all_grad_norms.append(pre_clip_norm)
 
         if not all_value_losses:
-            return {"avg_value_loss": float("nan"), "avg_grad_norm": float("nan")}
+            return {
+                "avg_value_loss": float("nan"),
+                "avg_grad_norm": float("nan"),
+                "val_value_loss": float("nan"),
+            }
+
+        # Compute validation loss after training (design/33)
+        val_loss = self._compute_val_loss(
+            val_perspectives, value_model, config, device,
+        )
 
         return {
             "avg_value_loss": sum(all_value_losses) / len(all_value_losses),
             "avg_grad_norm": sum(all_grad_norms) / len(all_grad_norms),
+            "val_value_loss": val_loss,
         }
 
     @abc.abstractmethod

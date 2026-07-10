@@ -53,6 +53,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Number of training epochs for value network (Phase 1). "
              "Defaults to --policy-epoch if not specified.",
     )
+    parser.add_argument(
+        "--validation-split", type=float, default=None,
+        help="Fraction of samples for validation set (0 <= split < 1). "
+             "Defaults to backend.json training.validation_split.",
+    )
     return parser
 
 
@@ -84,6 +89,7 @@ def _load_training_config() -> dict:
         "gamma": float, "gae_lambda": float,
         "clip_eps": float, "max_grad_norm": float,
         "value_coef": float, "entropy_coef": float, "batch_size": int,
+        "validation_split": float,
     }
     for key, expected_type in required.items():
         if key not in training_cfg:
@@ -108,6 +114,11 @@ def main() -> None:
     training_cfg = _load_training_config()
 
     value_epoch = args.value_epoch if args.value_epoch is not None else args.policy_epoch
+    validation_split = (
+        args.validation_split
+        if args.validation_split is not None
+        else training_cfg["validation_split"]
+    )
 
     config = TrainingConfig(
         sample_path=args.sample_path,
@@ -125,6 +136,7 @@ def main() -> None:
         value_coef=training_cfg["value_coef"],
         entropy_coef=training_cfg["entropy_coef"],
         batch_size=training_cfg["batch_size"],
+        validation_split=validation_split,
     )
 
     runner = TrainingRunnerFactory.create(config.model)

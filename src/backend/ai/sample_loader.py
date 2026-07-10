@@ -95,7 +95,10 @@ class SampleLoader:
                 steps = SampleLoader._validate_perspective(
                     perspective, p_idx, game, file_path,
                 )
-                all_perspectives.append({"steps": steps})
+                all_perspectives.append({
+                    "steps": steps,
+                    "game_id": game.get("game_id"),
+                })
         return all_perspectives
 
     @staticmethod

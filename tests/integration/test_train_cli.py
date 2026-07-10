@@ -151,3 +151,28 @@ class TestTrainCLIEpochArgs:
         # Old param absent (--epoch appears as substring of --policy-epoch,
         # so check for standalone --epoch with whitespace boundary)
         assert " --epoch " not in stdout
+
+
+class TestTrainCLIValidationSplit:
+    """TC-CLI-VS: train.py --validation-split argument (design/33)."""
+
+    def test_validation_split_accepted(self):
+        """TC-CLI-VS-01: --validation-split 0.2 is accepted."""
+        with tempfile.TemporaryDirectory() as td:
+            sample = _make_sample_file(td)
+            result = _run_train([
+                "--sample-path", sample,
+                "--output-dir", td,
+                "--model", "rnn_v2.1",
+                "--policy-epoch", "1",
+                "--validation-split", "0.2",
+            ])
+            stderr = result.stderr.lower()
+            assert "unrecognized arguments" not in stderr
+            assert "argparse" not in stderr.lower()
+
+    def test_help_shows_validation_split(self):
+        """TC-CLI-VS-02: --help shows --validation-split."""
+        result = _run_train(["--help"])
+        assert result.returncode == 0
+        assert "--validation-split" in result.stdout

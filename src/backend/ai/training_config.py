@@ -46,6 +46,7 @@ class TrainingConfig:
     value_coef: float
     entropy_coef: float
     batch_size: int
+    validation_split: float = 0.1
 
     def __post_init__(self) -> None:
         """Validate all field values after initialization.
@@ -90,6 +91,13 @@ class TrainingConfig:
             raise ValueError("value_coef must be >= 0")
         if self.entropy_coef < 0:
             raise ValueError("entropy_coef must be >= 0")
+
+        # Validate validation_split: [0, 1)
+        if not (0 <= self.validation_split < 1):
+            raise ValueError(
+                "validation_split must be in [0, 1), "
+                f"got {self.validation_split}"
+            )
 
         # Validate sample_path exists
         if not os.path.exists(self.sample_path):

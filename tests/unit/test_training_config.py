@@ -53,6 +53,38 @@ def _base_kwargs(sample_path: str, output_dir: str, **overrides) -> dict:
 # ---------------------------------------------------------------------------
 
 
+class TestTrainingConfigValidationSplit:
+    """TC-VS: validation_split field validation (design/33)."""
+
+    def test_validation_split_negative_raises_value_error(self):
+        """TC-VS-01: validation_split=-0.1 → ValueError."""
+        with tempfile.TemporaryDirectory() as td:
+            sample = _make_tmp_sample(td)
+            with pytest.raises(ValueError, match="validation_split must be"):
+                TrainingConfig(**_base_kwargs(sample, td, validation_split=-0.1))
+
+    def test_validation_split_one_raises_value_error(self):
+        """TC-VS-02: validation_split=1.0 → ValueError."""
+        with tempfile.TemporaryDirectory() as td:
+            sample = _make_tmp_sample(td)
+            with pytest.raises(ValueError, match="validation_split must be"):
+                TrainingConfig(**_base_kwargs(sample, td, validation_split=1.0))
+
+    def test_validation_split_zero_succeeds(self):
+        """TC-VS-03: validation_split=0.0 → success (validation disabled)."""
+        with tempfile.TemporaryDirectory() as td:
+            sample = _make_tmp_sample(td)
+            cfg = TrainingConfig(**_base_kwargs(sample, td, validation_split=0.0))
+            assert cfg.validation_split == 0.0
+
+    def test_validation_split_default_is_point_one(self):
+        """TC-VS-04: default validation_split is 0.1."""
+        with tempfile.TemporaryDirectory() as td:
+            sample = _make_tmp_sample(td)
+            cfg = TrainingConfig(**_base_kwargs(sample, td))
+            assert cfg.validation_split == 0.1
+
+
 class TestTrainingConfigEpochValidation:
     """TC-EC-01 through TC-EC-07: policy_epoch / value_epoch field validation."""
 

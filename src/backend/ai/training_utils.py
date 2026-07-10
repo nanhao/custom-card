@@ -24,12 +24,13 @@ def save_split_training_artifacts(
     loss_dir = output_dir if output_dir is not None else os.path.join(os.getcwd(), "loss")
     os.makedirs(loss_dir, exist_ok=True)
 
-    # Write loss CSV: phase,epoch,policy_loss,value_loss,entropy
+    # Write loss CSV: phase,epoch,policy_loss,value_loss,val_value_loss,entropy
     _write_csv(
         os.path.join(loss_dir, "loss.csv"),
-        ["phase", "epoch", "policy_loss", "value_loss", "entropy"],
+        ["phase", "epoch", "policy_loss", "value_loss", "val_value_loss", "entropy"],
         [
-            (r["phase"], r["epoch"], r["policy_loss"], r["value_loss"], r["entropy"])
+            (r["phase"], r["epoch"], r["policy_loss"], r["value_loss"],
+             r.get("val_value_loss", float("nan")), r["entropy"])
             for r in phase_records
         ],
     )
@@ -54,12 +55,24 @@ def save_split_training_artifacts(
         value_epochs = [r["epoch"] for r in phase_records if r["phase"] == "value"]
         policy_epochs = [r["epoch"] for r in phase_records if r["phase"] == "policy"]
         value_losses = [r["value_loss"] for r in phase_records if r["phase"] == "value"]
+        val_value_losses = [
+            r.get("val_value_loss", float("nan"))
+            for r in phase_records if r["phase"] == "value"
+        ]
         policy_p_losses = [r["policy_loss"] for r in phase_records if r["phase"] == "policy"]
         policy_entropies = [r["entropy"] for r in phase_records if r["phase"] == "policy"]
 
         fig, ax = plt.subplots(figsize=(8, 5))
         if value_losses:
             ax.plot(value_epochs, value_losses, "r--", label="Value Loss (Phase 1)")
+        # Add validation loss curve if any valid values exist (design/33)
+        valid_val = [
+            v for v in val_value_losses
+            if v is not None and not math.isnan(v)
+        ]
+        if valid_val:
+            ax.plot(value_epochs, val_value_losses, "b--",
+                    label="Val Value Loss (Phase 1)")
         if policy_p_losses:
             total_policy = [p + e * 0.01 for p, e in zip(policy_p_losses, policy_entropies)]
             ax.plot(policy_epochs, policy_p_losses, "g-", label="Policy Loss (Phase 3)")
