@@ -74,7 +74,6 @@ def save_split_training_artifacts(
             ax.plot(value_epochs, val_value_losses, "b--",
                     label="Val Value Loss (Phase 1)")
         if policy_p_losses:
-            total_policy = [p + e * 0.01 for p, e in zip(policy_p_losses, policy_entropies)]
             ax.plot(policy_epochs, policy_p_losses, "g-", label="Policy Loss (Phase 3)")
             ax.plot(policy_epochs, policy_entropies, "m-", label="Entropy (Phase 3)")
         ax.set_xlabel("Epoch")

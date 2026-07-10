@@ -206,7 +206,14 @@ class BaseTrainingRunner(abc.ABC):
         # Group perspectives by game_id
         game_groups: dict[str, list[dict]] = {}
         for p in perspectives:
-            gid = str(p.get("game_id", "unknown"))
+            raw_gid = p.get("game_id")
+            if raw_gid is None:
+                warnings.warn(
+                    "perspective missing 'game_id', grouping as 'unknown'. "
+                    "This may cause data leakage across games."
+                )
+                raw_gid = "unknown"
+            gid = str(raw_gid)
             if gid not in game_groups:
                 game_groups[gid] = []
             game_groups[gid].append(p)
@@ -261,15 +268,17 @@ class BaseTrainingRunner(abc.ABC):
         value_model.eval()
         total_loss = 0.0
         count = 0
-        with torch.no_grad():
-            for perspective in val_perspectives:
-                value_loss = self._process_value_perspective(
-                    perspective, value_model, config, device,
-                )
-                if value_loss is not None:
-                    total_loss += value_loss.item()
-                    count += 1
-        value_model.train()
+        try:
+            with torch.no_grad():
+                for perspective in val_perspectives:
+                    value_loss = self._process_value_perspective(
+                        perspective, value_model, config, device,
+                    )
+                    if value_loss is not None:
+                        total_loss += value_loss.item()
+                        count += 1
+        finally:
+            value_model.train()
 
         if count == 0:
             return float("nan")

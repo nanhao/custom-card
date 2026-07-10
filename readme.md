@@ -163,6 +163,14 @@ python src/backend/scripts/train.py ^
     --model rnn_v1.1 ^
     --policy-epoch 10
 
+# Train with custom validation split (15% validation set)
+python src/backend/scripts/train.py ^
+    --sample-path samples/rnn_v2_self_play.json ^
+    --output-dir src/backend/ai/rnn_v1/gen2 ^
+    --model rnn_v1.1 ^
+    --policy-epoch 10 ^
+    --validation-split 0.15
+
 python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/backend/ai/rnn_v1/gen2 --model rnn_v1.1 --policy-epoch 100
 ```
 
@@ -178,6 +186,7 @@ python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/ba
 | `--model` | `str` | *(required)* | AI registry name to train (e.g. `rnn_v1.1`) |
 | `--policy-epoch` | `int` | *(required)* | Number of training epochs for policy network (Phase 3) |
 | `--value-epoch` | `int` | *(optional)* | Number of training epochs for value network (Phase 1). Defaults to `--policy-epoch`. |
+| `--validation-split` | `float` | *(optional)* | Fraction of samples reserved for validation set (0 <= split < 1). Defaults to `training.validation_split` in `backend.json` (0.1). |
 
 **Hyperparameters** (in `config/backend.json` -> `training`):
 
@@ -193,6 +202,7 @@ python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/ba
 | `value_coef` | `float` | `0.5` | Value loss coefficient (Phase 1 only) |
 | `entropy_coef` | `float` | `0.01` | Entropy bonus coefficient (Phase 3 only) |
 | `batch_size` | `int` | `64` | Perspectives per gradient accumulation group |
+| `validation_split` | `float` | `0.1` | Fraction of samples reserved for validation set (0 = disabled) |
 
 ## API Endpoints
 
