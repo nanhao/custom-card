@@ -45,14 +45,12 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 
-# ---------------------------------------------------------------------------
-# Constants (same values as v1 per design/31 D4)
-# ---------------------------------------------------------------------------
-
-INPUT_SIZE = 42       # From Converter.INPUT_SIZE (design/27)
-HIDDEN_SIZE = 32      # GRU hidden state dimension
-NUM_CARD_TYPES = 7    # attack, defense, heavy, counter, energy, build, flex
-POLICY_OUTPUT_SIZE = 14  # 14-d: pass(0) + interleaved build/play pairs (design/28)
+from src.backend.ai.constants import (  # shared constants (design/31)
+    HIDDEN_SIZE,
+    INPUT_SIZE,
+    NUM_CARD_TYPES,
+    POLICY_OUTPUT_SIZE,
+)
 
 SKIP_INPUT_SIZE = INPUT_SIZE + HIDDEN_SIZE  # 74: GRU_out(32) + raw_input(42)
 

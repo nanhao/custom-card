@@ -7,7 +7,7 @@ Stateless — all methods are static.
 import json
 import os
 
-from src.backend.ai.rnn_v1.model import INPUT_SIZE, POLICY_OUTPUT_SIZE
+from src.backend.ai.constants import INPUT_SIZE, POLICY_OUTPUT_SIZE
 
 
 class SampleLoader:

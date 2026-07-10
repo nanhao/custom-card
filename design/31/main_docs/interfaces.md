@@ -104,7 +104,7 @@ class GRUValueModelV2(nn.Module):
 
 ### 3.3 `ai/rnn_v2/v2_training_runner.py` — `V2TrainingRunner(BaseTrainingRunner)`
 
-实现 v2 的前向策略：调用完整的 `model.forward()` 按 timestep 迭代，因为 v2 的 head 有 skip connection + 多层 MLP，不能 bypass GRU 输出。
+实现 v2 的前向策略：直接访问内部层（`model.gru` → concat(input) → `model.fc1` → ReLU → `model.fc2` → ReLU → `model.fc_*`）做序列 batch 前向。虽然绕过了 `model.forward()`，但数学上与逐步调用 `forward()` 完全等价（已验证等价性测试），且 batch 处理 GPU 效率远高于逐 timestep 迭代。
 
 ### 3.4 `ai/training_factory.py` — `TrainingRunnerFactory`（工厂类）
 

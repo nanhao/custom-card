@@ -358,3 +358,118 @@ class TestTrainingErrorHandling:
                     entropy_coef=0.01,
                     batch_size=2,
                 )
+
+
+# ===========================================================================
+# V2TrainingRunner — smoke tests (design/31 code review #3)
+# ===========================================================================
+
+
+class TestV2TrainingSmoke:
+    """V2 training pipeline works end-to-end with fresh random weights.
+
+    Creates temporary weight files and sample data, runs full three-phase
+    training, then verifies output files exist and are loadable.
+    All files created in pytest temp directories — no side effects.
+    """
+
+    def test_v2_training_completes_and_outputs_weights(self, tmp_path):
+        """V2 three-phase training with fresh weights produces loadable output."""
+        from src.backend.ai.rnn_v2.model import GRUPolicyModelV2, GRUValueModelV2
+        from src.backend.ai.rnn_v2.v2_training_runner import V2TrainingRunner
+
+        # -- Create fresh v2 weight files in gen1 dir --
+        gen_dir = tmp_path / "rnn_v2" / "gen1"
+        gen_dir.mkdir(parents=True)
+
+        policy_model = GRUPolicyModelV2()
+        value_model = GRUValueModelV2()
+        torch.save(policy_model.state_dict(), str(gen_dir / "policy.pth"))
+        torch.save(value_model.state_dict(), str(gen_dir / "value.pth"))
+
+        # -- Create minimal training sample --
+        steps_per_game = 3
+        perspectives = []
+        for p in range(2):
+            steps = []
+            for t in range(steps_per_game):
+                base = float((p + 1) * (t + 1))
+                steps.append({
+                    "input": [base * (i + 1) / 42.0 for i in range(INPUT_SIZE)],
+                    "action": (t + p) % POLICY_OUTPUT_SIZE,
+                    "reward": base / 10.0,
+                    "value": base / 5.0,
+                    "log_prob": -(base / 100.0),
+                })
+            perspectives.append({
+                "player": str(p + 1),
+                "steps": steps,
+            })
+        sample = [{
+            "game_id": "test_v2",
+            "winner": "1",
+            "rounds": steps_per_game * 2,
+            "perspectives": perspectives,
+        }]
+        sample_path = tmp_path / "sample.json"
+        sample_path.write_text(json.dumps(sample), encoding="utf-8")
+
+        # Monkeypatch registry to use tmp dir for weight paths
+        import src.backend.ai.registry as registry_module
+        original_derive = registry_module._derive_weight_path
+
+        def _patched_derive(name, gen, suffix):
+            return str(gen_dir / f"{suffix}.pth")
+
+        registry_module._derive_weight_path = _patched_derive
+
+        try:
+            output_dir = tmp_path / "output"
+            output_dir.mkdir()
+
+            config = TrainingConfig(
+                sample_path=str(sample_path),
+                output_dir=str(output_dir),
+                model="rnn_v2.1",
+                epoch=1,
+                policy_lr=0.001,
+                value_lr=0.001,
+                weight_decay=0.0,
+                gamma=0.99,
+                gae_lambda=0.95,
+                clip_eps=0.2,
+                max_grad_norm=0.5,
+                value_coef=0.5,
+                entropy_coef=0.01,
+                batch_size=2,
+            )
+
+            random.seed(42)
+            torch.manual_seed(42)
+            runner = V2TrainingRunner()
+            runner.run(config)
+
+            # Verify output files
+            assert os.path.isfile(str(output_dir / "policy.pth"))
+            assert os.path.isfile(str(output_dir / "value.pth"))
+
+            # Verify output weights are loadable into v2 models
+            trained_policy = GRUPolicyModelV2()
+            trained_value = GRUValueModelV2()
+            trained_policy.load_state_dict(torch.load(
+                str(output_dir / "policy.pth"), map_location="cpu", weights_only=True,
+            ))
+            trained_value.load_state_dict(torch.load(
+                str(output_dir / "value.pth"), map_location="cpu", weights_only=True,
+            ))
+
+            # Smoke forward with trained weights
+            x = torch.randn(1, 1, INPUT_SIZE)
+            h = torch.zeros(1, 1, HIDDEN_SIZE)
+            probs, log_probs, _ = trained_policy(x, h)
+            val, _ = trained_value(x, h)
+            assert probs.shape == (1, POLICY_OUTPUT_SIZE)
+            assert val.shape == (1, 1)
+
+        finally:
+            registry_module._derive_weight_path = original_derive

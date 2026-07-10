@@ -263,3 +263,89 @@ class TestV1Compatibility:
         value, _ = value_model.forward(x, h)
         assert probs.shape == (1, POLICY_OUTPUT_SIZE)
         assert value.shape == (1, 1)
+
+
+# ===========================================================================
+# 5. Batch vs Step-by-Step Equivalence (TC-SEQ)
+# ===========================================================================
+
+
+class TestV2SequenceEquivalence:
+    """Verify that batch internal layer access equals step-by-step forward().
+
+    V2TrainingRunner uses direct internal layer access (model.gru + model.fc1 +
+    model.fc2 + model.fc_*) for GPU-efficient batch training. This test ensures
+    that approach produces the same output as calling model.forward() per timestep.
+    """
+
+    def test_value_batch_equals_stepwise(self):
+        """V2 value: batch internal layers == step-by-step forward()."""
+        torch.manual_seed(123)
+        model = GRUValueModelV2()
+        model.eval()
+
+        T = 5
+        x_seq = torch.randn(T, 1, INPUT_SIZE)
+
+        # Step-by-step via model.forward()
+        h_step = torch.zeros(1, 1, HIDDEN_SIZE)
+        step_vals = []
+        for t in range(T):
+            x_t = x_seq[t:t + 1]
+            val, h_step = model.forward(x_t, h_step)
+            step_vals.append(val.item())
+
+        # Batch via internal layers (same as V2TrainingRunner)
+        h_seq = torch.zeros(1, 1, HIDDEN_SIZE)
+        with torch.no_grad():
+            gru_out, _ = model.gru(x_seq, h_seq)
+            combined = torch.cat(
+                [gru_out.squeeze(1), x_seq.squeeze(1)], dim=-1,
+            )
+            h1 = torch.relu(model.fc1(combined))
+            h2 = torch.relu(model.fc2(h1))
+            seq_vals = model.fc_value(h2).squeeze()
+
+        for t in range(T):
+            assert abs(step_vals[t] - seq_vals[t].item()) < 1e-5, (
+                f"Step {t}: step={step_vals[t]:.6f}, batch={seq_vals[t].item():.6f}"
+            )
+
+    def test_policy_batch_equals_stepwise(self):
+        """V2 policy: batch internal layers == step-by-step forward()."""
+        torch.manual_seed(123)
+        model = GRUPolicyModelV2()
+        model.eval()
+
+        T = 5
+        x_seq = torch.randn(T, 1, INPUT_SIZE)
+
+        # Step-by-step via model.forward()
+        h_step = torch.zeros(1, 1, HIDDEN_SIZE)
+        step_log_probs = []
+        for t in range(T):
+            x_t = x_seq[t:t + 1]
+            probs, log_probs, h_step = model.forward(
+                x_t, h_step, mask_fn=None, temperature=1.0,
+            )
+            step_log_probs.append(log_probs)
+
+        # Batch via internal layers (same as V2TrainingRunner)
+        h_seq = torch.zeros(1, 1, HIDDEN_SIZE)
+        with torch.no_grad():
+            gru_out, _ = model.gru(x_seq, h_seq)
+            combined = torch.cat(
+                [gru_out.squeeze(1), x_seq.squeeze(1)], dim=-1,
+            )
+            h1 = torch.relu(model.fc1(combined))
+            h2 = torch.relu(model.fc2(h1))
+            policy_logits = model.fc_policy(h2)
+            seq_log_probs = torch.log_softmax(policy_logits, dim=-1)
+
+        for t in range(T):
+            diff = (
+                (seq_log_probs[t] - step_log_probs[t].squeeze(0)).abs().max().item()
+            )
+            assert diff < 1e-5, (
+                f"Step {t}: max log_prob diff={diff:.6f}"
+            )
