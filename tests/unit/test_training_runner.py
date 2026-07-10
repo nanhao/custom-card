@@ -7,6 +7,7 @@ import json
 import os
 import random
 import tempfile
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -521,16 +522,13 @@ class TestV2TrainingSmoke:
         sample_path = tmp_path / "sample.json"
         sample_path.write_text(json.dumps(sample), encoding="utf-8")
 
-        # Monkeypatch registry to use tmp dir for weight paths
+        # Patch registry to use tmp dir for weight paths (clean restore via mock.patch)
         import src.backend.ai.registry as registry_module
-        original_derive = registry_module._derive_weight_path
 
         def _patched_derive(name, gen, suffix):
             return str(gen_dir / f"{suffix}.pth")
 
-        registry_module._derive_weight_path = _patched_derive
-
-        try:
+        with patch.object(registry_module, '_derive_weight_path', _patched_derive):
             output_dir = tmp_path / "output"
             output_dir.mkdir()
 
@@ -578,6 +576,3 @@ class TestV2TrainingSmoke:
             val, _ = trained_value(x, h)
             assert probs.shape == (1, POLICY_OUTPUT_SIZE)
             assert val.shape == (1, 1)
-
-        finally:
-            registry_module._derive_weight_path = original_derive
