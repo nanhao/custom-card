@@ -4,6 +4,16 @@
 - 状态。特指玩家玩家状态。
 - 造成 x 点伤害。目标的生命值减少 x 点，且触发所有伤害 hook
 - 造成 x 点生命流失。目标的生命值减少 x 点，不触发伤害 hook
+- “轮” = cycle
+- “回合” = round
+- “本轮及上轮”的含义：
+    - '本轮'指当前cycle中当前回合之前的所有回合
+    - '上轮'指上一个cycle的全部回合
+    - 判定范围=上轮全部 + 本轮(当前回合前)
+    - 公式：
+        - j = i - (i % ROUNDS_PER_CYCLE)
+        - start_index = max(0, j - ROUNDS_PER_CYCLE)
+        - end_index = i - 1
 
 # 玩家状态定义
 - 防御

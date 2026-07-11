@@ -1,12 +1,10 @@
-"""BonusDefenseResolver — grants +1 extra DEFENSE if last round played
-a '防'-tagged card (priority 11).
+"""BonusDefenseResolver — grants +1 extra DEFENSE if a '防'-tagged card
+was played in "本轮及上轮" (priority 11).
 
 Used exclusively by 攻守兼备 (FLEX) per intention #36 card.md:
 "如果本轮及上轮有打出过'防'卡，则额外增加一回合防御状态".
 
-Per D2: "本轮打出过" excludes the current card, so only checks
-card_owner.history[-1] (last round).
-
+Per D2: the current card itself is excluded.
 Blocked by FRAGILE — same as GrantDefenseResolver.
 """
 
@@ -15,32 +13,41 @@ from src.backend.game.resolver.base import ResolveContext, ResolveDetails, Resol
 
 
 class BonusDefenseResolver(Resolver):
-    """Grants +1 extra DEFENSE if last round played a '防'-tagged card (P11)."""
+    """Grants +1 extra DEFENSE if '防'-tagged card was played in 本轮/上轮 (P11)."""
 
     def get_priority(self) -> int:
         return 11
 
     def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
-        """Grant +1 DEFENSE if last round had a '防' tagged card.
+        """Grant +1 DEFENSE if 本轮/上轮 has a '防' tagged card.
 
-        Per D2: only checks history[-1], does NOT include the current card.
+        Formula per card.md:
+          j = i - (i % ROUNDS_PER_CYCLE)
+          check history[max(0, j - ROUNDS_PER_CYCLE) : i]
 
         Args:
             ctx: ResolveContext with card_owner and opponent.
             details: Collects resolution detail strings.
         """
-        # First round — no history.
-        if len(ctx.card_owner.history) == 0:
+        history = ctx.card_owner.history
+        i = len(history)
+        if i == 0:
             return
 
-        # Check if last round's card has '防' tag.
-        last_card = ctx.card_owner.history[-1].card
-        if last_card is None:
-            return
-        # Lazy import to avoid circular dependency (card_def → resolver).
+        # Lazy imports to avoid circular dependency (card_def → resolver → game_core).
+        from src.backend.game.constants import ROUNDS_PER_CYCLE  # noqa: PLC0415
         from src.backend.game.card_def import get_card_def  # noqa: PLC0415
-        tags = get_card_def(last_card).tags
-        if "防" not in tags:
+
+        j = i - (i % ROUNDS_PER_CYCLE)
+        start = max(0, j - ROUNDS_PER_CYCLE)
+
+        found = False
+        for h in history[start:i]:
+            if h.card is not None and "防" in get_card_def(h.card).tags:
+                found = True
+                break
+
+        if not found:
             return
 
         # Blocked by FRAGILE (same as GrantDefenseResolver).

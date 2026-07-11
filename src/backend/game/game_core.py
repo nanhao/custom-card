@@ -15,6 +15,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def, get_initial_draw_pile
+from src.backend.game.constants import ROUNDS_PER_CYCLE
 from src.backend.game.game_state import GameState, PlayerState
 from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
@@ -42,7 +43,6 @@ class GameCore:
     - BUILD settlement handled by BuildResolver (design/25).
     """
 
-    ROUNDS_PER_CYCLE = 3
     CARDS_PER_CYCLE = 5
     INITIAL_HP = 20
 
@@ -236,7 +236,7 @@ class GameCore:
 
         # b) Cycle-end processing (round 3)
         end_actions = EndActions()
-        if self.round_in_cycle >= self.ROUNDS_PER_CYCLE:
+        if self.round_in_cycle >= ROUNDS_PER_CYCLE:
             end_actions.cycle_ended = True
             end_actions.bleed_damage_1 = 1
             end_actions.bleed_damage_2 = 1
@@ -274,7 +274,7 @@ class GameCore:
         result = RoundResult(
             round=self.round_number - 1,  # pre-advancement round number
             cycle=self.cycle_number if not end_actions.cycle_ended else self.cycle_number - 1,
-            round_in_cycle=self.round_in_cycle - 1 if not end_actions.cycle_ended else self.ROUNDS_PER_CYCLE,
+            round_in_cycle=self.round_in_cycle - 1 if not end_actions.cycle_ended else ROUNDS_PER_CYCLE,
             cards_1=cards_1,
             cards_2=cards_2,
             before=before,
