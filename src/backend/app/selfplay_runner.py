@@ -251,7 +251,7 @@ class SelfPlayRunner:
                 else 0.0
             )
             try:
-                card1, bt1, h1_pol, lp1, val1, h1_val = self._sample_action(
+                card1, bt1, dt1, h1_pol, lp1, val1, h1_val = self._sample_action(
                     pre_state_p1, h1_pol, h1_val, config.ai1,
                     temperature=temp_p1, player_key="1",
                 )
@@ -275,7 +275,7 @@ class SelfPlayRunner:
                 else 0.0
             )
             try:
-                card2, bt2, h2_pol, lp2, val2, h2_val = self._sample_action(
+                card2, bt2, dt2, h2_pol, lp2, val2, h2_val = self._sample_action(
                     pre_state_p2, h2_pol, h2_val, config.ai2,
                     temperature=temp_p2, player_key="2",
                 )
@@ -314,6 +314,8 @@ class SelfPlayRunner:
                 card2=card2.value if card2 else None,
                 bt1=bt1.value if bt1 else None,
                 bt2=bt2.value if bt2 else None,
+                dt1=dt1.value if dt1 else None,
+                dt2=dt2.value if dt2 else None,
                 hand1=[c.value for c in pre_state_p1.players["1"].hand],
                 hand2=[c.value for c in pre_state_p2.players["2"].hand],
                 energy1=pre_state_p1.players["1"].energy,
@@ -329,6 +331,8 @@ class SelfPlayRunner:
                     [card1] if card1 else [], [card2] if card2 else [],
                     build_target_1=bt1,
                     build_target_2=bt2,
+                    dismantle_target_1=dt1,
+                    dismantle_target_2=dt2,
                 )
             except ValueError as exc:
                 print(
@@ -379,7 +383,7 @@ class SelfPlayRunner:
                 if config.perspective in ("ai1", "both"):
                     # Compute policy index for P1's action (design/14)
                     p1_action_idx = Converter.action_to_policy_index(
-                        card1, bt1,
+                        card1, bt1, dt1,
                     )
                     game_samples.append({
                         "player": "1",
@@ -391,7 +395,7 @@ class SelfPlayRunner:
                 if config.perspective in ("ai2", "both"):
                     # Compute policy index for P2's action (design/14)
                     p2_action_idx = Converter.action_to_policy_index(
-                        card2, bt2,
+                        card2, bt2, dt2,
                     )
                     game_samples.append({
                         "player": "2",

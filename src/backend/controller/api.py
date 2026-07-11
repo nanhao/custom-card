@@ -286,7 +286,7 @@ def _register_routes(app: Flask) -> None:
             # PVE: auto-compute via AppManager
             app_manager: AppManager = app.config["APP_MANAGER"]
             try:
-                card_type, build_target_type, new_hidden_state = app_manager.ai_select_action(
+                card_type, build_target_type, dismantle_target_type, new_hidden_state = app_manager.ai_select_action(
                     gm.get_state(player_perspective="2"), metadata["ai_state"], metadata["ai"]
                 )
             except ValueError as exc:
@@ -311,9 +311,10 @@ def _register_routes(app: Flask) -> None:
                     "AI_INFERENCE_ERROR", 500
                 )), 500
 
-            # Per design/28: pass → empty cards_2, build_target=None
+            # Per design/28: pass → empty cards_2. Per design/37: dismantle_target.
             cards_2 = [card_type] if card_type is not None else []
             build_target_2 = build_target_type if card_type is not None else None
+            dismantle_target_2 = dismantle_target_type if card_type is not None else None
         else:
             # PVP: deserialize cards_2 from request body
             # Per design/28: empty cards_2 = pass, no error.
@@ -327,10 +328,13 @@ def _register_routes(app: Flask) -> None:
                         str(exc), "INVALID_CARD", 400
                     )), 400
             build_target_2 = None
+            dismantle_target_2 = None
 
-        # Parse build_target_1 from request (optional, only for BUILD)
+        # Parse build_target_1 / dismantle_target_1 from request (design/37)
         build_target_1_raw = data.get("build_target_1")
+        dismantle_target_1_raw = data.get("dismantle_target_1")
         build_target_1 = str_to_card(build_target_1_raw) if build_target_1_raw else None
+        dismantle_target_1 = str_to_card(dismantle_target_1_raw) if dismantle_target_1_raw else None
 
         # ---- Delegate to GameCore ----
         try:
@@ -338,6 +342,8 @@ def _register_routes(app: Flask) -> None:
                 cards_1, cards_2,
                 build_target_1=build_target_1,
                 build_target_2=build_target_2,
+                dismantle_target_1=dismantle_target_1,
+                dismantle_target_2=dismantle_target_2,
             )
         except ValueError as exc:
             error_msg = str(exc)
