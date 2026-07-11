@@ -129,37 +129,53 @@ export default function App() {
     const hand = state.players['1'].hand;
     if (countInHand(hand, card) === 0) return;
 
-    // BUILD card requires target selection
+    // BUILD card — show dual-mode choice (design/37)
     if (card === 'build') {
       setPendingBuild(card);
-      setBuildPhase('select_target');
+      setBuildPhase('choose_mode');
       return;
     }
 
     // Normal card — play immediately
-    await doPlayCard(card, null);
+    await doPlayCard(card, null, null);
   }
 
-  /** User selected a build target (or cancelled). */
-  async function handleSelectBuildTarget(target) {
-    if (target === null) {
-      // Cancelled
-      setBuildPhase(null);
-      setPendingBuild(null);
+  /** User selected the build mode (build or dismantle) for 构建/拆解. */
+  async function handleSelectBuildTarget(card, mode) {
+    if (mode === 'build') {
+      // Build mode: show target card selection dialog
+      setBuildPhase('select_target');
       return;
     }
-    setBuildPhase(null);
-    setPendingBuild(null);
-    await doPlayCard('build', target);
+    // Should not reach here — handled by handleSelectDismantleTarget
   }
 
-  /** Common play-round logic for both normal cards and BUILD. */
-  async function doPlayCard(card, buildTarget) {
+  /** User selected a dismantle target card. */
+  async function handleSelectDismantleTarget(card, target) {
+    if (!target) {
+      // First call: switch to dismantle target selection
+      setBuildPhase('select_dismantle');
+      return;
+    }
+    // Second call: target selected, execute dismantle
+    setBuildPhase(null);
+    setPendingBuild(null);
+    await doPlayCard('build', null, target);
+  }
+
+  /** Cancel BUILD sub-flow. */
+  function handleCancelBuild() {
+    setBuildPhase(null);
+    setPendingBuild(null);
+  }
+
+  /** Common play-round logic. Per design/37: supports build and dismantle targets. */
+  async function doPlayCard(card, buildTarget, dismantleTarget = null) {
     if (mode === 'pve') {
       setP1Card(card);
       setPhase('loading');
       try {
-        const data = await playRound(gameId, card, null, buildTarget);
+        const data = await playRound(gameId, card, null, buildTarget, dismantleTarget);
         // Merge round_result statuses into state so status bar shows current round's effects
         setState({
           ...data.state,
@@ -412,6 +428,8 @@ export default function App() {
         onSelectCard={handleSelectCard}
         onPlayer2Card={handlePlayer2Card}
         onSelectBuildTarget={handleSelectBuildTarget}
+        onSelectDismantleTarget={handleSelectDismantleTarget}
+        onCancelBuild={handleCancelBuild}
         onViewPiles={handleViewPiles}
         onClosePiles={() => setPileViewer(null)}
         onNextRound={handleNextRound}

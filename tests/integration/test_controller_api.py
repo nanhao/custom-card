@@ -216,7 +216,7 @@ class TestListCards:
         resp = api_client.get("/api/cards")
         data = resp.get_json()
         cards = data["cards"]
-        assert len(cards) == 7
+        assert len(cards) == 8
         for card in cards:
             assert "description" in card, f"missing description in {card['type']}"
             assert isinstance(card["description"], str)
@@ -246,7 +246,7 @@ class TestListCards:
         assert cards["heavy"]["display_name"] == "破防重击"
         assert cards["counter"]["display_name"] == "防守反击"
         assert cards["energy"]["display_name"] == "聚能"
-        assert cards["build"]["display_name"] == "构建"
+        assert cards["build"]["display_name"] == "构建/拆解"
         assert cards["flex"]["display_name"] == "攻守兼备"
 
     def test_tags_values(self, api_client):

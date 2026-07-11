@@ -39,6 +39,7 @@ class ResolveContext:
 
     Passed directly to resolve() — no GameCore indirection needed.
     Per design/25: build_target and build_target_cost added for BUILD.
+    Per design/37: dismantle_target added for BUILD's dismantle mode.
     """
 
     card_owner: Player
@@ -47,6 +48,7 @@ class ResolveContext:
     card_played_by_opponent: CardType | None  # None when opponent passes (design/28)
     build_target: CardType | None = None
     build_target_cost: int = 0
+    dismantle_target: CardType | None = None  # design/37: BUILD dismantle mode
 
 
 class Resolver(ABC):

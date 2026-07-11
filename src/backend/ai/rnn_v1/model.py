@@ -1,39 +1,37 @@
-"""Split policy/value GRU-based AI models for the custom card game (design/14, design/34).
+"""Split policy/value GRU-based AI models for the custom card game (design/37).
 
-Per design/14: input vector redesigned — metadata (HP, energy, round, cycle) at
-front, card counts in middle, policy-index last actions at tail.
-Per design/34: INPUT_SIZE expanded from 42 to 56 — added opponent discard pile (7 dims),
-opponent draw pile (7 dims); own draw pile and last actions shifted accordingly.
+Per design/37: INPUT_SIZE 56→62 (8 card types), POLICY_OUTPUT_SIZE 14→24
+(adds dismantle dimension per card type).
 Input layout per intention/input.md.
-Per design/28: POLICY_OUTPUT_SIZE expanded from 13 to 14 — added pass at index 0;
-even indices pure play, odd indices build+target.
 
 Architecture:
-    GRUPolicyModel: Input(56) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax
-        Output 14-d: index 0=pass, even(2,4,6,8,10,12)=pure play, odd(1,3,5,7,9,11,13)=build.
-    GRUValueModel:  Input(56) -> GRU(32, 1 layer) -> Linear(32->1)
+    GRUPolicyModel: Input(62) -> GRU(32, 1 layer) -> Linear(32->24) -> softmax
+        Output 24-d: pass(0) + 8×(play, build, dismantle) triplets.
+    GRUValueModel:  Input(62) -> GRU(32, 1 layer) -> Linear(32->1)
 
-Input vector layout (0-based, per intention/input.md, design/34):
+Input vector layout (0-based, per intention/input.md, design/37):
     index 0:     Own HP
     index 1:     Opponent HP
     index 2:     Own energy (0-5)
     index 3:     Opponent energy (0-5)
     index 4:     round_in_cycle (1-3, design/26 D1)
     index 5:     cycle number
-    indices 6-12:   Own hand card counts (attack..flex, 7 types)
-    indices 13-19:  Opponent hand card counts (attack..flex, 7 types)
-    indices 20-22:  Own status lifetimes (DEFENSE, GUARD, FRAGILE; 0 if absent)
-    indices 23-25:  Opponent status lifetimes (DEFENSE, GUARD, FRAGILE; 0 if absent)
-    indices 26-32:  Own discard pile card counts (attack..flex, 7 types)
-    indices 33-39:  Opponent discard pile card counts (attack..flex, 7 types)  ← NEW design/34
-    indices 40-46:  Own draw pile card counts (attack..flex, 7 types)          ← shifted design/34
-    indices 47-53:  Opponent draw pile card counts (attack..flex, 7 types)    ← NEW design/34
-    index 54:    Own last action policy index (-1 if first round)              ← shifted design/34
-    index 55:    Opponent last action policy index (-1 if first round)         ← shifted design/34
+    indices 6-13:   Own hand card counts (8 types)
+    indices 14-21:  Opponent hand card counts (8 types)
+    indices 22-24:  Own status lifetimes (DEFENSE, GUARD, FRAGILE; 0 if absent)
+    indices 25-27:  Opponent status lifetimes
+    indices 28-35:  Own discard pile card counts (8 types)
+    indices 36-43:  Opponent discard pile card counts (8 types)
+    indices 44-51:  Own draw pile card counts (8 types)
+    indices 52-59:  Opponent draw pile card counts (8 types)
+    index 60:    Own last action policy index (-1 if first round)
+    index 61:    Opponent last action policy index (-1 if first round)
 
-mask_fn supports 13-d interleaved masking:
-    - Odd indices (1,3,5,7,9,11): block cards not in hand
-    - Even indices (0,2,4,6,8,10,12): block when build not available or insufficient energy
+mask_fn supports 24-d triplet masking:
+    - Pass (index 0): always legal
+    - Play indices: block cards not in hand
+    - Build indices: block if can't build or insufficient energy
+    - Dismantle indices: block if BUILD not in hand or discard lacks target
 """
 
 from collections.abc import Callable

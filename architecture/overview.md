@@ -9,9 +9,9 @@ A 2-player turn-based card game with simultaneous card resolution, AI opponents 
 The current game (design/11+) introduces a deep strategic system on top of the original v1 rules:
 
 - **Players**: 2, each starting with 20 HP.
-- **Card Types**: 7 — Attack (攻击), Defense (防御), Heavy Strike (重击), Counter (防守反击), Energy (聚能), Build (构建), Flex (攻守兼备).
+- **Card Types**: 8 — Attack (连续击), Defense (格挡), Heavy Strike (破防重击), Counter (防守反击), Energy (聚能), Build/Dismantle (构建/拆解), Flex (攻守兼备), Iron Defense (严防死守).
 - **Energy System**: Each player has an energy bar (0–5). Cards have a `build_cost` (1 or 2). Playing cards costs _no_ energy; only _building_ new cards via the Build card consumes energy.
-- **Deck System**: Each player has a draw pile and discard pile. No initial hand — cards are drawn at cycle start via `Player.draw_cards()`. Initial draw pile: 2× Attack + 1 each of Defense, Heavy, Counter, Energy, Build (7 cards, no Flex).
+- **Deck System**: Each player has a draw pile and discard pile. No initial hand — cards are drawn at cycle start via `Player.draw_cards()`. Initial draw pile: 2× Attack + 1 each of Defense, Heavy, Counter, Energy, Build (7 cards, no Flex, no Iron Defense).
 - **Cycle (轮) System**: A cycle consists of 3 rounds (design/26 D1). At each cycle start, all hands are discarded to discard pile, then 5 cards are drawn from draw pile via smart draw (design/35): discard pile is only shuffled into draw pile when draw pile is empty during drawing. The initial draw pile contains 7 cards (design/26 D3), so 2 cards remain after the first deal. At cycle end, each player loses 1 HP (bleed) to prevent infinite loops.
 - **Priority Resolution**: Each card effect has a priority (10, 11, or 12). Higher priority effects resolve first.
 - **Status System**: Players can gain statuses with managed lifetimes:
@@ -105,19 +105,19 @@ Pure ML — no knowledge of game rules.
 | `training_utils.py` | Training artifact generation — CSV loss/grad logging + PNG charts |
 | `rnn_v1/model.py` | Split GRU models: `GRUPolicyModel` (56→32→14) + `GRUValueModel` (56→32→1) |
 
-**Model Architecture (design/14, design/34)**:
-- Input: 56-d vector (design/34)
+- Model Architecture (design/37):
+- Input: 62-d vector (8 card types × 7 segments + status × 3 per player + last action × 2 + metadata)
   - Metadata (6): HP×2, energy×2, round_in_cycle, cycle
-  - Own hand counts (7): attack, defense, heavy, counter, energy, build, flex
-  - Opponent hand counts (7): same order
+  - Own hand counts (8): build, attack, defense, heavy, counter, energy, flex, iron_defense
+  - Opponent hand counts (8): same order
   - Own status lifetimes (3): DEFENSE, GUARD, FRAGILE (0 if absent)
   - Opponent status lifetimes (3): same order
-  - Own discard pile counts (7)
-  - Opponent discard pile counts (7)
-  - Own draw pile counts (7)
-  - Opponent draw pile counts (7)
+  - Own discard pile counts (8)
+  - Opponent discard pile counts (8)
+  - Own draw pile counts (8)
+  - Opponent draw pile counts (8)
   - Last actions (2): own last policy index, opponent last policy index (-1 if first round)
-- Policy: GRU(32) → Linear(32→14) → softmax (14-d: 0=pass, even=play, odd=build+target, design/28)
+- Policy: GRU(32) → Linear(32→24) → softmax (24-d: 0=pass, triplets of play/build/dismantle per card type)
 - Value: GRU(32) → Linear(32→1) → scalar value estimate (no tanh)
 - Mask function (injected via forward): blocks illegal actions (cards not in hand, insufficient energy for build); pass always legal
 - rnn_v2 adds skip connection: Input(56)+GRU_out(32) → Concat(88) → MLP(88→64→32→14/1) (design/34)

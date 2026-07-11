@@ -1,0 +1,75 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+actor "玩家/AI" as Player
+participant "GameCore" as GC
+participant "CardResolver" as CR
+participant "BuildResolver" as BR
+participant "DismantleResolver" as DR
+participant "Player" as P
+
+== 构建模式（上半部分） ==
+
+Player -> GC: ① play_round([BUILD], [card], build_target=ATTACK)
+activate GC
+
+GC -> GC: ② _validate: build_target非None, dismantle_target为None, energy>0
+GC -> GC: ③ 构造 ResolveContext(build_target=ATTACK, dismantle_target=None)
+GC -> GC: ④ 创建 BuildResolver + DismantleResolver 任务
+GC -> CR: ⑤ CardResolver.resolve(tasks)
+activate CR
+
+CR -> BR: ⑥ BuildResolver.resolve(ctx, details)
+activate BR
+BR -> BR: ⑦ build_target非None，执行构建
+BR -> P: ⑧ card_owner.energy -= build_target_cost
+BR -> P: ⑨ card_owner.draw_pile.append(ATTACK) ← 放入抽牌堆
+deactivate BR
+
+CR -> DR: ⑩ DismantleResolver.resolve(ctx, details)
+activate DR
+DR -> DR: ⑪ dismantle_target为None，跳过
+deactivate DR
+
+deactivate CR
+
+GC -> P: ⑫ play_cards([BUILD]) — 从手牌移除
+GC -> P: ⑬ discard_pile.extend([BUILD]) — BUILD卡进入弃牌堆
+GC -> P: ⑭ 记录 PlayerHistoryItem(BUILD, build_target=ATTACK)
+
+deactivate GC
+
+== 拆解模式（下半部分） ==
+
+Player -> GC: ① play_round([BUILD], [card], dismantle_target=ATTACK)
+activate GC
+
+GC -> GC: ② _validate: dismantle_target非None, build_target为None, 弃牌堆有ATTACK
+GC -> GC: ③ 构造 ResolveContext(build_target=None, dismantle_target=ATTACK)
+GC -> GC: ④ 创建 BuildResolver + DismantleResolver 任务
+GC -> CR: ⑤ CardResolver.resolve(tasks)
+activate CR
+
+CR -> BR: ⑥ BuildResolver.resolve(ctx, details)
+activate BR
+BR -> BR: ⑦ build_target为None，跳过
+deactivate BR
+
+CR -> DR: ⑧ DismantleResolver.resolve(ctx, details)
+activate DR
+DR -> P: ⑨ card_owner.remove_from_discard(ATTACK) — 从弃牌堆移除
+DR -> DR: ⑩ details.add("DISMANTLE attack")
+deactivate DR
+
+deactivate CR
+
+GC -> P: ⑪ play_cards([BUILD]) — 从手牌移除
+GC -> P: ⑫ discard_pile.extend([BUILD]) — BUILD卡进入弃牌堆
+GC -> P: ⑬ 记录 PlayerHistoryItem(BUILD, dismantle_target=ATTACK)
+
+deactivate GC
+
+@enduml

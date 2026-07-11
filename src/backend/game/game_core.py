@@ -87,12 +87,14 @@ class GameCore:
         cards_2: list[CardType],
         build_target_1: CardType | None = None,
         build_target_2: CardType | None = None,
+        dismantle_target_1: CardType | None = None,
+        dismantle_target_2: CardType | None = None,
     ) -> RoundResult:
         """Execute one round of the game.
 
         Flow:
-        1. Validate (game not over, cards in hand, BUILD energy check).
-        2. Build resolver tasks with build_target passed via ResolveContext.
+        1. Validate (game not over, cards in hand, BUILD dual-mode check).
+        2. Build resolver tasks with build_target/dismantle_target via ResolveContext.
         3. Resolve card effects via CardResolver.
         4. Discard played cards.
         5. Record history.
@@ -103,8 +105,10 @@ class GameCore:
         Args:
             cards_1: Cards played by Player 1 (empty list = pass).
             cards_2: Cards played by Player 2 (empty list = pass).
-            build_target_1: Card to construct if P1 plays BUILD.
-            build_target_2: Card to construct if P2 plays BUILD.
+            build_target_1: Card to construct if P1 plays BUILD (build mode).
+            build_target_2: Card to construct if P2 plays BUILD (build mode).
+            dismantle_target_1: Card to remove if P1 plays BUILD (dismantle mode).
+            dismantle_target_2: Card to remove if P2 plays BUILD (dismantle mode).
 
         Returns:
             RoundResult with all round outcome data.
@@ -114,7 +118,11 @@ class GameCore:
                         for BUILD, or players are not initialized.
         """
         # Step 1: Validate
-        self._validate(cards_1, cards_2, build_target_1, build_target_2)
+        self._validate(
+            cards_1, cards_2,
+            build_target_1, build_target_2,
+            dismantle_target_1, dismantle_target_2,
+        )
 
         # Step 1.5: Capture before-resolve snapshot.
         # Record HP, energy, and statuses BEFORE any card effects are applied.
@@ -144,6 +152,7 @@ class GameCore:
                     card_played_by_opponent=cards_2[0] if cards_2 else None,
                     build_target=build_target,
                     build_target_cost=build_cost,
+                    dismantle_target=dismantle_target_1,
                 )
                 for resolver_cls in get_card_def(card_type).resolvers:
                     tasks.append((resolver_cls(), ctx))
@@ -159,6 +168,7 @@ class GameCore:
                     card_played_by_opponent=cards_1[0] if cards_1 else None,
                     build_target=build_target,
                     build_target_cost=build_cost,
+                    dismantle_target=dismantle_target_2,
                 )
                 for resolver_cls in get_card_def(card_type).resolvers:
                     tasks.append((resolver_cls(), ctx))
@@ -178,11 +188,20 @@ class GameCore:
 
         # Step 5: Record history as PlayerHistoryItem (design/16 D3)
         # Per design/28: pass records card=None, build_target=None.
+        # Per design/37: dismantle_target recorded for BUILD dismantle mode.
         self.player_1.history.append(
-            PlayerHistoryItem(cards_1[0] if cards_1 else None, build_target_1 if cards_1 else None)
+            PlayerHistoryItem(
+                cards_1[0] if cards_1 else None,
+                build_target_1 if cards_1 and CardType.BUILD in cards_1 else None,
+                dismantle_target_1 if cards_1 and CardType.BUILD in cards_1 else None,
+            )
         )
         self.player_2.history.append(
-            PlayerHistoryItem(cards_2[0] if cards_2 else None, build_target_2 if cards_2 else None)
+            PlayerHistoryItem(
+                cards_2[0] if cards_2 else None,
+                build_target_2 if cards_2 and CardType.BUILD in cards_2 else None,
+                dismantle_target_2 if cards_2 and CardType.BUILD in cards_2 else None,
+            )
         )
 
         # Step 6: after_resolve — snapshot after card resolution, before round-end.
@@ -381,18 +400,23 @@ class GameCore:
         cards_2: list[CardType],
         build_target_1: CardType | None,
         build_target_2: CardType | None,
+        dismantle_target_1: CardType | None = None,
+        dismantle_target_2: CardType | None = None,
     ) -> None:
         """Validate that play_round() can proceed.
 
         Per design/28: empty cards list = pass — skip all validation for that player.
+        Per design/37: BUILD dual-mode — build_target and dismantle_target are
+        mutually exclusive. Build mode requires energy; dismantle mode does not.
 
         Raises ValueError if:
         - Game is over.
         - Players are not initialized.
         - Any card is not in the respective player's hand.
-        - BUILD played with energy=0.
-        - BUILD played without build_target.
-        - BUILD target costs more energy than available.
+        - BUILD played with both or neither of build_target/dismantle_target.
+        - BUILD build mode: energy=0 or insufficient energy for target.
+        - BUILD dismantle mode: dismantle_target not in discard pile.
+        - Non-BUILD card has a build_target or dismantle_target set.
         """
         if self.is_over:
             raise ValueError("Cannot play round: the game is over.")
@@ -407,21 +431,17 @@ class GameCore:
                 raise ValueError(
                     f"Not all cards in {[c.name for c in cards_1]} are in Player 1's hand."
                 )
-            # BUILD validation for P1
+            # BUILD validation for P1 — dual-mode (design/37)
             if CardType.BUILD in cards_1:
-                if self.player_1.energy == 0:
+                self._validate_build_dual_mode(
+                    self.player_1, build_target_1, dismantle_target_1,
+                )
+            else:
+                # Non-BUILD cards must not have build/dismantle targets
+                if build_target_1 is not None or dismantle_target_1 is not None:
                     raise ValueError(
-                        "Cannot play BUILD: energy is 0."
-                    )
-                if build_target_1 is None:
-                    raise ValueError(
-                        "Cannot play BUILD: build_target_1 is required."
-                    )
-                build_cost = get_card_def(build_target_1).build_cost
-                if build_cost > self.player_1.energy:
-                    raise ValueError(
-                        f"Cannot build {build_target_1.value}: "
-                        f"cost {build_cost} > energy {self.player_1.energy}."
+                        "build_target_1/dismantle_target_1 must be None "
+                        "when not playing BUILD."
                     )
 
         # Per design/28: empty cards = pass, skip hand/BUILD validation
@@ -430,22 +450,73 @@ class GameCore:
                 raise ValueError(
                     f"Not all cards in {[c.name for c in cards_2]} are in Player 2's hand."
                 )
-            # BUILD validation for P2
+            # BUILD validation for P2 — dual-mode (design/37)
             if CardType.BUILD in cards_2:
-                if self.player_2.energy == 0:
+                self._validate_build_dual_mode(
+                    self.player_2, build_target_2, dismantle_target_2,
+                )
+            else:
+                if build_target_2 is not None or dismantle_target_2 is not None:
                     raise ValueError(
-                        "Cannot play BUILD: energy is 0."
+                        "build_target_2/dismantle_target_2 must be None "
+                        "when not playing BUILD."
                     )
-                if build_target_2 is None:
-                    raise ValueError(
-                        "Cannot play BUILD: build_target_2 is required."
-                    )
-                build_cost = get_card_def(build_target_2).build_cost
-                if build_cost > self.player_2.energy:
-                    raise ValueError(
-                        f"Cannot build {build_target_2.value}: "
-                        f"cost {build_cost} > energy {self.player_2.energy}."
-                    )
+
+    def _validate_build_dual_mode(
+        self,
+        player: "Player",
+        build_target: CardType | None,
+        dismantle_target: CardType | None,
+    ) -> None:
+        """Validate BUILD card dual-mode: build and dismantle are mutually exclusive.
+
+        Per design/37: when playing BUILD, exactly one of build_target or
+        dismantle_target must be non-None.
+
+        Args:
+            player: The player playing BUILD.
+            build_target: Card to build (build mode), or None.
+            dismantle_target: Card to dismantle (dismantle mode), or None.
+
+        Raises:
+            ValueError: If both or neither targets are set, if build mode has
+                        insufficient energy, or dismantle target not in discard.
+        """
+        # Lazy import to avoid circular dependency at module level.
+        from src.backend.game.player import Player  # noqa: PLC0415
+
+        # Must have exactly one target (mutually exclusive)
+        if build_target is None and dismantle_target is None:
+            raise ValueError(
+                "Cannot play BUILD: must specify either build_target or "
+                "dismantle_target."
+            )
+        if build_target is not None and dismantle_target is not None:
+            raise ValueError(
+                "Cannot play BUILD: build_target and dismantle_target are "
+                "mutually exclusive."
+            )
+
+        # Build mode validation
+        if build_target is not None:
+            if player.energy == 0:
+                raise ValueError(
+                    "Cannot play BUILD (build mode): energy is 0."
+                )
+            build_cost = get_card_def(build_target).build_cost
+            if build_cost > player.energy:
+                raise ValueError(
+                    f"Cannot build {build_target.value}: "
+                    f"cost {build_cost} > energy {player.energy}."
+                )
+
+        # Dismantle mode validation
+        if dismantle_target is not None:
+            if dismantle_target not in player.discard_pile:
+                raise ValueError(
+                    f"Cannot dismantle {dismantle_target.value}: "
+                    f"not found in discard pile."
+                )
 
     def _check_game_end(self) -> tuple[bool, str | None]:
         """Evaluate game-end conditions: HP=0 only (no round limit in v2).

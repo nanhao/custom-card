@@ -1,4 +1,7 @@
-"""Unit tests for rnn_v2 skip-connection models (design/34 test_cases.md)."""
+"""Unit tests for rnn_v2 skip-connection models (design/34 test_cases.md, design/37).
+
+Per design/37: INPUT_SIZE 56→62, POLICY_OUTPUT_SIZE 14→24, NUM_CARD_TYPES 7→8.
+"""
 
 import torch
 import pytest
@@ -23,23 +26,23 @@ class TestPolicyModelV2:
     """TC-PV2: GRUPolicyModelV2 structure and forward propagation."""
 
     def test_constants(self):
-        """TC-PV2-01: INPUT_SIZE=56, HIDDEN_SIZE=32, POLICY_OUTPUT_SIZE=14, NUM_CARD_TYPES=7."""
-        assert INPUT_SIZE == 56
+        """TC-PV2-01: INPUT_SIZE=62, HIDDEN_SIZE=32, POLICY_OUTPUT_SIZE=24, NUM_CARD_TYPES=8 (design/37)."""
+        assert INPUT_SIZE == 62
         assert HIDDEN_SIZE == 32
-        assert POLICY_OUTPUT_SIZE == 14
-        assert NUM_CARD_TYPES == 7
+        assert POLICY_OUTPUT_SIZE == 24
+        assert NUM_CARD_TYPES == 8
 
     def test_skip_input_size_and_fc1(self):
-        """TC-IS-04/05: SKIP_INPUT_SIZE=88, fc1.in_features=88."""
+        """TC-IS-04/05: SKIP_INPUT_SIZE=94 (=62+32), fc1.in_features=94 (design/37)."""
         model = GRUPolicyModelV2()
-        assert model.fc1.in_features == 88, f"Expected fc1.in_features=88, got {model.fc1.in_features}"
+        assert model.fc1.in_features == 94, f"Expected fc1.in_features=94, got {model.fc1.in_features}"
         assert model.fc2.in_features == 64
         assert model.fc_policy.out_features == POLICY_OUTPUT_SIZE
         value_model = GRUValueModelV2()
-        assert value_model.fc1.in_features == 88
+        assert value_model.fc1.in_features == 94
 
     def test_forward_output_shapes(self):
-        """TC-PV2-02: probs=(1,14), log_probs=(1,14), new_hidden=(1,1,32), sums ≈ 1.0."""
+        """TC-PV2-02: probs=(1,24), log_probs=(1,24), new_hidden=(1,1,32), sums ≈ 1.0."""
         model = GRUPolicyModelV2()
         x = torch.randn(1, 1, INPUT_SIZE)
         hidden = torch.randn(1, 1, HIDDEN_SIZE)
@@ -194,14 +197,14 @@ class TestSkipConnection:
         assert not torch.allclose(probs_a, probs_b)
 
     def test_hand_card_segment_affects_policy(self):
-        """TC-SC-02: changing indices 6-12 (own hand) → different probs distribution."""
+        """TC-SC-02: changing indices 6-13 (own hand, 8 types) → different probs distribution."""
         model = GRUPolicyModelV2()
         x_normal = torch.zeros(1, 1, INPUT_SIZE)
         x_normal[0, 0, 6] = 3.0  # 3 attack cards in hand
         x_normal[0, 0, 7] = 2.0  # 2 defense cards in hand
 
         x_no_hand = torch.zeros(1, 1, INPUT_SIZE)
-        # indices 6-12 remain all zeros (empty hand)
+        # indices 6-13 remain all zeros (empty hand)
 
         h0 = torch.zeros(1, 1, HIDDEN_SIZE)
         probs_normal, _, _ = model.forward(x_normal, h0)
@@ -219,7 +222,7 @@ class TestV1Compatibility:
     """TC-CP: v2 models accept same input/output shapes as v1."""
 
     def test_policy_v1_input_shape_works_on_v2(self):
-        """TC-CP-01: same (1,1,42) input works on v2 policy, output shapes match v1."""
+        """TC-CP-01: same (1,1,62) input works on v2 policy, output shapes match v1."""
         from src.backend.ai.rnn_v1.model import GRUPolicyModel
 
         x = torch.randn(1, 1, INPUT_SIZE)
@@ -236,7 +239,7 @@ class TestV1Compatibility:
         assert h_v1.shape == h_v2.shape == (1, 1, HIDDEN_SIZE)
 
     def test_value_v1_input_shape_works_on_v2(self):
-        """TC-CP-01: same (1,1,42) input works on v2 value, output shapes match v1."""
+        """TC-CP-01: same (1,1,62) input works on v2 value, output shapes match v1."""
         from src.backend.ai.rnn_v1.model import GRUValueModel
 
         x = torch.randn(1, 1, INPUT_SIZE)

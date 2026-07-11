@@ -134,14 +134,16 @@ class AppManager:
 
         x = torch.tensor(input_vector, dtype=torch.float32).view(1, 1, INPUT_SIZE)
         h = torch.tensor(hidden_state, dtype=torch.float32).view(1, 1, HIDDEN_SIZE)
-        mask_fn = self._make_mask_fn(hand, energy)
+        mask_fn = self._make_mask_fn(
+            hand, energy, discard_pile=state.players["2"].discard_pile,
+        )
 
         with torch.inference_mode():
             probs, _log_probs, new_hidden = model(x, h, mask_fn=mask_fn)
             action_idx = int(torch.argmax(probs, dim=-1).item())
 
-        # Decode 14-d output (design/28)
-        card_type, build_target = Converter.policy_index_to_action(action_idx)
+        # Decode 24-d output (design/37)
+        card_type, build_target, _dismantle = Converter.policy_index_to_action(action_idx)
 
         new_hidden_list = new_hidden.squeeze(1).squeeze(0).tolist()
         return card_type, build_target, new_hidden_list
@@ -180,7 +182,9 @@ class AppManager:
         x = torch.tensor(input_vector, dtype=torch.float32).view(1, 1, INPUT_SIZE)
         h_pol = torch.tensor(hidden_state_policy, dtype=torch.float32).view(1, 1, HIDDEN_SIZE)
         h_val = torch.tensor(hidden_state_value, dtype=torch.float32).view(1, 1, HIDDEN_SIZE)
-        mask_fn = self._make_mask_fn(hand, energy)
+        mask_fn = self._make_mask_fn(
+            hand, energy, discard_pile=state.players[player_key].discard_pile,
+        )
 
         with torch.inference_mode():
             probs, log_probs, new_h_pol = policy_model(
@@ -195,8 +199,8 @@ class AppManager:
                 action_idx = int(torch.multinomial(probs, 1).item())
                 log_prob = float(log_probs[0, action_idx].item())
 
-        # Decode 14-d output (design/28)
-        card_type, build_target = Converter.policy_index_to_action(action_idx)
+        # Decode 24-d output (design/37)
+        card_type, build_target, _dismantle = Converter.policy_index_to_action(action_idx)
 
         new_h_pol_list = new_h_pol.squeeze(1).squeeze(0).tolist()
         new_h_val_list = new_h_val.squeeze(1).squeeze(0).tolist()
@@ -272,45 +276,52 @@ class AppManager:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _make_mask_fn(hand: list[CardType], energy: int):
-        """Create a 14-d mask function closure (design/14, design/28).
+    def _make_mask_fn(
+        hand: list[CardType], energy: int, discard_pile: list[CardType] | None = None,
+    ):
+        """Create a 24-d mask function closure (design/37).
 
-        Per design/19 D7: hand is list[CardType], not list[str].
-        Per design/20: Converter._PLAY_TO_INDEX and _CARD_MAP use
-        CardType keys, no .value conversion needed.
-
-        Per design/28 (14-d layout):
+        Per design/37 (24-d layout):
         - Index 0: pass — always legal, never masked.
-        - Even indices (2,4,6,8,10,12): pure card plays.
-            - Block cards not in hand.
-        - Odd indices (1,3,5,7,9,11,13): build + build target.
-            - Block all if BUILD not in hand or energy == 0.
-            - Otherwise, block targets exceeding available energy.
+        - Play indices (3,6,9,12,15,18,21): block cards not in hand.
+        - Build indices (1,4,7,10,13,16,19,22): block if BUILD not in hand,
+          energy=0, or energy < build_cost of target.
+        - Dismantle indices (2,5,8,11,14,17,20,23): block if BUILD not in hand,
+          or discard_pile is empty/doesn't contain target card.
 
         Args:
             hand: List of CardType in the player's hand.
             energy: Current energy of the player.
+            discard_pile: Player's discard pile for dismantle availability check.
 
         Returns:
             A callable mask_fn(logits: Tensor) -> Tensor.
         """
-        # Per design/20: hand is already CardType, no .value conversion needed.
         legal_cards = set(hand)
         can_build = CardType.BUILD in legal_cards and energy > 0
+        has_build_card = CardType.BUILD in legal_cards
+
+        # Pre-compute available discard types for dismantle checks
+        discard_set: set[CardType] = set(discard_pile) if discard_pile else set()
 
         def mask_fn(logits: torch.Tensor) -> torch.Tensor:
             masked = logits.clone()
-            # Index 0 (pass): always legal, never masked (design/28)
-            # Even indices (2,4,6,8,10,12): block cards not in hand
+            # Index 0 (pass): always legal
+            # Play indices: block cards not in hand
             for card_type, idx in Converter._PLAY_TO_INDEX.items():
                 if card_type not in legal_cards:
                     masked[0, idx] = float('-inf')
 
-            # Odd indices (1,3,5,7,9,11,13): block build actions if can't build or too expensive.
-            # Per design/20: _CARD_MAP is (CardType, play_index, build_index).
-            for card_type, _, build_idx in Converter._CARD_MAP:
+            # Build indices: block if can't build or too expensive
+            # _CARD_MAP is (card_type, play_idx, build_idx, dismantle_idx)
+            for card_type, _, build_idx, _ in Converter._CARD_MAP:
                 if not can_build or Converter.build_cost(card_type) > energy:
                     masked[0, build_idx] = float('-inf')
+
+            # Dismantle indices: block if BUILD not in hand or discard lacks target
+            for card_type, _, _, dismantle_idx in Converter._CARD_MAP:
+                if not has_build_card or card_type not in discard_set:
+                    masked[0, dismantle_idx] = float('-inf')
 
             return masked
 

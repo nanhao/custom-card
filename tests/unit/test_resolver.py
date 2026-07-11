@@ -1,7 +1,9 @@
-"""Unit tests for resolver.py — Resolver strategy pattern (design/22).
+"""Unit tests for resolver.py — Resolver strategy pattern (design/22, design/37).
 
 Per design/22: CardResolverRegistry removed; card → CardType mapping
 now lives in CardDef.resolvers.
+Per design/37: BUILD has 2 resolvers (BuildResolver + DismantleResolver),
+IRON_DEFENSE added as 8th card type.
 Test cases per design/22 test_cases.md.
 """
 
@@ -109,7 +111,8 @@ def _build_tasks(player_1, player_2, cards_1, cards_2):
 
 
 class TestCardDefResolvers:
-    """Per design/22: CardDef.resolvers replaces CardResolverRegistry."""
+    """Per design/22: CardDef.resolvers replaces CardResolverRegistry.
+    Per design/37: BUILD has 2 resolvers, IRON_DEFENSE added."""
 
     def test_attack_has_one_resolver(self):
         """TC-RG-01: ATTACK has AttackDamageResolver."""
@@ -124,10 +127,18 @@ class TestCardDefResolvers:
         assert set(cd.resolvers) == {GrantDefenseResolver, GrantGuardResolver}
 
     def test_all_card_types_have_resolvers(self):
-        """TC-RG-03: every CardType has correct resolver counts."""
-        expected = {CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 3,
-                    CardType.COUNTER: 3, CardType.ENERGY: 1, CardType.BUILD: 1,
-                    CardType.FLEX: 3}
+        """TC-RG-03: every CardType has correct resolver counts (design/37: 8 types)."""
+        from src.backend.game.resolver import DismantleResolver, StrongDefenseResolver
+        expected = {
+            CardType.ATTACK: 1,
+            CardType.DEFENSE: 2,
+            CardType.HEAVY: 3,
+            CardType.COUNTER: 3,
+            CardType.ENERGY: 1,
+            CardType.BUILD: 2,
+            CardType.FLEX: 3,
+            CardType.IRON_DEFENSE: 2,
+        }
         for ct, count in expected.items():
             cd = get_card_def(ct)
             assert len(cd.resolvers) == count, f"{ct.name}: expected {count}, got {len(cd.resolvers)}"
@@ -410,57 +421,57 @@ class TestResolveContextBuildTarget:
 
 
 # =============================================================================
-# 11. BuildResolver
+# 11. BuildResolver — design/37: card added to draw_pile (was discard_pile)
 # =============================================================================
 
 
 class TestBuildResolver:
-    """TC-BLD-01 ~ TC-BLD-06: BuildResolver settlement logic (design/25)."""
+    """TC-BLD-01 ~ TC-BLD-06: BuildResolver settlement logic (design/37: draw_pile)."""
 
     def test_build_attack_cost_1(self):
-        """TC-BLD-01: BUILD ATTACK (cost=1), energy 2 -> 1, card added to discard."""
+        """TC-BLD-01: BUILD ATTACK (cost=1), energy 2 -> 1, card added to draw_pile."""
         gm, ctx = _make_ctx(
             hp_1=20, energy_1=2, source="1",
             owner_card=CardType.BUILD,
         )
         ctx.build_target = CardType.ATTACK
         ctx.build_target_cost = 1
-        gm.player_1.discard_pile = []
+        gm.player_1.draw_pile = []
         details = ResolveDetails()
         BuildResolver().resolve(ctx, details)
         assert gm.player_1.energy == 1
-        assert CardType.ATTACK in gm.player_1.discard_pile
-        assert len(gm.player_1.discard_pile) == 1
-        assert any("BUILD attack (cost 1)" in d for d in details.details)
+        assert CardType.ATTACK in gm.player_1.draw_pile
+        assert len(gm.player_1.draw_pile) == 1
+        assert any("BUILD attack -> draw pile (cost 1)" in d for d in details.details)
 
     def test_build_heavy_cost_2(self):
-        """TC-BLD-02: BUILD HEAVY (cost=2), energy 2 -> 0, card added to discard."""
+        """TC-BLD-02: BUILD HEAVY (cost=2), energy 2 -> 0, card added to draw_pile."""
         gm, ctx = _make_ctx(
             hp_1=20, energy_1=2, source="1",
             owner_card=CardType.BUILD,
         )
         ctx.build_target = CardType.HEAVY
         ctx.build_target_cost = 2
-        gm.player_1.discard_pile = []
+        gm.player_1.draw_pile = []
         details = ResolveDetails()
         BuildResolver().resolve(ctx, details)
         assert gm.player_1.energy == 0
-        assert CardType.HEAVY in gm.player_1.discard_pile
-        assert any("BUILD heavy (cost 2)" in d for d in details.details)
+        assert CardType.HEAVY in gm.player_1.draw_pile
+        assert any("BUILD heavy -> draw pile (cost 2)" in d for d in details.details)
 
-    def test_build_flex_with_existing_discard(self):
-        """TC-BLD-03: BUILD FLEX (cost=2) with existing discard, energy 5 -> 3."""
+    def test_build_flex_with_existing_draw(self):
+        """TC-BLD-03: BUILD FLEX (cost=2) with existing draw_pile contents, energy 5 -> 3."""
         gm, ctx = _make_ctx(
             hp_1=20, energy_1=5, source="1",
             owner_card=CardType.BUILD,
         )
         ctx.build_target = CardType.FLEX
         ctx.build_target_cost = 2
-        gm.player_1.discard_pile = [CardType.ATTACK]
+        gm.player_1.draw_pile = [CardType.ATTACK]
         details = ResolveDetails()
         BuildResolver().resolve(ctx, details)
         assert gm.player_1.energy == 3
-        assert gm.player_1.discard_pile == [CardType.ATTACK, CardType.FLEX]
+        assert gm.player_1.draw_pile == [CardType.ATTACK, CardType.FLEX]
 
     def test_build_target_none_is_noop(self):
         """TC-BLD-04: build_target is None -> no state changes (defensive)."""
@@ -469,11 +480,11 @@ class TestBuildResolver:
             owner_card=CardType.BUILD,
         )
         ctx.build_target = None
-        gm.player_1.discard_pile = []
+        gm.player_1.draw_pile = []
         details = ResolveDetails()
         BuildResolver().resolve(ctx, details)
         assert gm.player_1.energy == 2
-        assert gm.player_1.discard_pile == []
+        assert gm.player_1.draw_pile == []
 
     def test_build_energy_detail_recorded(self):
         """TC-BLD-05: detail message includes target card and cost."""

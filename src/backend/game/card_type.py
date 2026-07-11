@@ -9,15 +9,17 @@ from enum import Enum
 
 
 class CardType(Enum):
-    """Seven card types available in the v2 game (design/11 §7).
+    """Eight card types available in the v2 game.
 
+    Per design/37: IRON_DEFENSE added as 8th card type.
     Values are short string identifiers used for serialization and display.
     """
 
-    ATTACK = "attack"
-    DEFENSE = "defense"
-    HEAVY = "heavy"
-    COUNTER = "counter"
-    ENERGY = "energy"
-    BUILD = "build"
-    FLEX = "flex"
+    ATTACK = "attack"          # 连续击
+    DEFENSE = "defense"        # 格挡
+    HEAVY = "heavy"            # 破防重击
+    COUNTER = "counter"        # 防守反击
+    ENERGY = "energy"          # 聚能
+    BUILD = "build"            # 构建/拆解
+    FLEX = "flex"              # 攻守兼备
+    IRON_DEFENSE = "iron_defense"  # 严防死守

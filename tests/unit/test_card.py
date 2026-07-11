@@ -14,6 +14,7 @@ from src.backend.game.resolver import (
     AttackDamageResolver,
     BonusDefenseResolver,
     BuildResolver,
+    DismantleResolver,
     FlexDamageResolver,
     GainEnergyResolver,
     GrantDefenseResolver,
@@ -22,15 +23,16 @@ from src.backend.game.resolver import (
     HeavyDamageResolver,
     ReflectResolver,
     RemoveDefenseResolver,
+    StrongDefenseResolver,
 )
 
 
 class TestCardType:
     """Tests for the CardType enum — 7 values."""
 
-    def test_card_type_has_seven_members(self):
-        """TC-CD-01: CardType 枚举包含7个值."""
-        assert len(CardType) == 7
+    def test_card_type_has_eight_members(self):
+        """TC-CD-01: CardType 枚举包含8个值 (design/37: IRON_DEFENSE added)."""
+        assert len(CardType) == 8
         assert CardType.ATTACK.value == "attack"
         assert CardType.DEFENSE.value == "defense"
         assert CardType.HEAVY.value == "heavy"
@@ -38,11 +40,12 @@ class TestCardType:
         assert CardType.ENERGY.value == "energy"
         assert CardType.BUILD.value == "build"
         assert CardType.FLEX.value == "flex"
+        assert CardType.IRON_DEFENSE.value == "iron_defense"
 
     def test_card_type_identity(self):
         """Verify each card type is a unique enum member."""
         values = set(CardType)
-        assert len(values) == 7
+        assert len(values) == 8
 
 
 class TestGetCardDef:
@@ -152,7 +155,7 @@ class TestGetCardDef:
         assert get_card_def(CardType.HEAVY).display_name == "破防重击"
         assert get_card_def(CardType.COUNTER).display_name == "防守反击"
         assert get_card_def(CardType.ENERGY).display_name == "聚能"
-        assert get_card_def(CardType.BUILD).display_name == "构建"
+        assert get_card_def(CardType.BUILD).display_name == "构建/拆解"
         assert get_card_def(CardType.FLEX).display_name == "攻守兼备"
 
     def test_icon_removed(self):
@@ -204,8 +207,8 @@ class TestCardDefResolvers:
         """TC-CD-02: each CardType has correct number of resolvers (intention #36)."""
         expected = {
             CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 3,
-            CardType.COUNTER: 3, CardType.ENERGY: 1, CardType.BUILD: 1,
-            CardType.FLEX: 3,
+            CardType.COUNTER: 3, CardType.ENERGY: 1, CardType.BUILD: 2,
+            CardType.FLEX: 3, CardType.IRON_DEFENSE: 2,
         }
         for ct, count in expected.items():
             cd = get_card_def(ct)
@@ -219,8 +222,9 @@ class TestCardDefResolvers:
             CardType.HEAVY: {HeavyDamageResolver, RemoveDefenseResolver, GrantFragileResolver},
             CardType.COUNTER: {GrantDefenseResolver, ReflectResolver, GrantGuardResolver},
             CardType.ENERGY: {GainEnergyResolver},
-            CardType.BUILD: {BuildResolver},
+            CardType.BUILD: {BuildResolver, DismantleResolver},
             CardType.FLEX: {GrantDefenseResolver, BonusDefenseResolver, FlexDamageResolver},
+            CardType.IRON_DEFENSE: {StrongDefenseResolver, GrantGuardResolver},
         }
         for ct, types_set in expected.items():
             cd = get_card_def(ct)

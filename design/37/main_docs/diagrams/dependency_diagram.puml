@@ -1,0 +1,91 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+package "game/" {
+  component card_type as "card_type.py
+CardType enum"
+  component card_def as "card_def.py
+CardDef"
+  component player as "player.py
+Player HistoryItem"
+  component player_state as "player_state.py
+StatusType PlayerStatus"
+  component game_state as "game_state.py
+GameState"
+  component game_core as "game_core.py
+GameCore"
+  component round_result as "round_result.py
+RoundResult"
+  component constants as "constants.py
+ROUNDS_PER_CYCLE"
+  package "resolver/" {
+    component base as "base.py
+Resolver"
+    component build_resolver as "build_resolver.py
+BuildResolver mod"
+    component dismantle_resolver as "dismantle_resolver.py
+DismantleResolver new"
+    component strong_defense_resolver as "strong_defense_resolver.py
+StrongDefense new"
+    component grant_guard_resolver as "grant_guard_resolver.py
+GrantGuardResolver"
+  }
+}
+
+package "ai/" {
+  component ai_constants as "constants.py
+INPUT SIZE=62"
+  package "rnn_v1/" {
+    component model as "model.py
+GRU models"
+  }
+}
+
+package "app/" {
+  component converter as "converter.py
+Converter mod"
+  component app_manager as "app_manager.py
+AppManager mod"
+}
+
+package "controller/" {
+  component api as "api.py"
+  component serializers as "serializers.py"
+}
+
+game_core --> card_def
+game_core --> build_resolver
+game_core --> dismantle_resolver
+card_def --> build_resolver
+card_def --> dismantle_resolver
+card_def --> strong_defense_resolver
+card_def --> grant_guard_resolver
+converter --> ai_constants
+converter --> game_state
+app_manager --> converter
+app_manager --> model
+app_manager --> game_core
+api --> app_manager
+
+note right of converter
+  修改:
+  NUM_CARD_TYPES = 8
+  _CARD_MAP 四元组
+  新增 _DISMANTLE_TO_INDEX
+end note
+
+note right of build_resolver
+  修改: 放入 draw_pile
+end note
+
+note right of dismantle_resolver
+  新增
+end note
+
+note right of strong_defense_resolver
+  新增
+end note
+
+@enduml

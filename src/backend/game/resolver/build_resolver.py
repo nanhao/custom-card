@@ -7,19 +7,21 @@ from src.backend.game.resolver.base import ResolveContext, ResolveDetails, Resol
 
 
 class BuildResolver(Resolver):
-    """Executes BUILD card effect: deduct energy and add built card to discard.
+    """Executes BUILD card effect: deduct energy and add built card to draw_pile.
 
     Per design/25: the resolve() method reads ctx.build_target to determine
     which card the player chose to construct, and ctx.build_target_cost
     for the energy cost. It deducts the cost from card_owner's energy and
-    appends the target card to discard_pile.
+    appends the target card to draw_pile.
+
+    Per design/37: card goes to draw_pile (not discard_pile).
     """
 
     def get_priority(self) -> int:
         return 10
 
     def resolve(self, ctx: ResolveContext, details: ResolveDetails) -> None:
-        """Execute BUILD settlement: deduct energy, add card to discard.
+        """Execute BUILD settlement: deduct energy, add card to draw_pile.
 
         Defensive: if ctx.build_target is None, returns immediately with
         no state changes (should not happen in normal flow; _validate
@@ -29,5 +31,5 @@ class BuildResolver(Resolver):
             return
         cost: int = ctx.build_target_cost
         ctx.card_owner.energy = max(0, ctx.card_owner.energy - cost)
-        ctx.card_owner.discard_pile.append(ctx.build_target)
-        details.add(f"BUILD {ctx.build_target.value} (cost {cost})")
+        ctx.card_owner.draw_pile.append(ctx.build_target)
+        details.add(f"BUILD {ctx.build_target.value} -> draw pile (cost {cost})")

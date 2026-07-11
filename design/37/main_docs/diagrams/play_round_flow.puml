@@ -1,0 +1,55 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+actor "调用方" as Caller
+participant "GameCore" as GC
+participant "CardResolver" as CR
+
+Caller -> GC: ① play_round(cards_1, cards_2, build_tgt, dismantle_tgt)
+activate GC
+
+GC -> GC: ② _validate()
+note right: 检查游戏未结束、卡牌在手、\nBUILD的 build/dismantle互斥校验
+
+GC -> GC: ③ 快照 BeforeResolve (HP, energy, statuses)
+
+GC -> GC: ④ 为每个玩家的每张卡构建 Resolver 任务
+note right: ctx传递 build_target + dismantle_target
+
+GC -> CR: ⑤ CardResolver.resolve(tasks)
+activate CR
+CR --> GC: ResolutionResult(details)
+deactivate CR
+
+GC -> GC: ⑥ play_cards() — 移除手牌
+GC -> GC: ⑦ discard_pile 追加
+
+GC -> GC: ⑧ 记录 PlayerHistoryItem(card, build_target, dismantle_target)
+
+GC -> GC: ⑨ AfterResolve 快照 + 检测游戏结束
+
+alt game over (HP≤0)
+  GC --> Caller: RoundResult (is_over=True)
+else continue
+
+  GC -> GC: ⑩ _tick_status_lifetimes()
+  GC -> GC: ⑪ 检测 cycle end (round 3 结束?)
+
+  alt cycle ended
+    GC -> GC: bleed 扣血 + _start_cycle()
+    GC -> GC: 检测 bleed 后是否游戏结束
+  end
+
+  GC -> GC: ⑫ round_number++, round_in_cycle++
+
+  GC -> GC: ⑬ AfterEndActions 快照
+  GC --> Caller: RoundResult
+
+end
+
+deactivate GC
+
+@enduml

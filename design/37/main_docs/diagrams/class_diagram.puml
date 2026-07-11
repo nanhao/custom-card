@@ -1,0 +1,127 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+' ====== Enums ======
+enum CardType {
+  ATTACK
+  DEFENSE
+  HEAVY
+  COUNTER
+  ENERGY
+  BUILD
+  FLEX
+  <<new>> IRON_DEFENSE
+}
+
+' ====== Dataclasses ======
+class CardDef <<dataclass>> {
+  card_type: CardType
+  build_cost: int
+  display_name: str
+  description: str
+  tags: tuple[str,...]
+  resolvers: tuple[type,...]
+}
+
+class PlayerHistoryItem <<dataclass>> {
+  card: CardType | None
+  build_target: CardType | None
+  <<new>> dismantle_target: CardType | None
+}
+
+class ResolveContext <<dataclass>> {
+  card_owner: Player
+  opponent: Player
+  card_played_by_owner: CardType
+  card_played_by_opponent: CardType|None
+  build_target: CardType|None
+  build_target_cost: int
+  <<new>> dismantle_target: CardType|None
+}
+
+' ====== Player ======
+class Player <<dataclass>> {
+  hp: int
+  energy: int
+  statuses: list[PlayerStatus]
+  hand: list[CardType]
+  draw_pile: list[CardType]
+  discard_pile: list[CardType]
+  history: list[PlayerHistoryItem]
+  --
+  grant_status(StatusType, lifetime)
+  has_status(StatusType): bool
+  take_damage(int)
+  add_energy(int)
+  <<new>> remove_from_discard(CardType)
+}
+
+' ====== Resolvers ======
+abstract class Resolver {
+  {abstract} get_priority(): int
+  {abstract} resolve(ctx, details)
+}
+
+class BuildResolver <<modified>> {
+  get_priority(): int
+  resolve(ctx, details)
+}
+note right of BuildResolver: now adds to draw_pile
+
+class DismantleResolver <<new>> {
+  get_priority(): int
+  resolve(ctx, details)
+}
+note right of DismantleResolver: removes from discard_pile
+
+class StrongDefenseResolver <<new>> {
+  get_priority(): int
+  resolve(ctx, details)
+}
+note right of StrongDefenseResolver: grants DEFENSE lifetime=2
+
+class GrantGuardResolver {
+  get_priority(): int
+  resolve(ctx, details)
+}
+
+' ====== GameCore ======
+class GameCore <<modified>> {
+  play_round(cards_1, cards_2,
+    build_target_1, build_target_2,
+    <<new>> dismantle_target_1, dismantle_target_2): RoundResult
+}
+
+' ====== Converter ======
+class Converter <<modified>> {
+  {static} NUM_CARD_TYPES: int = 8
+  {static} _CARD_MAP: list[tuple[CardType,int|None,int,int]]
+  {static} _PLAY_TO_INDEX: dict
+  {static} _BUILD_TO_INDEX: dict
+  <<new>> {static} _DISMANTLE_TO_INDEX: dict
+  {static} build_input_vector(state, player_key): list[float]
+  {static} action_to_policy_index(card, build_target, <<new>> dismantle_target): int
+  {static} policy_index_to_action(int): tuple
+}
+
+' ====== AppManager ======
+class AppManager <<modified>> {
+  _make_mask_fn(hand, energy, <<new>> discard_pile): Callable
+}
+
+' ====== Relationships ======
+CardType "1" --* "1" CardDef
+CardDef "1" --* "*" Resolver : resolvers
+Resolver <|-- BuildResolver
+Resolver <|-- DismantleResolver
+Resolver <|-- StrongDefenseResolver
+Resolver <|-- GrantGuardResolver
+GameCore --> ResolveContext : creates
+ResolveContext --> Player
+Player --> PlayerHistoryItem
+Player --> CardType
+Converter ..> CardType : uses
+AppManager ..> Converter : uses
+@enduml

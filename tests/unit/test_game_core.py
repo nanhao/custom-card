@@ -306,8 +306,11 @@ class TestBuildEnergyCheck:
         gm.player_1.energy = 0
         gm.player_1.hand = [CardType.BUILD]
         gm.player_2.hand = [CardType.ATTACK]
-        with pytest.raises(ValueError, match="energy"):
-            gm.play_round([CardType.BUILD], [CardType.ATTACK])
+        with pytest.raises(ValueError, match="energy is 0"):
+            gm.play_round(
+                [CardType.BUILD], [CardType.ATTACK],
+                build_target_1=CardType.ATTACK,
+            )
 
     def test_energy_sufficient_can_play_build(self):
         """Can play BUILD when energy >= build_cost."""
@@ -322,7 +325,7 @@ class TestBuildEnergyCheck:
         )
         # BUILD succeeded
         assert gm.player_1.energy == 1  # consumed 1 energy (ATTACK build_cost=1)
-        assert CardType.ATTACK in gm.player_1.discard_pile
+        assert CardType.ATTACK in gm.player_1.draw_pile
 
 
 class TestHistoryRecording:
@@ -638,7 +641,7 @@ class TestHeavyBuildCostValidation:
         gm.player_2.hand = [CardType.ATTACK]
         result = gm.play_round([CardType.BUILD], [CardType.ATTACK], build_target_1=CardType.HEAVY)
         assert gm.player_1.energy == 0
-        assert CardType.HEAVY in gm.player_1.discard_pile
+        assert CardType.HEAVY in gm.player_1.draw_pile
 
 
 # =============================================================================
@@ -727,7 +730,7 @@ class TestBuildResolverIntegration:
             build_target_1=CardType.ATTACK,
         )
         assert gm.player_1.energy == 1
-        assert CardType.ATTACK in gm.player_1.discard_pile
+        assert CardType.ATTACK in gm.player_1.draw_pile
         assert result is not None
 
     def test_build_heavy_via_play_round(self):
@@ -742,7 +745,7 @@ class TestBuildResolverIntegration:
             build_target_1=CardType.HEAVY,
         )
         assert gm.player_1.energy == 0
-        assert CardType.HEAVY in gm.player_1.discard_pile
+        assert CardType.HEAVY in gm.player_1.draw_pile
         # P2 should have gained DEFENSE (not affected by BUILD)
         assert any(
             ps.status_type == StatusType.DEFENSE
@@ -757,7 +760,10 @@ class TestBuildResolverIntegration:
         gm.player_1.hand = [CardType.BUILD]
         gm.player_2.hand = [CardType.ATTACK]
         with pytest.raises(ValueError, match="energy is 0"):
-            gm.play_round([CardType.BUILD], [CardType.ATTACK])
+            gm.play_round(
+                [CardType.BUILD], [CardType.ATTACK],
+                build_target_1=CardType.ATTACK,
+            )
 
     def test_build_missing_target_raises(self):
         """TC-GC-BLD-04: BUILD without build_target raises ValueError."""
@@ -766,7 +772,7 @@ class TestBuildResolverIntegration:
         gm.player_1.energy = 1
         gm.player_1.hand = [CardType.BUILD]
         gm.player_2.hand = [CardType.ATTACK]
-        with pytest.raises(ValueError, match="build_target_1 is required"):
+        with pytest.raises(ValueError, match="must specify either build_target or dismantle_target"):
             gm.play_round([CardType.BUILD], [CardType.ATTACK])
 
     def test_build_cost_exceeds_energy_raises(self):
@@ -783,18 +789,18 @@ class TestBuildResolverIntegration:
             )
 
     def test_non_build_card_ignores_build_target(self):
-        """TC-GC-BLD-06: ATTACK with build_target=HEAVY — build_target ignored."""
+        """TC-GC-BLD-06: Non-BUILD card with build_target raises ValueError (design/37)."""
         gm = GameCore(mode="pvp")
         gm.start_game()
         gm.player_1.energy = 5
         gm.player_1.hand = [CardType.ATTACK]
         gm.player_2.hand = [CardType.DEFENSE]
-        # Should not raise — build_target is ignored for non-BUILD cards
-        gm.play_round(
-            [CardType.ATTACK], [CardType.DEFENSE],
-            build_target_1=CardType.HEAVY,
-        )
-        assert gm.player_1.energy == 5
+        # Per design/37: build_target/dismantle_target must be None for non-BUILD cards
+        with pytest.raises(ValueError, match="must be None when not playing BUILD"):
+            gm.play_round(
+                [CardType.ATTACK], [CardType.DEFENSE],
+                build_target_1=CardType.HEAVY,
+            )
 
     def test_process_build_method_deleted(self):
         """TC-GC-BLD-07: _process_build method no longer exists."""
@@ -832,9 +838,9 @@ class TestBuildResolverIntegration:
             build_target_2=CardType.DEFENSE,
         )
         assert gm.player_1.energy == 1
-        assert CardType.ATTACK in gm.player_1.discard_pile
+        assert CardType.ATTACK in gm.player_1.draw_pile
         assert gm.player_2.energy == 1
-        assert CardType.DEFENSE in gm.player_2.discard_pile
+        assert CardType.DEFENSE in gm.player_2.draw_pile
 
 
 # =============================================================================

@@ -19,19 +19,24 @@ MAX_ENERGY = 5
 
 @dataclass
 class PlayerHistoryItem:
-    """Single entry in a player's action history (design/14 D8).
+    """Single entry in a player's action history (design/14 D8, design/37).
 
-    Records both the card played and the build target (if any)
-    for a single round. Used by GameCore.get_state() to provide
-    complete action history so Converter can derive policy indices.
+    Records the card played, the build target (if build mode), and the
+    dismantle target (if dismantle mode) for a single round. Used by
+    GameCore.get_state() to provide complete action history.
+
+    Per design/37: dismantle_target field added for BUILD card's
+    dismantle mode (lower half of 构建/拆解).
 
     Attributes:
         card: The card played this round.
-        build_target: The card built via BUILD, or None if no build occurred.
+        build_target: The card built via BUILD, or None.
+        dismantle_target: The card dismantled via BUILD, or None.
     """
 
     card: CardType | None  # None means pass (design/28)
     build_target: CardType | None = None
+    dismantle_target: CardType | None = None  # design/37
 
 
 @dataclass
@@ -207,6 +212,26 @@ class Player:
             else:
                 break
         return count
+
+    # ------------------------------------------------------------------
+    # Deck manipulation
+    # ------------------------------------------------------------------
+
+    def remove_from_discard(self, card: CardType) -> None:
+        """Remove one occurrence of `card` from discard_pile (design/37).
+
+        Used by DismantleResolver to remove a card from the game when
+        the玩家 selects the dismantle (拆解) half of 构建/拆解.
+
+        Raises:
+            ValueError: If the card is not found in discard_pile.
+        """
+        try:
+            self.discard_pile.remove(card)
+        except ValueError:
+            raise ValueError(
+                f"Card {card.name} is not in the player's discard pile."
+            ) from None
 
     # ------------------------------------------------------------------
     # Deck drawing (design/35)

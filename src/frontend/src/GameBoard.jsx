@@ -22,6 +22,7 @@ const CARD_ICONS = {
   energy: '\u26a1',
   build: '\ud83d\udd28',
   flex: '\u2696\ufe0f',
+  iron_defense: '\ud83d\udd30',
 };
 
 // =========================================================================
@@ -41,7 +42,7 @@ function buildLookups(cardMeta) {
 // Display constants (fallback for before API loads)
 // =========================================================================
 
-const FALLBACK_ORDER = ['attack', 'defense', 'heavy', 'counter', 'energy', 'build', 'flex'];
+const FALLBACK_ORDER = ['attack', 'defense', 'heavy', 'counter', 'energy', 'build', 'flex', 'iron_defense'];
 
 /** Count occurrences of a card in a hand array. */
 function countInHand(hand, card) {
@@ -66,6 +67,8 @@ export default function GameBoard({
   onNewGame,
   onBackToMenu,
   onSelectBuildTarget,
+  onSelectDismantleTarget,
+  onCancelBuild,
   buildPhase,
   pendingBuild,
   pileViewer,
@@ -480,8 +483,67 @@ export default function GameBoard({
           </div>
         </div>
       )}
+      {buildPhase === 'choose_mode' && pendingBuild && (
+        <div className="pile-overlay" onClick={onCancelBuild}>
+          <div className="pile-modal" onClick={e => e.stopPropagation()}>
+            <h3>🔨 构建/拆解 — 选择模式</h3>
+            <div className="energy-info" style={{ color: 'var(--muted)', fontSize: '0.85rem', margin: '8px 0 14px' }}>
+              当前能量：<span style={{ color: 'var(--energy)', fontWeight: 700 }}>{state.players['1'].energy}</span>
+            </div>
+            <div className="build-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <button
+                className={`build-card card-build`}
+                disabled={state.players['1'].energy === 0}
+                onClick={() => onSelectBuildTarget?.(pendingBuild, 'build')}
+                style={{ padding: 20 }}
+              >
+                <span style={{ fontSize: '2rem' }}>🔨</span>
+                <span style={{ fontWeight: 700, display: 'block', marginTop: 6 }}>构建</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>构建一张新的卡牌（放入抽牌堆）</span>
+              </button>
+              <button
+                className={`build-card card-build`}
+                disabled={state.players['1'].discard_pile?.length === 0}
+                onClick={() => onSelectDismantleTarget?.(pendingBuild)}
+                style={{ padding: 20 }}
+              >
+                <span style={{ fontSize: '2rem' }}>🗑️</span>
+                <span style={{ fontWeight: 700, display: 'block', marginTop: 6 }}>拆解</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>从弃牌堆中移除一张卡牌（无消耗）</span>
+              </button>
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 12 }}>
+              <button className="btn btn-secondary" onClick={onCancelBuild}>取消</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {buildPhase === 'select_dismantle' && pendingBuild && (
+        <div className="pile-overlay" onClick={onCancelBuild}>
+          <div className="pile-modal" onClick={e => e.stopPropagation()}>
+            <h3>🗑️ 选择要拆解的卡牌</h3>
+            <div className="build-grid">
+              {cardOrder.map(card => {
+                const cnt = countInHand(state.players['1'].discard_pile || [], card);
+                return (
+                  <button key={card} className={`build-card card-${card}`}
+                    disabled={cnt === 0}
+                    onClick={() => onSelectDismantleTarget?.(pendingBuild, card)}>
+                    <span className="build-icon">{CARD_ICONS[card]}</span>
+                    <span>{CARD_NAMES[card]}</span>
+                    <span className="build-cost">×{cnt}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 12 }}>
+              <button className="btn btn-secondary" onClick={onCancelBuild}>取消</button>
+            </div>
+          </div>
+        </div>
+      )}
       {buildPhase === 'select_target' && (
-        <div className="pile-overlay" onClick={() => onSelectBuildTarget?.(null)}>
+        <div className="pile-overlay" onClick={onCancelBuild}>
           <div className="pile-modal" onClick={e => e.stopPropagation()}>
             <h3>🔨 选择要构建的卡牌</h3>
             <div className="energy-info" style={{ color: 'var(--muted)', fontSize: '0.85rem', margin: '8px 0 14px' }}>
@@ -503,7 +565,7 @@ export default function GameBoard({
               })}
             </div>
             <div style={{ textAlign: 'center', marginTop: 12 }}>
-              <button className="btn btn-secondary" onClick={() => onSelectBuildTarget?.(null)}>取消</button>
+              <button className="btn btn-secondary" onClick={onCancelBuild}>取消</button>
             </div>
           </div>
         </div>

@@ -1,10 +1,12 @@
-"""CardDef dataclass and static card metadata table (design/22).
+"""CardDef dataclass and static card metadata table (design/22, design/37).
 
 Per design/22: CardDef gains a `resolvers` field that stores Resolver
 subclass references. CardResolverRegistry has been deleted — the mapping
 is now defined inline in _CARD_DEFS.
 
 Per intention #36: description and tags fields added to CardDef.
+Per design/37: BUILD updated to 构建/拆解 with DismantleResolver;
+IRON_DEFENSE card added.
 
 CardType was extracted to card_type.py to break the circular dependency
 with resolver/.
@@ -16,6 +18,7 @@ from src.backend.game.card_type import CardType
 from src.backend.game.resolver.attack_damage_resolver import AttackDamageResolver
 from src.backend.game.resolver.bonus_defense_resolver import BonusDefenseResolver
 from src.backend.game.resolver.build_resolver import BuildResolver
+from src.backend.game.resolver.dismantle_resolver import DismantleResolver
 from src.backend.game.resolver.flex_damage_resolver import FlexDamageResolver
 from src.backend.game.resolver.gain_energy_resolver import GainEnergyResolver
 from src.backend.game.resolver.grant_defense_resolver import GrantDefenseResolver
@@ -24,6 +27,7 @@ from src.backend.game.resolver.grant_fragile_resolver import GrantFragileResolve
 from src.backend.game.resolver.heavy_damage_resolver import HeavyDamageResolver
 from src.backend.game.resolver.reflect_resolver import ReflectResolver
 from src.backend.game.resolver.remove_defense_resolver import RemoveDefenseResolver
+from src.backend.game.resolver.strong_defense_resolver import StrongDefenseResolver
 
 
 @dataclass(frozen=True)
@@ -104,10 +108,10 @@ _CARD_DEFS: dict[CardType, CardDef] = {
     CardType.BUILD: CardDef(
         card_type=CardType.BUILD,
         build_cost=1,
-        display_name="构建",
-        description="构建一张新的卡牌",
+        display_name="构建/拆解",
+        description="(上半部分)构建一张新的卡牌；(下半部分)从弃牌堆中移除一张卡牌",
         tags=(),
-        resolvers=(BuildResolver,),
+        resolvers=(BuildResolver, DismantleResolver),
     ),
     CardType.FLEX: CardDef(
         card_type=CardType.FLEX,
@@ -116,6 +120,14 @@ _CARD_DEFS: dict[CardType, CardDef] = {
         description="一边进攻一边防守，只有高手才能做到如此平衡。如果本轮及上轮有打出过'防'卡，则额外增加一回合防御状态。但本卡无法获得联防状态",
         tags=("攻", "防"),
         resolvers=(GrantDefenseResolver, BonusDefenseResolver, FlexDamageResolver),
+    ),
+    CardType.IRON_DEFENSE: CardDef(
+        card_type=CardType.IRON_DEFENSE,
+        build_cost=2,
+        display_name="严防死守",
+        description="调动全身力量进行防守",
+        tags=("防",),
+        resolvers=(StrongDefenseResolver, GrantGuardResolver),
     ),
 }
 
