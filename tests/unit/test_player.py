@@ -220,3 +220,124 @@ class TestGrantStatus:
         p = Player(statuses=[PlayerStatus(StatusType.FRAGILE, 2)])
         assert p.has_status(StatusType.FRAGILE) is True
         assert p.has_status(StatusType.DEFENSE) is False
+
+
+class TestDrawCards:
+    """design/35: Player.draw_cards(count) smart draw with discard reshuffle."""
+
+    # --- 1.1 正常抽牌 — 抽牌堆充足 ---
+    def test_draw_sufficient_from_draw_pile(self):
+        """draw_cards(3) with 5 in draw_pile returns 3, discard_pile unchanged."""
+        p = Player(
+            draw_pile=[CardType.ATTACK, CardType.DEFENSE, CardType.HEAVY, CardType.COUNTER, CardType.ENERGY],
+            discard_pile=[CardType.BUILD, CardType.FLEX],
+        )
+        result = p.draw_cards(3)
+        assert result == 3
+        assert p.hand == [CardType.ATTACK, CardType.DEFENSE, CardType.HEAVY]
+        assert p.draw_pile == [CardType.COUNTER, CardType.ENERGY]
+        assert p.discard_pile == [CardType.BUILD, CardType.FLEX]
+
+    # --- 1.2 抽牌堆恰好够 ---
+    def test_draw_exact_from_draw_pile(self):
+        """draw_cards(2) with 2 in draw_pile returns 2, draw_pile becomes empty."""
+        p = Player(
+            draw_pile=[CardType.ATTACK, CardType.DEFENSE],
+            discard_pile=[CardType.HEAVY],
+        )
+        result = p.draw_cards(2)
+        assert result == 2
+        assert p.hand == [CardType.ATTACK, CardType.DEFENSE]
+        assert p.draw_pile == []
+        assert p.discard_pile == [CardType.HEAVY]
+
+    # --- 1.3 抽牌堆不足 — 弃牌堆补足 ---
+    def test_draw_with_discard_reshuffle(self):
+        """draw_cards(5) with 1 in draw_pile and 4 in discard returns 5."""
+        p = Player(
+            draw_pile=[CardType.ATTACK],
+            discard_pile=[CardType.DEFENSE, CardType.HEAVY, CardType.COUNTER, CardType.ENERGY],
+        )
+        result = p.draw_cards(5)
+        assert result == 5
+        assert len(p.hand) == 5
+        assert p.hand[0] == CardType.ATTACK  # First card from draw_pile
+        assert p.draw_pile == []
+        assert p.discard_pile == []
+
+    # --- 1.4 抽牌堆为空 — 全靠弃牌堆 ---
+    def test_draw_all_from_discard(self):
+        """draw_cards(3) with empty draw_pile draws all from shuffled discard."""
+        p = Player(
+            draw_pile=[],
+            discard_pile=[CardType.ATTACK, CardType.ATTACK, CardType.DEFENSE],
+        )
+        result = p.draw_cards(3)
+        assert result == 3
+        assert len(p.hand) == 3
+        assert p.draw_pile == []
+        assert p.discard_pile == []
+
+    # --- 1.5 两堆均空 — 提前结束 ---
+    def test_draw_both_piles_empty(self):
+        """draw_cards(5) with both piles empty returns 0."""
+        p = Player(draw_pile=[], discard_pile=[])
+        result = p.draw_cards(5)
+        assert result == 0
+        assert p.hand == []
+        assert p.draw_pile == []
+        assert p.discard_pile == []
+
+    # --- 1.6 两堆合计不足 — 抽到竭尽 ---
+    def test_draw_insufficient_total(self):
+        """draw_cards(5) with only 2 in draw_pile and empty discard returns 2."""
+        p = Player(
+            draw_pile=[CardType.ATTACK, CardType.DEFENSE],
+            discard_pile=[],
+        )
+        result = p.draw_cards(5)
+        assert result == 2
+        assert p.hand == [CardType.ATTACK, CardType.DEFENSE]
+        assert p.draw_pile == []
+        assert p.discard_pile == []
+
+    # --- 1.7 弃牌堆洗入后乱序 ---
+    def test_discard_shuffled_before_move(self):
+        """When discard is shuffled into draw_pile, order is randomized."""
+        # Run many times to verify shuffling produces non-deterministic order.
+        results = set()
+        for _ in range(20):
+            p = Player(
+                draw_pile=[CardType.ATTACK],
+                discard_pile=[CardType.DEFENSE, CardType.HEAVY, CardType.COUNTER, CardType.ENERGY, CardType.BUILD],
+            )
+            p.draw_cards(5)
+            # Record the tuple of last 4 cards (from discard) for variety check
+            results.add(tuple(p.hand[1:]))
+        # After 20 runs with 5! = 120 permutations, at least 2 different orders
+        assert len(results) >= 2, f"Expected at least 2 different shuffle orders, got {len(results)}"
+
+    # --- 1.8 count=0 边界 ---
+    def test_draw_zero(self):
+        """draw_cards(0) returns 0 with no state change."""
+        p = Player(
+            draw_pile=[CardType.ATTACK, CardType.DEFENSE],
+            discard_pile=[CardType.HEAVY],
+        )
+        result = p.draw_cards(0)
+        assert result == 0
+        assert p.hand == []
+        assert p.draw_pile == [CardType.ATTACK, CardType.DEFENSE]
+        assert p.discard_pile == [CardType.HEAVY]
+
+    # --- 1.9 手牌非空时追加抽牌 ---
+    def test_draw_appends_to_existing_hand(self):
+        """draw_cards appends to existing hand without removing old cards."""
+        p = Player(
+            hand=[CardType.COUNTER],
+            draw_pile=[CardType.ATTACK, CardType.DEFENSE],
+        )
+        result = p.draw_cards(2)
+        assert result == 2
+        assert p.hand == [CardType.COUNTER, CardType.ATTACK, CardType.DEFENSE]
+        assert p.draw_pile == []

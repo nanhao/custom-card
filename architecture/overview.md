@@ -11,8 +11,8 @@ The current game (design/11+) introduces a deep strategic system on top of the o
 - **Players**: 2, each starting with 20 HP.
 - **Card Types**: 7 — Attack (攻击), Defense (防御), Heavy Strike (重击), Counter (防守反击), Energy (聚能), Build (构建), Flex (攻守兼备).
 - **Energy System**: Each player has an energy bar (0–5). Cards have a `build_cost` (1 or 2). Playing cards costs _no_ energy; only _building_ new cards via the Build card consumes energy.
-- **Deck System**: Each player has a draw pile and discard pile. No initial hand — cards are drawn at cycle start. Initial draw pile: 2× Attack + 1 each of Defense, Heavy, Counter, Energy, Build (7 cards, no Flex).
-- **Cycle (轮) System**: A cycle consists of 3 rounds (design/26 D1). At each cycle start, all hands are discarded, discard piles shuffled into draw piles, and 5 cards drawn (design/26 D2). The initial draw pile contains 7 cards (design/26 D3), so 2 cards remain after the first deal. At cycle end, each player loses 1 HP (bleed) to prevent infinite loops.
+- **Deck System**: Each player has a draw pile and discard pile. No initial hand — cards are drawn at cycle start via `Player.draw_cards()`. Initial draw pile: 2× Attack + 1 each of Defense, Heavy, Counter, Energy, Build (7 cards, no Flex).
+- **Cycle (轮) System**: A cycle consists of 3 rounds (design/26 D1). At each cycle start, all hands are discarded to discard pile, then 5 cards are drawn from draw pile via smart draw (design/35): discard pile is only shuffled into draw pile when draw pile is empty during drawing. The initial draw pile contains 7 cards (design/26 D3), so 2 cards remain after the first deal. At cycle end, each player loses 1 HP (bleed) to prevent infinite loops.
 - **Priority Resolution**: Each card effect has a priority (10, 11, or 12). Higher priority effects resolve first.
 - **Status System**: Players can gain statuses with managed lifetimes:
   - **Defense (防御)** — blocks attack damage.
@@ -85,12 +85,12 @@ Pure game logic. The only module that knows game rules.
 |------|---------------|
 | `card_type.py` | `CardType` enum (7 values) |
 | `card_def.py` | `CardDef` dataclass (build_cost, display_name, resolvers mapping per design/22) |
-| `player.py` | `Player` + `PlayerHistoryItem`: HP, energy, statuses, piles, hand, history (design/16) |
+| `player.py` | `Player` + `PlayerHistoryItem`: HP, energy, statuses, piles, hand, history, `draw_cards()` (design/16, design/35) |
 | `player_state.py` | `StatusType` enum + `PlayerStatus` dataclass with lifetime (design/15) |
 | `game_state.py` | `GameState` + `PlayerState` typed dataclass snapshots (design/19) |
 | `round_result.py` | `RoundResult` four-phase dataclass: `BeforeResolve`, `AfterResolve`, `EndActions`, `AfterEndActions` (design/17) |
 | `resolver/` | `CardResolver` orchestrator + 9 Resolver subclasses (strategy pattern, design/21/22) |
-| `game_core.py` | `GameCore` — game state machine (create, play_round, cycle management, end detection) |
+| `game_core.py` | `GameCore` — game state machine (create, play_round, cycle management, end detection, design/35 draw) |
 | `session_store.py` | `SessionStore` — pure disk-based JSON persistence (save/load/delete games) |
 
 ### 3.2 AI Layer (`src/backend/ai/`)

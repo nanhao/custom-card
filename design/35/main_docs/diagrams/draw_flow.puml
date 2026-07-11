@@ -1,0 +1,33 @@
+@startuml draw_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam activityFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+title Player.draw_cards(count) 抽牌流程
+
+start
+:输入 count（期望抽牌数）;
+:剩余需要 = count;
+:实际抽到 = 0;
+
+while (剩余需要 > 0 ?) is (是)
+  if (抽牌堆是否为空 ?) then (是)
+    if (弃牌堆是否为空 ?) then (是)
+      :停止抽牌;
+      break
+    else (否)
+      :将弃牌堆随机打乱;
+      :弃牌堆全部移入抽牌堆;
+      :清空弃牌堆;
+    endif
+  endif
+  
+  :从抽牌堆顶部取 min(剩余需要, len(抽牌堆)) 张;
+  :加入手牌末尾;
+  :剩余需要 -= 取牌数;
+  :实际抽到 += 取牌数;
+endwhile (否)
+
+:返回 实际抽到;
+stop
+
+@enduml

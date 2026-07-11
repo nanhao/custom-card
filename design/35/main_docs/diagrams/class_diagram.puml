@@ -1,0 +1,57 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+title 抽牌机制相关类图 — intention #35
+
+class Player {
+  + hp: int
+  + energy: int
+  + statuses: list[PlayerStatus]
+  + hand: list[CardType]
+  + draw_pile: list[CardType]
+  + discard_pile: list[CardType]
+  + history: list[PlayerHistoryItem]
+  --
+  + play_card(card: CardType): void
+  + play_cards(cards: list[CardType]): void
+  + has_card(card: CardType): bool
+  + has_cards(cards: list[CardType]): bool
+  + draw_cards(count: int): int  <<new>>
+  + take_damage(amount: int): void
+  + add_energy(amount: int): void
+  + grant_status(status_type: StatusType, lifetime: int): void
+  + has_status(status_type: StatusType): bool
+  + get_consecutive_attack_count(): int
+}
+
+class GameCore {
+  + ROUNDS_PER_CYCLE: int = 3
+  + CARDS_PER_CYCLE: int = 5
+  + INITIAL_HP: int = 20
+  --
+  + start_game(): void
+  + play_round(cards_1, cards_2, ...): RoundResult
+  + get_state(player_perspective): GameState
+  --
+  - _start_cycle(): void  <<behavior changed>>
+  - _tick_status_lifetimes(): void
+  - _validate(...): void
+  - _check_game_end(): bool, str|None
+}
+
+GameCore "1" --> "2" Player : player_1, player_2
+
+note right of Player::draw_cards
+  <<new in design/35>>
+  智能抽牌：抽牌堆不足时
+  将弃牌堆洗入抽牌堆再继续
+end note
+
+note right of GameCore::_start_cycle
+  <<design/35 行为变更>>
+  去掉 discard→draw 自动合并
+  改用 player.draw_cards(5)
+end note
+
+@enduml

@@ -7,6 +7,7 @@ discard_pile, and history (list[PlayerHistoryItem] — design/16 D1).
 Per architecture D9, this module is pure logic — no UI, no I/O.
 """
 
+import random
 from dataclasses import dataclass, field
 
 from src.backend.game.card_type import CardType
@@ -172,3 +173,50 @@ class Player:
             else:
                 break
         return count
+
+    # ------------------------------------------------------------------
+    # Deck drawing (design/35)
+    # ------------------------------------------------------------------
+
+    def draw_cards(self, count: int) -> int:
+        """Draw up to `count` cards from draw_pile into hand.
+
+        Implements classic DBG draw mechanics (design/35):
+        1. Draw from draw_pile first.
+        2. If draw_pile runs out and more cards are needed, shuffle
+           discard_pile into draw_pile and continue drawing.
+        3. If both piles are empty, stop early.
+
+        Cards are appended to the end of hand; existing hand cards
+        are unaffected.
+
+        Args:
+            count: Desired number of cards to draw. Must be >= 0.
+
+        Returns:
+            Number of cards actually drawn (0 <= return <= count).
+        """
+        if count <= 0:
+            return 0
+
+        drawn: int = 0
+        needed: int = count
+
+        while needed > 0:
+            # If draw_pile is empty, try to recycle discard_pile
+            if not self.draw_pile:
+                if not self.discard_pile:
+                    break  # Both piles empty, stop drawing
+                # Shuffle discard_pile and move to draw_pile
+                random.shuffle(self.discard_pile)
+                self.draw_pile = self.discard_pile
+                self.discard_pile = []
+
+            # Draw as many as possible from draw_pile
+            take: int = min(needed, len(self.draw_pile))
+            self.hand.extend(self.draw_pile[:take])
+            self.draw_pile = self.draw_pile[take:]
+            drawn += take
+            needed -= take
+
+        return drawn

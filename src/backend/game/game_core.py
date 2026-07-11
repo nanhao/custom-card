@@ -1,4 +1,4 @@
-"""Game state machine for the custom card game v2 (design/11, design/26).
+"""Game state machine for the custom card game v2 (design/11, design/26, design/35).
 
 Per design/11 D4, the v2 game introduces cycle mechanics: rounds are grouped
 into cycles of 3 (design/26 D1, was 5), with cycle-end HP bleed and deck
@@ -7,10 +7,11 @@ reshuffling. No maximum round limit — game ends only when HP reaches 0.
 Per design/26 D2: CARDS_PER_CYCLE = 5 (was hardcoded 7), initial draw pile
 stays at 7 cards (D3), so 2 cards remain in draw pile after first deal.
 
+Per design/35: classic DBG draw — discard pile only shuffled into draw pile
+when draw pile is empty during draw_cards(), instead of at every cycle start.
+
 Per architecture D9, this module is pure logic — no UI, no I/O.
 """
-
-import random
 
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def, get_initial_draw_pile
@@ -361,13 +362,12 @@ class GameCore:
             ]
 
     def _start_cycle(self) -> None:
-        """Start a new cycle: reclaim hands → shuffle discard into draw → draw CARDS_PER_CYCLE cards.
+        """Start a new cycle: reclaim hands → draw CARDS_PER_CYCLE cards.
 
-        Per design/11 D4 + design/26 D2:
+        Per design/35 (classic DBG draw):
         1. Move all cards from hands to discard_pile.
-        2. Move all cards from discard_pile to draw_pile.
-        3. Shuffle the draw_pile.
-        4. Draw CARDS_PER_CYCLE (5) cards from draw_pile into hand.
+        2. Use Player.draw_cards(CARDS_PER_CYCLE) to draw cards with
+           smart reshuffle (discard→draw only when draw pile empty).
         """
         for player in (self.player_1, self.player_2):
             if player is None:
@@ -375,14 +375,8 @@ class GameCore:
             # Move hand cards to discard
             player.discard_pile.extend(player.hand)
             player.hand = []
-            # Move discard to draw pile
-            player.draw_pile.extend(player.discard_pile)
-            player.discard_pile = []
-            # Shuffle and draw CARDS_PER_CYCLE cards
-            random.shuffle(player.draw_pile)
-            draw_count = min(self.CARDS_PER_CYCLE, len(player.draw_pile))
-            player.hand = player.draw_pile[:draw_count]
-            player.draw_pile = player.draw_pile[draw_count:]
+            # Smart draw: shuffles discard into draw only when needed
+            player.draw_cards(self.CARDS_PER_CYCLE)
 
     def _validate(
         self,
