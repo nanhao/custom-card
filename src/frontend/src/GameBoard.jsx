@@ -367,7 +367,7 @@ export default function GameBoard({
             | {p2Label} <strong>{rr.after_resolve.hp_2} HP</strong>\u26A1{rr.after_resolve.energy_2}
           </div>
           <div className="btn-row" style={{ marginTop: 12 }}>
-            {phase === 'reveal' ? (
+            {(phase === 'reveal' && !(state && state.is_over)) ? (
               <button className="btn btn-primary btn-big" onClick={onNextRound}>
                 ▶ Next Round
               </button>

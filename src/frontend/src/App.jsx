@@ -174,7 +174,9 @@ export default function App() {
         setBuildPhase(null);
         setPendingBuild(null);
         setPileViewer(null);
-        setPhase(data.round_result.after_resolve.is_game_over ? 'gameover' : 'reveal');
+        const isGameOver = data.round_result.after_resolve.is_game_over
+          || data.round_result.after_end_actions.is_game_over;
+        setPhase(isGameOver ? 'gameover' : 'reveal');
       } catch (err) {
         setError(err.message);
         setPhase('select');
@@ -207,7 +209,9 @@ export default function App() {
         setBuildPhase(null);
         setPendingBuild(null);
         setPileViewer(null);
-        setPhase(data.round_result.after_resolve.is_game_over ? 'gameover' : 'reveal');
+        const isGameOver = data.round_result.after_resolve.is_game_over
+          || data.round_result.after_end_actions.is_game_over;
+        setPhase(isGameOver ? 'gameover' : 'reveal');
       } catch (err) {
         setError(err.message);
         setPhase('select');
@@ -238,7 +242,9 @@ export default function App() {
       });
       setRoundLog(prev => [...prev, data.round_result]);
       setP1Card(null);
-      setPhase(data.round_result.after_resolve.is_game_over ? 'gameover' : 'reveal');
+      const isGameOver = data.round_result.after_resolve.is_game_over
+        || data.round_result.after_end_actions.is_game_over;
+      setPhase(isGameOver ? 'gameover' : 'reveal');
     } catch (err) {
       setError(err.message);
       setPhase('pvp_pass');
@@ -261,7 +267,9 @@ export default function App() {
       });
       setRoundLog(prev => [...prev, data.round_result]);
       setP1Card(null);
-      setPhase(data.round_result.after_resolve.is_game_over ? 'gameover' : 'reveal');
+      const isGameOver = data.round_result.after_resolve.is_game_over
+        || data.round_result.after_end_actions.is_game_over;
+      setPhase(isGameOver ? 'gameover' : 'reveal');
     } catch (err) {
       setError(err.message);
       setPhase('pvp_pass');
