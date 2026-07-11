@@ -213,7 +213,7 @@ class TestComputeValLoss:
             batch_size=2,
         )
         val_perspectives = [
-            {"steps": [{"input": [float(i) for i in range(42)], "action": 2,
+            {"steps": [{"input": [float(i) for i in range(INPUT_SIZE)], "action": 2,
                          "reward": 0.1, "value": 0.5, "log_prob": -0.1}],
              "game_id": "g0"},
         ]
@@ -279,7 +279,7 @@ class TestComputeValLoss:
         # Perspective with NaN values should cause _process_value_perspective
         # to return None (NaN guard)
         val_perspectives = [
-            {"steps": [{"input": [float("nan")] * 42, "action": 2,
+            {"steps": [{"input": [float("nan")] * INPUT_SIZE, "action": 2,
                          "reward": float("nan"), "value": float("nan"),
                          "log_prob": 0.0}],
              "game_id": "g0"},

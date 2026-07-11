@@ -572,27 +572,31 @@ class TestStatusLifecycle:
         assert ps.status_type == StatusType.DEFENSE
         assert ps.lifetime == 1
 
-    def test_guard_not_granted_across_rounds_statuses_expire(self):
-        """TC-GS-07 (revised): GUARD is NOT granted across rounds because statuses expire.
+    def test_guard_granted_same_round_with_defense(self):
+        """TC-GS-07 (revised for design/35): GUARD IS granted in the same round.
 
-        Since statuses are ticked to empty each round, the resolver never sees
-        pre-existing DEFENSE in consecutive rounds. GUARD can only be tested
-        at the resolver unit-test level with manually set pre-existing statuses.
+        GrantDefenseResolver (priority 11) runs before GrantGuardResolver (priority 12)
+        within the same round. When a player plays DEFENSE:
+        1. GrantDefenseResolver grants DEFENSE (lifetime=1)
+        2. GrantGuardResolver checks for DEFENSE → finds it → grants GUARD
+
+        This is correct behavior: GUARD is granted because DEFENSE is present
+        at the moment GrantGuardResolver runs, not because of a pre-existing status.
         """
         gm = GameCore(mode="pvp")
         gm.start_game()
-        # Round 1: DEFENSE → gets DEFENSE (ticked away at round end)
+        # Round 1: just to advance to round 2 (status from round 1 is ticked away)
         gm.player_1.hand = [CardType.DEFENSE]
         gm.player_2.hand = [CardType.ATTACK]
         gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
-        # Round 2: DEFENSE again → only gets DEFENSE (no pre-existing)
+        # Round 2: DEFENSE again — gets both DEFENSE and GUARD in same round
         gm.player_1.hand = [CardType.DEFENSE]
         gm.player_2.hand = [CardType.ATTACK]
         result = gm.play_round([CardType.DEFENSE], [CardType.ATTACK])
 
         types = [ps.status_type for ps in result.after_resolve.statuses_1]
         assert StatusType.DEFENSE in types
-        assert StatusType.GUARD not in types
+        assert StatusType.GUARD in types
 
     def test_defense_granted_when_player_plays_defense(self):
         """TC-GS-08: Playing DEFENSE grants DEFENSE status."""

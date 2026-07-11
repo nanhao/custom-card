@@ -150,16 +150,18 @@ class TestGameStateSerialization:
         for c in hand:
             assert isinstance(c, str), f"{c!r} should be str"
 
-    def test_state_has_no_draw_pile_by_default(self, api_client):
-        """TC-API-01: Default perspective omits draw_pile key."""
+    def test_state_has_draw_pile_always_visible(self, api_client):
+        """design/34: draw_pile is always present in state (mutual visibility)."""
         resp = api_client.post("/api/games", json={"mode": "pvp"})
         p1 = resp.get_json()["state"]["players"]["1"]
-        # By default (no perspective), draw_pile should NOT be present
-        assert "draw_pile" not in p1
+        # Per design/34: both players' piles are always visible
+        assert "draw_pile" in p1
+        assert isinstance(p1["draw_pile"], list)
+        # draw_pile_count is also always present
         assert isinstance(p1["draw_pile_count"], int)
 
-    def test_perspective_exposes_pile_contents(self, api_client):
-        """TC-API-02: perspective=1 exposes draw_pile and discard_pile."""
+    def test_perspective_both_players_see_piles(self, api_client):
+        """design/34: perspective param is deprecated — both players see all piles."""
         resp = api_client.post("/api/games", json={"mode": "pvp"})
         gid = resp.get_json()["game_id"]
         resp = api_client.get(f"/api/games/{gid}?perspective=1")
@@ -169,9 +171,10 @@ class TestGameStateSerialization:
         assert isinstance(p1["draw_pile"], list)
         assert "discard_pile" in p1
         assert isinstance(p1["discard_pile"], list)
-        # P2 should NOT see pile contents
+        # P2 also sees pile contents (design/34: mutual visibility)
         p2 = resp.get_json()["state"]["players"]["2"]
-        assert "draw_pile" not in p2
+        assert "draw_pile" in p2
+        assert isinstance(p2["draw_pile"], list)
 
     def test_create_returns_state_dict(self, api_client):
         """TC-API-03: POST /api/games returns state dict with expected structure."""

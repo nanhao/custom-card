@@ -4,7 +4,9 @@ Fixtures defined here are auto-discovered by pytest and available
 to all test files in the tests/ directory tree without explicit imports.
 """
 
+import importlib
 import json
+import os
 
 import pytest
 
@@ -67,3 +69,53 @@ def api_client(tmp_path):
     app = create_app(config_path=str(config_path))
     app.config["TESTING"] = True
     return app.test_client()
+
+
+# ---------------------------------------------------------------------------
+# gen1 model weights for training tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_gen1_weights():
+    """Create gen1 model weights in a temporary directory for training tests.
+
+    Patches _derive_weight_path so rnn_v1.1 resolves to temp paths.
+    This avoids modifying the real project directory while ensuring
+    training tests can load model weights during _build_models().
+
+    Scope: session — weight files are created once and reused.
+    """
+    import torch
+    import tempfile
+    from unittest.mock import patch
+
+    from src.backend.ai.rnn_v1.model import GRUPolicyModel, GRUValueModel
+
+    # Create temp gen1 directory with initialized model weights
+    gen1_dir = tempfile.mkdtemp(prefix="test_gen1_")
+
+    # Initialize and save policy model with random weights
+    policy_model = GRUPolicyModel()
+    torch.save(policy_model.state_dict(), os.path.join(gen1_dir, "policy.pth"))
+
+    # Initialize and save value model with random weights
+    value_model = GRUValueModel()
+    torch.save(value_model.state_dict(), os.path.join(gen1_dir, "value.pth"))
+
+    # Monkeypatch _derive_weight_path to return temp paths for rnn_v1 gen1
+    import src.backend.ai.registry as registry_mod
+
+    _original_derive = registry_mod._derive_weight_path
+
+    def _patched_derive(name: str, gen: int, suffix: str) -> str:
+        if name == "rnn_v1" and gen == 1:
+            return os.path.join(gen1_dir, f"{suffix}.pth")
+        return _original_derive(name, gen, suffix)
+
+    with patch.object(registry_mod, "_derive_weight_path", side_effect=_patched_derive):
+        yield
+
+    # Cleanup temp directory after session
+    import shutil
+    shutil.rmtree(gen1_dir, ignore_errors=True)
