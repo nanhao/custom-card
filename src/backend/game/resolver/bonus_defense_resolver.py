@@ -48,5 +48,5 @@ class BonusDefenseResolver(Resolver):
             details.add("Bonus DEFENSE blocked by FRAGILE")
             return
 
-        ctx.card_owner.grant_status(StatusType.DEFENSE)
+        ctx.card_owner.extend_status(StatusType.DEFENSE, 1)
         details.add("gains +1 bonus DEFENSE")

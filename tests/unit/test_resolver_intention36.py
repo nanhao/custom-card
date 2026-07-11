@@ -407,6 +407,26 @@ class TestFlexResolver36:
         BonusDefenseResolver().resolve(ctx, details)
         assert gm.player_1.has_status(StatusType.DEFENSE)
 
+    def test_bonus_and_base_defense_combine_to_2_rounds(self):
+        """TC-08-02 (combined): GrantDefense + BonusDefense → DEFENSE(2).
+
+        When both GrantDefenseResolver and BonusDefenseResolver fire,
+        the resulting DEFENSE should have lifetime=2, surviving one tick.
+        """
+        gm = _make_gm(
+            p1_history=[PlayerHistoryItem(CardType.DEFENSE)],
+        )
+        ctx = _ctx(gm, "1", CardType.FLEX, opponent_card=CardType.ATTACK)
+        details = ResolveDetails()
+        # Fire both in registration order (GrantDefense first, then Bonus)
+        GrantDefenseResolver().resolve(ctx, details)
+        BonusDefenseResolver().resolve(ctx, details)
+        assert gm.player_1.has_status(StatusType.DEFENSE)
+        # Find the DEFENSE status and verify lifetime=2
+        defense_states = [s for s in gm.player_1.statuses if s.status_type == StatusType.DEFENSE]
+        assert len(defense_states) == 1, "Should have exactly one DEFENSE status"
+        assert defense_states[0].lifetime == 2, f"Expected lifetime=2, got {defense_states[0].lifetime}"
+
     def test_no_bonus_without_defense_tag_history(self):
         """TC-08-03: last round ATTACK (no 防 tag) → no bonus defense."""
         gm = _make_gm(

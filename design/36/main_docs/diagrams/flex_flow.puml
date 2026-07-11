@@ -25,7 +25,7 @@ else (否)
     :检查 history[-1].card;
     :通过 get_card_def() 获取上轮卡牌的 tags;
     if ("防" in tags?) then (是)
-        :card_owner.grant_status(DEFENSE);
+        :card_owner.extend_status(DEFENSE, extra=1);
         :记录 "gains +1 bonus DEFENSE";
     else (否)
         :无额外防御;
