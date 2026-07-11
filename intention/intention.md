@@ -510,3 +510,12 @@ train.py 增加一个参数： value_epoch。用于指定训练 value 网络的 
 此外，所有卡牌都增加了一个描述字段，用于在前端展示以介绍卡牌。
 所有卡牌都增加了一个标签定义。一张卡牌可以有多个标签。也可以没有标签。
 还有部分卡牌的效果描述进行了优化，使其更加精简和准确。
+
+# intention_id=37
+构建卡增加一个可选效果，见 intention/card.md 定义。
+同时，网络的 input 和 output 也要修改，见 intention/input.md 和 intention/output.md。
+
+# intention_id=38
+初始抽牌堆减少为5张，移除防守反击和破防重击。
+初始生命值改为30点。
+初始能量数改为3点。
