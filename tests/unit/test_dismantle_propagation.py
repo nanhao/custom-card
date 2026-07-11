@@ -273,6 +273,53 @@ class TestApiDismantleTarget:
             f"{resp2.get_json()}"
         )
 
+    def test_dismantle_survives_save_load_roundtrip(self, api_client):
+        """After save+load, dismantle_target is preserved in history."""
+        resp = api_client.post("/api/games", json={"mode": "pvp"})
+        gid = resp.get_json()["game_id"]
+
+        from src.backend.game.session_store import SessionStore
+        app_instance = api_client.application
+        store: SessionStore = app_instance.config["SESSION_STORE"]
+        gm, metadata = store.load(gid)
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_1.energy = 0
+        gm.player_1.discard_pile = [CardType.HEAVY]
+        gm.player_2.hand = [CardType.DEFENSE]
+        store.save(gid, gm)
+
+        # Round 1: P1 dismantles HEAVY
+        api_client.post(f"/api/games/{gid}/play", json={
+            "cards_1": ["build"],
+            "cards_2": ["defense"],
+            "dismantle_target_1": "heavy",
+        })
+
+        # Save and reload — simulates page refresh
+        gm2, meta2 = store.load(gid)
+        store.save(gid, gm2)
+        gm3, meta3 = store.load(gid)
+
+        # Verify history has dismantle_target preserved after roundtrip
+        hist = gm3.player_1.history
+        assert len(hist) == 1
+        assert hist[0].card == CardType.BUILD
+        assert hist[0].dismantle_target == CardType.HEAVY
+        assert hist[0].build_target is None
+
+        # Play another round — should NOT crash on history processing
+        gm3.player_1.hand = [CardType.ATTACK]
+        gm3.player_2.hand = [CardType.DEFENSE]
+        store.save(gid, gm3)
+        resp2 = api_client.post(f"/api/games/{gid}/play", json={
+            "cards_1": ["attack"],
+            "cards_2": ["defense"],
+        })
+        assert resp2.status_code == 200, (
+            f"Round after dismantle save/load should work, "
+            f"got {resp2.status_code}: {resp2.get_json()}"
+        )
+
 
 class _FakeValueModel(torch.nn.Module):
     """A value model that always returns 0.0 and zero hidden state."""

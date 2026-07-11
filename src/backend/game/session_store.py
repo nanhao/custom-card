@@ -105,6 +105,7 @@ def _serialize_player(player: Player) -> dict:
             {
                 "card": _card_to_str(item.card),
                 "build_target": _card_to_str(item.build_target) if item.build_target else None,
+                "dismantle_target": _card_to_str(item.dismantle_target) if item.dismantle_target else None,
             }
             for item in player.history
         ],
@@ -135,6 +136,7 @@ def _deserialize_player(data: dict) -> Player:
             PlayerHistoryItem(
                 card=_str_to_card(d["card"]) if d.get("card") is not None else None,
                 build_target=_str_to_card(d["build_target"]) if d.get("build_target") else None,
+                dismantle_target=_str_to_card(d["dismantle_target"]) if d.get("dismantle_target") else None,
             )
             for d in data["history"]
         ],
