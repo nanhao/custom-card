@@ -15,7 +15,7 @@ Per architecture D9, this module is pure logic — no UI, no I/O.
 
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def, get_initial_draw_pile
-from src.backend.game.constants import ROUNDS_PER_CYCLE
+from src.backend.game.constants import ROUNDS_PER_CYCLE, CARDS_PER_CYCLE, INITIAL_HP
 from src.backend.game.game_state import GameState, PlayerState
 from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
@@ -42,9 +42,6 @@ class GameCore:
     - build_target parameter for BUILD card construction.
     - BUILD settlement handled by BuildResolver (design/25).
     """
-
-    CARDS_PER_CYCLE = 5
-    INITIAL_HP = 20
 
     def __init__(self, mode: str = "pvp") -> None:
         """Create an uninitialized GameCore. Call start_game() to begin.
@@ -309,7 +306,7 @@ class GameCore:
             """Build a PlayerState snapshot from a Player instance."""
             if p is None:
                 return PlayerState(
-                    hp=GameCore.INITIAL_HP, energy=0, statuses=[], hand=[], history=[],
+                    hp=INITIAL_HP, energy=0, statuses=[], hand=[], history=[],
                 )
             # Deep-copy statuses and hand to prevent mutation of the snapshot.
             statuses = [
@@ -376,7 +373,7 @@ class GameCore:
             player.discard_pile.extend(player.hand)
             player.hand = []
             # Smart draw: shuffles discard into draw only when needed
-            player.draw_cards(self.CARDS_PER_CYCLE)
+            player.draw_cards(CARDS_PER_CYCLE)
 
     def _validate(
         self,
