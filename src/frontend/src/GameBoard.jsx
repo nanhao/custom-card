@@ -152,7 +152,7 @@ export default function GameBoard({
               <div className="status-energy">{energyBar} {p.energy}/5</div>
               {statusTags.length > 0 && <div className="status-tags">{statusTags}</div>}
               {chips.length > 0 && <div className="status-history">{chips}</div>}
-              <div className="status-piles" onClick={pid === '1' ? onViewPiles : undefined} title={pid === '1' ? 'Click to view draw & discard piles' : undefined}>
+              <div className="status-piles" onClick={() => onViewPiles(pid)} title={'Click to view ' + displayName + ' draw & discard piles'} style={{ cursor: 'pointer' }}>
                 Hand: {p.hand.length} | Deck: {p.draw_pile_count ?? 0} | Disc: {p.discard_pile_count ?? 0}
               </div>
             </div>
@@ -454,7 +454,7 @@ export default function GameBoard({
         <div className="pile-overlay" onClick={onClosePiles}>
           <div className="pile-modal" onClick={e => e.stopPropagation()}>
             <div className="pile-modal-header">
-              <h3>📦 Your Piles</h3>
+              <h3>📦 {pileViewer.pid === '1' ? 'Your Piles' : (mode === 'pve' ? `AI (${aiName}) Piles` : "Player 2's Piles")}</h3>
               <button className="btn btn-secondary btn-small" onClick={onClosePiles}>✕</button>
             </div>
             <div className="pile-section">

@@ -200,10 +200,12 @@ def _register_routes(app: Flask) -> None:
     def get_state(game_id: str):
         """Return the current game snapshot.
 
+        Per design/34: both players' draw_pile and discard_pile are always
+        fully visible. The `perspective` query param is kept for backward
+        compatibility but has no effect.
+
         Query params:
-            perspective: "1" or "2" — if set, exposes that player's draw_pile
-                         and discard_pile contents (opponent sees counts only).
-                         If absent, both players see counts only.
+            perspective: Deprecated (design/34). All piles always visible.
 
         Success: 200 OK with {"game_id": "...", "state": {...}}
         Errors:  404 if game not found

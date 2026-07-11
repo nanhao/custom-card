@@ -1,6 +1,6 @@
-"""Unit tests for Converter — 42-d input + action encoding (design/27).
+"""Unit tests for Converter — 56-d input + action encoding (design/34).
 
-Test cases per design/27 test_cases.md.
+Test cases per design/34 test_cases.md.
 """
 
 import pytest
@@ -18,11 +18,11 @@ def _phi(card: CardType, bt: CardType | None = None) -> PlayerHistoryItem:
     return PlayerHistoryItem(card=card, build_target=bt)
 
 
-class TestBuildInputVector42D:
-    """TC-IV: build_input_vector 42-d format (design/27)."""
+class TestBuildInputVector56D:
+    """TC-IV: build_input_vector 56-d format (design/34)."""
 
-    def test_vector_length_is_42(self):
-        """Returned vector length is 42."""
+    def test_vector_length_is_56(self):
+        """Returned vector length is 56."""
         state = make_game_state(
             hand_2=[CardType.ATTACK, CardType.DEFENSE],
             hand_1=[CardType.ATTACK, CardType.DEFENSE],
@@ -31,7 +31,7 @@ class TestBuildInputVector42D:
             history_1=[_phi(CardType.DEFENSE)],
         )
         vec = Converter.build_input_vector(state, player_key="2")
-        assert len(vec) == INPUT_SIZE  # 42
+        assert len(vec) == INPUT_SIZE  # 56
 
     def test_metadata_segment(self):
         """Indices 0-5: HP, energy, round_in_cycle, cycle."""
@@ -160,7 +160,7 @@ class TestBuildInputVector42D:
         assert vec[32] == 1.0  # FLEX
 
     def test_own_draw_pile_counts(self):
-        """P2 draw: energy x2, build x1. Per design/28: BUILD is position 0."""
+        """P2 draw: energy x2, build x1 (design/34: shifted to indices 40-46)."""
         state = make_game_state(
             hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
@@ -168,58 +168,94 @@ class TestBuildInputVector42D:
         )
         vec = Converter.build_input_vector(state, player_key="2")
         # Order: BUILD, ATTACK, DEFENSE, HEAVY, COUNTER, ENERGY, FLEX
+        assert vec[40] == 1.0  # BUILD
+        assert vec[41] == 0.0  # ATTACK
+        assert vec[42] == 0.0  # DEFENSE
+        assert vec[43] == 0.0  # HEAVY
+        assert vec[44] == 0.0  # COUNTER
+        assert vec[45] == 2.0  # ENERGY
+        assert vec[46] == 0.0  # FLEX
+
+    def test_opponent_discard_pile_counts(self):
+        """P1 discard: heavy x1, energy x2, build x1 (design/34: indices 33-39)."""
+        state = make_game_state(
+            hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
+            hp_1=20, hp_2=20,
+            discard_pile_1=[CardType.HEAVY, CardType.ENERGY, CardType.ENERGY, CardType.BUILD],
+        )
+        vec = Converter.build_input_vector(state, player_key="2")
+        # Order: BUILD, ATTACK, DEFENSE, HEAVY, COUNTER, ENERGY, FLEX
         assert vec[33] == 1.0  # BUILD
         assert vec[34] == 0.0  # ATTACK
         assert vec[35] == 0.0  # DEFENSE
-        assert vec[36] == 0.0  # HEAVY
+        assert vec[36] == 1.0  # HEAVY
         assert vec[37] == 0.0  # COUNTER
         assert vec[38] == 2.0  # ENERGY
         assert vec[39] == 0.0  # FLEX
 
+    def test_opponent_discard_pile_empty(self):
+        """Opponent discard empty → indices 33-39 all 0.0."""
+        state = make_game_state(
+            hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
+            hp_1=20, hp_2=20,
+            discard_pile_1=[],
+        )
+        vec = Converter.build_input_vector(state, player_key="2")
+        for i in range(33, 40):
+            assert vec[i] == 0.0
+
+    def test_opponent_draw_pile_counts(self):
+        """P1 draw: counter x2, flex x3 (design/34: indices 47-53)."""
+        state = make_game_state(
+            hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
+            hp_1=20, hp_2=20,
+            draw_pile_1=[CardType.COUNTER, CardType.COUNTER, CardType.FLEX, CardType.FLEX, CardType.FLEX],
+        )
+        vec = Converter.build_input_vector(state, player_key="2")
+        # Order: BUILD, ATTACK, DEFENSE, HEAVY, COUNTER, ENERGY, FLEX
+        assert vec[47] == 0.0  # BUILD
+        assert vec[48] == 0.0  # ATTACK
+        assert vec[49] == 0.0  # DEFENSE
+        assert vec[50] == 0.0  # HEAVY
+        assert vec[51] == 2.0  # COUNTER
+        assert vec[52] == 0.0  # ENERGY
+        assert vec[53] == 3.0  # FLEX
+
+    def test_opponent_draw_pile_empty(self):
+        """Opponent draw empty → indices 47-53 all 0.0."""
+        state = make_game_state(
+            hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
+            hp_1=20, hp_2=20,
+            draw_pile_1=[],
+        )
+        vec = Converter.build_input_vector(state, player_key="2")
+        for i in range(47, 54):
+            assert vec[i] == 0.0
+
     def test_empty_piles_all_zero(self):
-        """Indices 26-39 all 0.0 when piles are empty."""
+        """Indices 26-53 all 0.0 when all piles are empty (design/34: expanded range)."""
         state = make_game_state(
             hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
             discard_pile_2=[], draw_pile_2=[],
+            discard_pile_1=[], draw_pile_1=[],
         )
         vec = Converter.build_input_vector(state, player_key="2")
-        for i in range(26, 40):
+        for i in range(26, 54):
             assert vec[i] == 0.0
 
-    def test_none_discard_pile_raises(self):
-        """ValueError when discard_pile is None (design/27 D4)."""
-        from src.backend.game.game_state import PlayerState
+    def test_piles_non_none_no_error(self):
+        """build_input_vector operates normally when piles are non-None (design/34: None check removed)."""
         state = make_game_state(
             hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
             discard_pile_2=[], draw_pile_2=[],
+            discard_pile_1=[], draw_pile_1=[],
         )
-        # Override PlayerState to set discard_pile=None directly
-        state.players["2"] = PlayerState(
-            hp=20, energy=0, statuses=[], hand=[CardType.ATTACK], history=[],
-            draw_pile=[], discard_pile=None,
-            draw_pile_count=0, discard_pile_count=0,
-        )
-        with pytest.raises(ValueError, match="discard_pile is None"):
-            Converter.build_input_vector(state, player_key="2")
-
-    def test_none_draw_pile_raises(self):
-        """ValueError when draw_pile is None (design/27 D4)."""
-        from src.backend.game.game_state import PlayerState
-        state = make_game_state(
-            hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
-            discard_pile_2=[], draw_pile_2=[],
-        )
-        state.players["2"] = PlayerState(
-            hp=20, energy=0, statuses=[], hand=[CardType.ATTACK], history=[],
-            draw_pile=None, discard_pile=[],
-            draw_pile_count=0, discard_pile_count=0,
-        )
-        with pytest.raises(ValueError, match="draw_pile is None"):
-            Converter.build_input_vector(state, player_key="2")
+        vec = Converter.build_input_vector(state, player_key="2")
+        assert len(vec) == INPUT_SIZE
 
     def test_last_action_segment(self):
-        """P2 played ATTACK, P1 played BUILD+DEFENSE. Per design/28: indices shifted."""
+        """P2 played ATTACK, P1 played BUILD+DEFENSE (design/34: indices 54-55)."""
         state = make_game_state(
             hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
@@ -227,18 +263,18 @@ class TestBuildInputVector42D:
             history_1=[_phi(CardType.BUILD, CardType.DEFENSE)],
         )
         vec = Converter.build_input_vector(state, player_key="2")
-        assert vec[40] == 2.0  # ATTACK (was 1.0 in 13-d, now 2.0 in 14-d)
-        assert vec[41] == 5.0  # BUILD+DEFENSE (was 4.0 in 13-d, now 5.0)
+        assert vec[54] == 2.0  # ATTACK play → index 2
+        assert vec[55] == 5.0  # BUILD+DEFENSE → index 5
 
     def test_first_round_no_history(self):
-        """Indices 40-41 = -1.0 when no history."""
+        """Indices 54-55 = -1.0 when no history."""
         state = make_game_state(
             hand_2=[CardType.ATTACK], hand_1=[CardType.DEFENSE],
             hp_1=20, hp_2=20,
         )
         vec = Converter.build_input_vector(state, player_key="2")
-        assert vec[40] == -1.0
-        assert vec[41] == -1.0
+        assert vec[54] == -1.0
+        assert vec[55] == -1.0
 
     def test_invalid_player_key_raises(self):
         """ValueError for non-'1'/'2' player_key."""
@@ -294,7 +330,7 @@ class TestBuildInputVector42D:
             assert vec[i] == 0.0
 
     def test_full_perspective_swap(self):
-        """Comprehensive validation when player_key='1'. Per design/28: _CARD_TYPE_ORDER changes."""
+        """Comprehensive validation when player_key='1' (design/34: 56-d indices)."""
         state = make_game_state(
             hp_1=10, hp_2=20, energy_1=2, energy_2=4,
             hand_1=[CardType.HEAVY, CardType.COUNTER],
@@ -304,6 +340,8 @@ class TestBuildInputVector42D:
                         PlayerStatus(StatusType.FRAGILE, lifetime=3)],
             history_1=[_phi(CardType.ATTACK)],
             history_2=[_phi(CardType.DEFENSE)],
+            discard_pile_1=[CardType.ATTACK], draw_pile_1=[CardType.ENERGY],
+            discard_pile_2=[CardType.DEFENSE, CardType.DEFENSE], draw_pile_2=[CardType.FLEX],
         )
         vec = Converter.build_input_vector(state, player_key="1")
         assert vec[0] == 10.0
@@ -329,9 +367,34 @@ class TestBuildInputVector42D:
         assert vec[23] == 0.0
         assert vec[24] == 2.0
         assert vec[25] == 3.0
-        # Last actions: ATTACK→2, DEFENSE→4 (design/28)
-        assert vec[40] == 2.0
-        assert vec[41] == 4.0
+        # P1 discard (indices 26-32): attack=1
+        assert vec[27] == 1.0  # ATTACK in own discard
+        # P2 discard (indices 33-39): defense=2
+        assert vec[35] == 2.0  # DEFENSE in opp discard
+        # P1 draw (indices 40-46): energy=1
+        assert vec[45] == 1.0  # ENERGY in own draw
+        # P2 draw (indices 47-53): flex=1
+        assert vec[53] == 1.0  # FLEX in opp draw
+        # Last actions: ATTACK→2, DEFENSE→4 (design/34: indices 54-55)
+        assert vec[54] == 2.0
+        assert vec[55] == 4.0
+
+    def test_build_adds_to_opponent_discard(self):
+        """After play_round with BUILD+ATTACK, opponent discard has ATTACK (design/34)."""
+        from src.backend.game.game_core import GameCore
+        gc = GameCore()
+        gc.start_game()
+        # Ensure BUILD is in P1's hand and energy is sufficient
+        gc.player_1.hand = [CardType.BUILD]
+        gc.player_2.hand = [CardType.DEFENSE]
+        gc.player_1.energy = 3
+        gc.play_round([CardType.BUILD], [CardType.DEFENSE], build_target_1=CardType.ATTACK)
+        gs = gc.get_state()
+        vec = Converter.build_input_vector(gs, player_key="2")
+        # P1 discard pile (opponent's discard from P2 perspective): should contain the built ATTACK
+        assert vec[34] == 1.0  # ATTACK in opponent (P1) discard
+        # P2 discard pile (own): contains DEFENSE
+        assert vec[28] == 1.0  # DEFENSE in own (P2) discard
 
 
 class TestCountByCardType:
@@ -387,14 +450,14 @@ class TestExtractStatusLifetime:
 
 
 class TestInputSizeConstant:
-    """TC-IS: INPUT_SIZE = 42, model accepts 42-d input."""
+    """TC-IS: INPUT_SIZE = 56, model accepts 56-d input."""
 
-    def test_input_size_is_42(self):
-        """INPUT_SIZE from model module equals 42."""
-        assert INPUT_SIZE == 42
+    def test_input_size_is_56(self):
+        """INPUT_SIZE from model module equals 56."""
+        assert INPUT_SIZE == 56
 
-    def test_policy_model_accepts_42d_input(self):
-        """GRUPolicyModel forward accepts (1, 1, 42) tensor."""
+    def test_policy_model_accepts_56d_input(self):
+        """GRUPolicyModel forward accepts (1, 1, 56) tensor."""
         import torch
         from src.backend.ai.rnn_v1.model import GRUPolicyModel, HIDDEN_SIZE
         model = GRUPolicyModel()
@@ -403,8 +466,8 @@ class TestInputSizeConstant:
         probs, log_probs, new_hidden = model.forward(x, hidden)
         assert probs.shape == (1, POLICY_OUTPUT_SIZE)
 
-    def test_value_model_accepts_42d_input(self):
-        """GRUValueModel forward accepts (1, 1, 42) tensor."""
+    def test_value_model_accepts_56d_input(self):
+        """GRUValueModel forward accepts (1, 1, 56) tensor."""
         import torch
         from src.backend.ai.rnn_v1.model import GRUValueModel, HIDDEN_SIZE
         model = GRUValueModel()

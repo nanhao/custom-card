@@ -1,19 +1,19 @@
-"""Split policy/value GRU-based AI models for the custom card game (design/14, design/27, design/28).
+"""Split policy/value GRU-based AI models for the custom card game (design/14, design/34).
 
 Per design/14: input vector redesigned — metadata (HP, energy, round, cycle) at
 front, card counts in middle, policy-index last actions at tail.
-Per design/27: INPUT_SIZE expanded from 15 to 42 — added opponent hand (7 dims),
-status lifetimes for both players (6 dims), own discard pile (7 dims), and own
-draw pile (7 dims).
+Per design/34: INPUT_SIZE expanded from 42 to 56 — added opponent discard pile (7 dims),
+opponent draw pile (7 dims); own draw pile and last actions shifted accordingly.
+Input layout per intention/input.md.
 Per design/28: POLICY_OUTPUT_SIZE expanded from 13 to 14 — added pass at index 0;
 even indices pure play, odd indices build+target.
 
 Architecture:
-    GRUPolicyModel: Input(42) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax
+    GRUPolicyModel: Input(56) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax
         Output 14-d: index 0=pass, even(2,4,6,8,10,12)=pure play, odd(1,3,5,7,9,11,13)=build.
-    GRUValueModel:  Input(42) -> GRU(32, 1 layer) -> Linear(32->1)
+    GRUValueModel:  Input(56) -> GRU(32, 1 layer) -> Linear(32->1)
 
-Input vector layout (0-based, design/27):
+Input vector layout (0-based, per intention/input.md, design/34):
     index 0:     Own HP
     index 1:     Opponent HP
     index 2:     Own energy (0-5)
@@ -25,9 +25,11 @@ Input vector layout (0-based, design/27):
     indices 20-22:  Own status lifetimes (DEFENSE, GUARD, FRAGILE; 0 if absent)
     indices 23-25:  Opponent status lifetimes (DEFENSE, GUARD, FRAGILE; 0 if absent)
     indices 26-32:  Own discard pile card counts (attack..flex, 7 types)
-    indices 33-39:  Own draw pile card counts (attack..flex, 7 types)
-    index 40:    Own last action policy index (-1 if first round)
-    index 41:    Opponent last action policy index (-1 if first round)
+    indices 33-39:  Opponent discard pile card counts (attack..flex, 7 types)  ← NEW design/34
+    indices 40-46:  Own draw pile card counts (attack..flex, 7 types)          ← shifted design/34
+    indices 47-53:  Opponent draw pile card counts (attack..flex, 7 types)    ← NEW design/34
+    index 54:    Own last action policy index (-1 if first round)              ← shifted design/34
+    index 55:    Opponent last action policy index (-1 if first round)         ← shifted design/34
 
 mask_fn supports 13-d interleaved masking:
     - Odd indices (1,3,5,7,9,11): block cards not in hand
@@ -53,15 +55,16 @@ from src.backend.ai.constants import (  # shared constants (design/31)
 
 
 class GRUPolicyModel(nn.Module):
-    """GRU-based policy network with 14-d output (design/14, design/27, design/28).
+    """GRU-based policy network with 14-d output (design/14, design/34, design/28).
 
-    Architecture: Input(42) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax.
+    Architecture: Input(56) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax.
 
-    Input (42-d, per design/27):
+    Input (56-d, per intention/input.md, design/34):
         [HP_own, HP_opp, energy_own, energy_opp, round, cycle |
          own_hand_counts(7) | opp_hand_counts(7) |
          own_status_lifetimes(3) | opp_status_lifetimes(3) |
-         own_discard_counts(7) | own_draw_counts(7) |
+         own_discard_counts(7) | opp_discard_counts(7) |
+         own_draw_counts(7) | opp_draw_counts(7) |
          last_own, last_opp]
 
     Output (14-d, design/28):
@@ -93,7 +96,7 @@ class GRUPolicyModel(nn.Module):
         """Run one GRU step, apply optional two-segment mask and temperature.
 
         Args:
-            x: Input tensor of shape (1, 1, 42).
+            x: Input tensor of shape (1, 1, 56).
             hidden: Hidden state tensor of shape (1, 1, 32).
             mask_fn: Optional callable that takes policy logits (1,14) and
                      returns masked logits (1,14). If None, no masking.
@@ -134,14 +137,15 @@ class GRUPolicyModel(nn.Module):
 class GRUValueModel(nn.Module):
     """GRU-based value network for state evaluation.
 
-    Architecture: Input(42) -> GRU(32, 1 layer) -> Linear(32->1).
+    Architecture: Input(56) -> GRU(32, 1 layer) -> Linear(32->1).
     No tanh — value can exceed [-1, 1].
 
-    Input (42-d, per design/27):
+    Input (56-d, per intention/input.md, design/34):
         [HP_own, HP_opp, energy_own, energy_opp, round, cycle |
          own_hand_counts(7) | opp_hand_counts(7) |
          own_status_lifetimes(3) | opp_status_lifetimes(3) |
-         own_discard_counts(7) | own_draw_counts(7) |
+         own_discard_counts(7) | opp_discard_counts(7) |
+         own_draw_counts(7) | opp_draw_counts(7) |
          last_own, last_opp]
     """
 
@@ -166,7 +170,7 @@ class GRUValueModel(nn.Module):
         """Run one GRU step, return scalar value estimate.
 
         Args:
-            x: Input tensor of shape (1, 1, 42).
+            x: Input tensor of shape (1, 1, 56).
             hidden: Hidden state tensor of shape (1, 1, 32).
 
         Returns:

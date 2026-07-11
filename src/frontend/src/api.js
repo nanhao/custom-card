@@ -26,17 +26,10 @@ export async function createGame(mode = 'pvp', ai = null) {
   return data;
 }
 
-/** Get current game state. Returns { game_id, state }. */
+/** Get current game state. Returns { game_id, state }.
+ * Per design/34: both players' draw_pile and discard_pile are always visible. */
 export async function getState(gameId) {
   const resp = await fetch(`${API_BASE}/games/${gameId}`);
-  const data = await resp.json();
-  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-  return data;
-}
-
-/** Get game state with pile inspection for a player. */
-export async function getMyPiles(gameId) {
-  const resp = await fetch(`${API_BASE}/games/${gameId}?perspective=1`);
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
   return data;

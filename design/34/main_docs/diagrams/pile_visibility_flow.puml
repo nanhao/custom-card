@@ -1,0 +1,69 @@
+@startuml
+' Pile Visibility Flow — Mutual Pile Visibility (intention #34)
+' Shows the end-to-end flow: GameCore.get_state() → API → frontend pile viewer.
+
+skinparam sequenceFontSize 11
+
+title Pile Visibility — End-to-End Flow (intention #34)
+
+actor User
+
+box "Frontend" #LightYellow
+    participant GameBoard
+    participant App
+    participant "api.js" as API
+end box
+
+box "Backend" #LightBlue
+    participant "Controller\napi.py" as Controller
+    participant GameCore
+    participant PlayerState
+end box
+
+== Game State Request (always full piles) ==
+
+User -> GameBoard : clicks pile count (P1 or P2)
+GameBoard -> App : onViewPiles(pid)
+App -> App : read state.players[pid].draw_pile\nand state.players[pid].discard_pile\ndirectly from state (no API call)
+
+note right of App
+  **Design/34 change**
+  state already contains full
+  piles for BOTH players.
+  No perspective param needed.
+  getMyPiles() API removed.
+end note
+
+App -> GameBoard : setPileViewer({ pid, draw_pile, discard_pile })
+GameBoard -> User : show pile viewer modal\n"Your Piles" or "Opponent's Piles"
+
+== Backend: get_state() always returns full piles ==
+
+Controller -> GameCore : get_state()\n(player_perspective deprecated)
+GameCore -> PlayerState : build PlayerState for P1
+GameCore -> PlayerState : build PlayerState for P2
+
+note right of PlayerState
+  **Design/34 change**
+  draw_pile: list[CardType] (always)
+  discard_pile: list[CardType] (always)
+  No more None values.
+  No conditional branching.
+end note
+
+GameCore --> Controller : GameState with full piles for both
+Controller --> API : {"players": {"1": {draw_pile:[...], discard_pile:[...]},\n"2": {draw_pile:[...], discard_pile:[...]}}}
+
+== During Game Creation ==
+
+User -> App : start game (PVP or PVE)
+App -> API : createGame(mode, ai)
+API -> Controller : POST /api/games
+Controller -> GameCore : start_game()
+Controller -> GameCore : get_state()
+GameCore --> Controller : GameState (both piles visible)
+Controller --> API : state with both players' piles
+API --> App : state
+App -> GameBoard : render status bar with\nclickable pile counts for both players
+
+@enduml

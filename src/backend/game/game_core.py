@@ -292,18 +292,19 @@ class GameCore:
         PlayerState fields use typed objects (CardType, PlayerStatus) — no
         string or dict representations.
 
+        Per design/34 D3: both players' draw_pile and discard_pile are always
+        fully visible regardless of player_perspective. The parameter is kept
+        for backward compatibility but does not affect behavior.
+
         Args:
-            player_perspective: If "1" or "2", exposes that player's pile
-                                contents in draw_pile/discard_pile. If None,
-                                both players see only counts.
+            player_perspective: Deprecated in design/34. Kept for compatibility.
+                                Always returns full piles for both players.
 
         Returns:
             GameState dataclass with typed fields.
         """
-        show_p1 = (player_perspective == "1")
-        show_p2 = (player_perspective == "2")
 
-        def _build_player_state(p: Player | None, show_piles: bool) -> PlayerState:
+        def _build_player_state(p: Player | None) -> PlayerState:
             """Build a PlayerState snapshot from a Player instance."""
             if p is None:
                 return PlayerState(
@@ -315,19 +316,12 @@ class GameCore:
             ]
             hand = list(p.hand)
             history = list(p.history)
-            if show_piles:
-                return PlayerState(
-                    hp=p.hp, energy=p.energy,
-                    statuses=statuses, hand=hand, history=history,
-                    draw_pile=list(p.draw_pile),
-                    discard_pile=list(p.discard_pile),
-                    draw_pile_count=len(p.draw_pile),
-                    discard_pile_count=len(p.discard_pile),
-                )
+            # Per design/34: piles always fully visible to both players.
             return PlayerState(
                 hp=p.hp, energy=p.energy,
                 statuses=statuses, hand=hand, history=history,
-                draw_pile=None, discard_pile=None,
+                draw_pile=list(p.draw_pile),
+                discard_pile=list(p.discard_pile),
                 draw_pile_count=len(p.draw_pile),
                 discard_pile_count=len(p.discard_pile),
             )
@@ -337,8 +331,8 @@ class GameCore:
             cycle=self.cycle_number,
             round_in_cycle=self.round_in_cycle,
             players={
-                "1": _build_player_state(self.player_1, show_p1),
-                "2": _build_player_state(self.player_2, show_p2),
+                "1": _build_player_state(self.player_1),
+                "2": _build_player_state(self.player_2),
             },
             is_over=self.is_over,
             winner=self.winner,

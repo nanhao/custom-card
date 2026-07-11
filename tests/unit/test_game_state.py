@@ -1,6 +1,6 @@
 """Unit tests for src/backend/game/game_state.py — PlayerState / GameState dataclass.
 
-Test cases per design/19 test_cases.md §1-3 (TC-PS-01~05, TC-GS-01~03, TC-TD-01~07).
+Test cases per design/34 test_cases.md §3 (TC-GS-01~04).
 """
 
 import pytest
@@ -20,15 +20,16 @@ class TestPlayerState:
     """Tests for PlayerState dataclass construction and field types."""
 
     def test_basic_construction(self):
-        """TC-PS-01: Basic construction with empty fields."""
+        """TC-PS-01: Basic construction with empty fields (design/34: piles default to [])."""
         ps = PlayerState(hp=20, energy=3, statuses=[], hand=[], history=[])
         assert ps.hp == 20
         assert ps.energy == 3
         assert ps.statuses == []
         assert ps.hand == []
         assert ps.history == []
-        assert ps.draw_pile is None
-        assert ps.discard_pile is None
+        # design/34: piles always list, not None
+        assert ps.draw_pile == []
+        assert ps.discard_pile == []
         assert ps.draw_pile_count == 0
         assert ps.discard_pile_count == 0
 
@@ -74,11 +75,13 @@ class TestPlayerState:
         assert isinstance(ps.statuses[0], PlayerStatus)
         assert not isinstance(ps.statuses[0], dict)
 
-    def test_default_piles_none(self):
-        """TC-PS-05: Default draw_pile / discard_pile are None, counts are 0."""
+    def test_default_piles_empty_list(self):
+        """TC-PS-05: Default draw_pile / discard_pile are empty lists (design/34: never None)."""
         ps = PlayerState(hp=20, energy=0, statuses=[], hand=[], history=[])
-        assert ps.draw_pile is None
-        assert ps.discard_pile is None
+        assert ps.draw_pile == []
+        assert ps.discard_pile == []
+        assert isinstance(ps.draw_pile, list)
+        assert isinstance(ps.discard_pile, list)
         assert ps.draw_pile_count == 0
         assert ps.discard_pile_count == 0
 
@@ -219,11 +222,11 @@ class TestGameStateToDict:
             {"card": "build", "build_target": "counter"},
         ]
 
-    def test_draw_pile_none_omitted(self):
-        """TC-TD-05: When draw_pile is None, it is omitted from dict."""
+    def test_draw_pile_always_serialized(self):
+        """TC-GS-03: When draw_pile is empty list, it is serialized (design/34: always included)."""
         ps1 = PlayerState(
             hp=20, energy=0, statuses=[], hand=[], history=[],
-            draw_pile=None, draw_pile_count=5,
+            draw_pile=[], draw_pile_count=0,
         )
         ps2 = self._make_empty_player(20)
         gs = GameState(
@@ -232,8 +235,13 @@ class TestGameStateToDict:
             is_over=False, winner=None, mode="pvp", round_log=[],
         )
         result = GameState.to_dict(gs)
-        assert "draw_pile" not in result["players"]["1"]
-        assert result["players"]["1"]["draw_pile_count"] == 5
+        # design/34: draw_pile always serialized, even when empty
+        assert "draw_pile" in result["players"]["1"]
+        assert result["players"]["1"]["draw_pile"] == []
+        assert result["players"]["1"]["draw_pile_count"] == 0
+        # P2 should also have draw_pile/discard_pile
+        assert "draw_pile" in result["players"]["2"]
+        assert "discard_pile" in result["players"]["2"]
 
     def test_round_log_serialization(self):
         """TC-TD-06: round_log contains serialized RoundResult."""

@@ -20,7 +20,6 @@ vi.mock('../src/api.js', () => ({
   playRound: vi.fn(),
   deleteGame: vi.fn(),
   listAis: vi.fn(),
-  getMyPiles: vi.fn(),
   fetchCards: vi.fn(() => Promise.resolve({ cards: MOCK_CARDS })),
 }));
 import * as api from '../src/api.js';

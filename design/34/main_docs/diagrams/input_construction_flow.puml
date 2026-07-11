@@ -1,0 +1,74 @@
+@startuml
+' Input Construction Flow — 56-d Vector Build (intention #34)
+' Shows how Converter.build_input_vector constructs the 56-d input from GameState.
+
+skinparam activityFontSize 12
+
+title Converter.build_input_vector — 56-d Input Construction
+
+start
+
+:Input: GameState + player_key ("1" or "2");
+
+:Validate player_key in {"1", "2"};
+
+if (player_key valid?) then (no)
+    :Raise ValueError;
+    stop
+endif
+
+:Determine this_player and opponent_key;
+
+partition "Segment 1: Metadata (indices 0-5)" {
+    :this_player.hp → index 0;
+    :opp_player.hp → index 1;
+    :this_player.energy → index 2;
+    :opp_player.energy → index 3;
+    :state.round_in_cycle → index 4;
+    :state.cycle → index 5;
+}
+
+partition "Segment 2: Hand Counts (indices 6-19)" {
+    :_count_by_card_type(this_player.hand) → indices 6-12;
+    :_count_by_card_type(opp_player.hand) → indices 13-19;
+}
+
+partition "Segment 3: Status Lifetimes (indices 20-25)" {
+    :_extract_status_lifetime(this_player, DEFENSE) → index 20;
+    :_extract_status_lifetime(this_player, GUARD) → index 21;
+    :_extract_status_lifetime(this_player, FRAGILE) → index 22;
+    :_extract_status_lifetime(opp_player, DEFENSE) → index 23;
+    :_extract_status_lifetime(opp_player, GUARD) → index 24;
+    :_extract_status_lifetime(opp_player, FRAGILE) → index 25;
+}
+
+partition "Segment 4: Own Discard Pile (indices 26-32)" {
+    :_count_by_card_type(this_player.discard_pile) → indices 26-32;
+    note right: pile always non-None (per D4)\nno ValueError check needed
+}
+
+partition "Segment 5: Opponent Discard Pile (indices 33-39) [NEW]" {
+    :_count_by_card_type(opp_player.discard_pile) → indices 33-39;
+    note right: NEW in design/34\nwas own draw pile in design/27
+}
+
+partition "Segment 6: Own Draw Pile (indices 40-46) [SHIFTED]" {
+    :_count_by_card_type(this_player.draw_pile) → indices 40-46;
+    note right: shifted from 33-39 in design/27
+}
+
+partition "Segment 7: Opponent Draw Pile (indices 47-53) [NEW]" {
+    :_count_by_card_type(opp_player.draw_pile) → indices 47-53;
+}
+
+partition "Segment 8: Last Actions (indices 54-55) [SHIFTED]" {
+    :_action_item_to_index(this_player.history[-1]) or -1.0 → index 54;
+    :_action_item_to_index(opp_player.history[-1]) or -1.0 → index 55;
+    note right: shifted from 40-41 in design/27
+}
+
+:Return list[float] of length 56;
+
+stop
+
+@enduml

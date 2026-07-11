@@ -1,26 +1,26 @@
-"""Skip-connection GRU-based AI models for the custom card game (design/31).
+"""Skip-connection GRU-based AI models for the custom card game (design/34).
 
-Per design/31: rnn_v2 adds a skip connection that concatenates the raw 42-d
-input with the GRU's 32-d output, producing a 74-d vector fed into a 3-layer
+Per design/34: rnn_v2 adds a skip connection that concatenates the raw 56-d
+input with the GRU's 32-d output, producing an 88-d vector fed into a 3-layer
 MLP head. This allows hand cards, HP, energy, and other instantaneous features
 to bypass the GRU bottleneck, while the GRU focuses on sequential context
 (last actions, status changes).
 
 Architecture:
-    GRUPolicyModelV2: Input(42) -> GRU(32, 1 layer) ─┐
-                       Input(42) ─────────────────────┤-> Concat(74)
-                         -> Linear(74->64) -> ReLU
+    GRUPolicyModelV2: Input(56) -> GRU(32, 1 layer) ─┐
+                       Input(56) ─────────────────────┤-> Concat(88)
+                         -> Linear(88->64) -> ReLU
                          -> Linear(64->32) -> ReLU
                          -> Linear(32->14) -> softmax
         Output 14-d: index 0=pass, even(2,4,6,8,10,12)=pure play, odd(1,3,5,7,9,11,13)=build.
 
-    GRUValueModelV2:  Input(42) -> GRU(32, 1 layer) ─┐
-                       Input(42) ─────────────────────┤-> Concat(74)
-                         -> Linear(74->64) -> ReLU
+    GRUValueModelV2:  Input(56) -> GRU(32, 1 layer) ─┐
+                       Input(56) ─────────────────────┤-> Concat(88)
+                         -> Linear(88->64) -> ReLU
                          -> Linear(64->32) -> ReLU
                          -> Linear(32->1)
 
-Input vector layout (0-based, same as v1 per design/27):
+Input vector layout (0-based, per intention/input.md, design/34):
     index 0:     Own HP
     index 1:     Opponent HP
     index 2:     Own energy (0-5)
@@ -32,9 +32,11 @@ Input vector layout (0-based, same as v1 per design/27):
     indices 20-22:  Own status lifetimes (DEFENSE, GUARD, FRAGILE; 0 if absent)
     indices 23-25:  Opponent status lifetimes (DEFENSE, GUARD, FRAGILE; 0 if absent)
     indices 26-32:  Own discard pile card counts (attack..flex, 7 types)
-    indices 33-39:  Own draw pile card counts (attack..flex, 7 types)
-    index 40:    Own last action policy index (-1 if first round)
-    index 41:    Opponent last action policy index (-1 if first round)
+    indices 33-39:  Opponent discard pile card counts (attack..flex, 7 types)  ← NEW design/34
+    indices 40-46:  Own draw pile card counts (attack..flex, 7 types)          ← shifted design/34
+    indices 47-53:  Opponent draw pile card counts (attack..flex, 7 types)    ← NEW design/34
+    index 54:    Own last action policy index (-1 if first round)              ← shifted design/34
+    index 55:    Opponent last action policy index (-1 if first round)         ← shifted design/34
 
 Per design/31 D5: forward() signatures are identical to v1, allowing
 transparent replacement in AppManager, SelfPlayRunner, and TrainingRunner.
@@ -52,7 +54,7 @@ from src.backend.ai.constants import (  # shared constants (design/31)
     POLICY_OUTPUT_SIZE,
 )
 
-SKIP_INPUT_SIZE = INPUT_SIZE + HIDDEN_SIZE  # 74: GRU_out(32) + raw_input(42)
+SKIP_INPUT_SIZE = INPUT_SIZE + HIDDEN_SIZE  # 88: GRU_out(32) + raw_input(56)
 
 # ---------------------------------------------------------------------------
 # GRUPolicyModelV2
@@ -60,20 +62,21 @@ SKIP_INPUT_SIZE = INPUT_SIZE + HIDDEN_SIZE  # 74: GRU_out(32) + raw_input(42)
 
 
 class GRUPolicyModelV2(nn.Module):
-    """GRU-based policy network with skip connection and 3-layer MLP head (design/31).
+    """GRU-based policy network with skip connection and 3-layer MLP head (design/34).
 
     Architecture:
-        x -> GRU(42->32) -> gru_out
-        concat(gru_out(32), x(42)) = 74
-        -> Linear(74->64) -> ReLU
+        x -> GRU(56->32) -> gru_out
+        concat(gru_out(32), x(56)) = 88
+        -> Linear(88->64) -> ReLU
         -> Linear(64->32) -> ReLU
         -> Linear(32->14) -> softmax
 
-    Input (42-d, per design/27):
+    Input (56-d, per intention/input.md, design/34):
         [HP_own, HP_opp, energy_own, energy_opp, round, cycle |
          own_hand_counts(7) | opp_hand_counts(7) |
          own_status_lifetimes(3) | opp_status_lifetimes(3) |
-         own_discard_counts(7) | own_draw_counts(7) |
+         own_discard_counts(7) | opp_discard_counts(7) |
+         own_draw_counts(7) | opp_draw_counts(7) |
          last_own, last_opp]
 
     Output (14-d, design/28):
@@ -113,7 +116,7 @@ class GRUPolicyModelV2(nn.Module):
         """Run one GRU step with skip connection, apply mask and temperature.
 
         Args:
-            x: Input tensor of shape (1, 1, 42).
+            x: Input tensor of shape (1, 1, 56).
             hidden: Hidden state tensor of shape (1, 1, 32).
             mask_fn: Optional callable that takes policy logits (1,14) and
                      returns masked logits (1,14). If None, no masking.
@@ -127,10 +130,10 @@ class GRUPolicyModelV2(nn.Module):
         """
         gru_out, new_hidden = self.gru(x, hidden)
         gru_out = gru_out.squeeze(0)  # (1, 32)
-        x_squeezed = x.squeeze(0)     # (1, 42)
+        x_squeezed = x.squeeze(0)     # (1, 56)
 
         # Skip connection: concat GRU output with raw input (design/31 D1)
-        combined = torch.cat([gru_out, x_squeezed], dim=-1)  # (1, 74)
+        combined = torch.cat([gru_out, x_squeezed], dim=-1)  # (1, 88)
 
         # 3-layer MLP head (design/31 D3)
         h1 = torch.relu(self.fc1(combined))   # (1, 64)
@@ -161,22 +164,23 @@ class GRUPolicyModelV2(nn.Module):
 
 
 class GRUValueModelV2(nn.Module):
-    """GRU-based value network with skip connection and 3-layer MLP head (design/31).
+    """GRU-based value network with skip connection and 3-layer MLP head (design/34).
 
     Architecture:
-        x -> GRU(42->32) -> gru_out
-        concat(gru_out(32), x(42)) = 74
-        -> Linear(74->64) -> ReLU
+        x -> GRU(56->32) -> gru_out
+        concat(gru_out(32), x(56)) = 88
+        -> Linear(88->64) -> ReLU
         -> Linear(64->32) -> ReLU
         -> Linear(32->1)
 
     No tanh — value can exceed [-1, 1], same as v1.
 
-    Input (42-d, per design/27):
+    Input (56-d, per intention/input.md, design/34):
         [HP_own, HP_opp, energy_own, energy_opp, round, cycle |
          own_hand_counts(7) | opp_hand_counts(7) |
          own_status_lifetimes(3) | opp_status_lifetimes(3) |
-         own_discard_counts(7) | own_draw_counts(7) |
+         own_discard_counts(7) | opp_discard_counts(7) |
+         own_draw_counts(7) | opp_draw_counts(7) |
          last_own, last_opp]
     """
 
@@ -205,7 +209,7 @@ class GRUValueModelV2(nn.Module):
         """Run one GRU step with skip connection, return scalar value estimate.
 
         Args:
-            x: Input tensor of shape (1, 1, 42).
+            x: Input tensor of shape (1, 1, 56).
             hidden: Hidden state tensor of shape (1, 1, 32).
 
         Returns:
@@ -215,10 +219,10 @@ class GRUValueModelV2(nn.Module):
         """
         gru_out, new_hidden = self.gru(x, hidden)
         gru_out = gru_out.squeeze(0)  # (1, 32)
-        x_squeezed = x.squeeze(0)     # (1, 42)
+        x_squeezed = x.squeeze(0)     # (1, 56)
 
         # Skip connection: concat GRU output with raw input (design/31 D1)
-        combined = torch.cat([gru_out, x_squeezed], dim=-1)  # (1, 74)
+        combined = torch.cat([gru_out, x_squeezed], dim=-1)  # (1, 88)
 
         # 3-layer MLP head (design/31 D3)
         h1 = torch.relu(self.fc1(combined))   # (1, 64)

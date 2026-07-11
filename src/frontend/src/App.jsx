@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createGame, getState, playRound, deleteGame, listAis, getMyPiles, fetchCards } from './api.js';
+import { createGame, getState, playRound, deleteGame, listAis, fetchCards } from './api.js';
 import GameBoard from './GameBoard.jsx';
 import './App.css';
 
@@ -35,7 +35,7 @@ export default function App() {
   const [pendingBuild, setPendingBuild] = useState(null); // card string buffered for BUILD
 
   // ---- Pile viewer state ----
-  const [pileViewer, setPileViewer] = useState(null); // null | { draw_pile: [...], discard_pile: [...] }
+  const [pileViewer, setPileViewer] = useState(null); // null | { pid, draw_pile, discard_pile }
 
   // ---- Load card metadata on mount ----
   useEffect(() => {
@@ -292,18 +292,16 @@ export default function App() {
   }
 
   // ---- Pile viewer ----
-  async function handleViewPiles() {
-    if (pileViewer) { setPileViewer(null); return; }
-    try {
-      const data = await getMyPiles(gameId);
-      const p = data.state.players['1'];
-      setPileViewer({
-        draw_pile: p.draw_pile || [],
-        discard_pile: p.discard_pile || [],
-      });
-    } catch (err) {
-      setError(err.message);
-    }
+  /** View draw/discard piles for any player (design/34: mutual visibility). */
+  async function handleViewPiles(pid) {
+    if (pileViewer && pileViewer.pid === pid) { setPileViewer(null); return; }
+    if (!state) return;
+    const p = state.players[pid];
+    setPileViewer({
+      pid,
+      draw_pile: p.draw_pile || [],
+      discard_pile: p.discard_pile || [],
+    });
   }
 
   // ---- New game (same mode/AI) ----

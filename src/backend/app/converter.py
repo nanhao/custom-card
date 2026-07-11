@@ -1,12 +1,12 @@
-"""Bidirectional conversion between game state and AI model tensors (design/14, design/27, design/28).
+"""Bidirectional conversion between game state and AI model tensors (design/14, design/34, design/28).
 
 Per design/14: 15-d input vector with metadata (HP, energy, round, cycle)
 at the front, card counts in the middle, and policy-index-encoded last
 actions at the tail. Policy output is 13-d interleaved (build/play pairs).
 
-Per design/27: INPUT_SIZE expanded to 42-d — adds opponent hand counts (7 dims),
-status lifetimes for both players (6 dims), own discard pile counts (7 dims),
-and own draw pile counts (7 dims).
+Per design/34: INPUT_SIZE expanded to 56-d — adds opponent discard pile (7 dims),
+opponent draw pile (7 dims); own draw pile and last actions shifted accordingly.
+Input layout per intention/input.md.
 
 Per design/28: POLICY_OUTPUT_SIZE expanded to 14-d — adds pass at index 0;
 all non-pass indices shift +1; even indices now pure play, odd indices build.
@@ -29,11 +29,12 @@ from src.backend.game.player_state import StatusType, PlayerStatus
 class Converter:
     """Bidirectional conversion between game state and model tensors.
 
-    Per design/14, design/27, design/28:
-    - Input: 42-d (HP×2, energy×2, round, cycle,
+    Per design/14, design/34, design/28:
+    - Input: 56-d (HP×2, energy×2, round, cycle,
               own_hand×7, opp_hand×7,
               own_status×3, opp_status×3,
-              own_discard×7, own_draw×7,
+              own_discard×7, opp_discard×7,
+              own_draw×7, opp_draw×7,
               last_action×2)
     - Policy output: 14-d (0=pass, even 2/4/6/8/10/12=pure play, odd 1/3/5/7/9/11/13=build)
     - Last action encoded as policy index, -1 when no history.
@@ -41,6 +42,8 @@ class Converter:
     Per design/20: all card mappings use CardType enum; INPUT_SIZE,
     POLICY_OUTPUT_SIZE imported from ai.rnn_v1.model; build_cost derived
     from get_card_def().
+
+    Per design/34 D4: piles always non-None — no ValueError checks needed.
 
     All methods are stateless. The class serves as a namespace for
     conversion logic bridging game domain types and AI model inputs.
@@ -114,18 +117,19 @@ class Converter:
 
     @staticmethod
     def build_input_vector(state: GameState, player_key: str = "2") -> list[float]:
-        """Build the 42-d input vector from a GameState.
+        """Build the 56-d input vector from a GameState.
 
         Per design/19 D6: accepts GameState directly instead of dict.
-        Per design/27: 42-d format — own/opponent hand, status lifetimes,
-        own discard/draw pile counts, last actions.
+        Per design/34: 56-d format — own/opponent hand, status lifetimes,
+        own/opponent discard/draw pile counts, last actions.
+        Input layout per intention/input.md.
 
         Args:
             state: GameState from GameCore.get_state().
             player_key: Which player's perspective — "1" or "2".
 
         Returns:
-            list[float] of length 42.
+            list[float] of length 56.
 
         Raises:
             ValueError: If player_key is not "1" or "2".
@@ -170,24 +174,19 @@ class Converter:
         ]
 
         # Own discard pile counts (indices 26-32)
-        # Per design/27 D4: draw_pile/discard_pile must not be None;
-        # caller must pass state with matching player_perspective.
-        if this_player.discard_pile is None:
-            raise ValueError(
-                f"discard_pile is None for player {player_key!r}. "
-                f"Call get_state() with player_perspective={player_key!r}."
-            )
+        # Per design/34 D4: piles always non-None, no check needed.
         own_discard = Converter._count_by_card_type(this_player.discard_pile)
 
-        # Own draw pile counts (indices 33-39)
-        if this_player.draw_pile is None:
-            raise ValueError(
-                f"draw_pile is None for player {player_key!r}. "
-                f"Call get_state() with player_perspective={player_key!r}."
-            )
+        # Opponent discard pile counts (indices 33-39) — NEW in design/34
+        opp_discard = Converter._count_by_card_type(opp_player.discard_pile)
+
+        # Own draw pile counts (indices 40-46) — shifted from 33-39 in design/27
         own_draw = Converter._count_by_card_type(this_player.draw_pile)
 
-        # Last action indices (40-41): compute from PlayerHistoryItem
+        # Opponent draw pile counts (indices 47-53) — NEW in design/34
+        opp_draw = Converter._count_by_card_type(opp_player.draw_pile)
+
+        # Last action indices (54-55): compute from PlayerHistoryItem — shifted from 40-41
         this_last = -1.0
         opp_last = -1.0
 
@@ -208,7 +207,9 @@ class Converter:
             + own_status
             + opp_status
             + own_discard
+            + opp_discard
             + own_draw
+            + opp_draw
             + [this_last, opp_last]
         )
 

@@ -1,15 +1,18 @@
-"""Read-only game state snapshots for the custom card game v2 (design/19).
+"""Read-only game state snapshots for the custom card game v2 (design/34).
 
 Provides GameState and PlayerState dataclasses that replace the dict returned
 by GameCore.get_state(). Per design/19 D1, these are pure data containers
 with typed fields — no strings for cards or statuses.
+
+Per design/34: draw_pile/discard_pile are always list[CardType] (never None),
+since both players' piles are mutually visible.
 
 # Per architecture overview §2: game layer is pure logic — no UI, no I/O.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from src.backend.game.card_type import CardType
@@ -30,8 +33,8 @@ class PlayerState:
         statuses: Active statuses with lifetimes (PlayerStatus objects, not dicts).
         hand: Cards currently in hand (CardType enum, not strings).
         history: Full action history (card + build_target per round).
-        draw_pile: Cards in draw pile, or None if hidden from this perspective.
-        discard_pile: Cards in discard pile, or None if hidden.
+        draw_pile: Cards in draw pile (design/34: always visible to both players).
+        discard_pile: Cards in discard pile (design/34: always visible to both players).
         draw_pile_count: Count of cards in draw pile (always visible).
         discard_pile_count: Count of cards in discard pile (always visible).
     """
@@ -41,8 +44,8 @@ class PlayerState:
     statuses: list[PlayerStatus]
     hand: list[CardType]
     history: list[PlayerHistoryItem]
-    draw_pile: list[CardType] | None = None
-    discard_pile: list[CardType] | None = None
+    draw_pile: list[CardType] = field(default_factory=list)
+    discard_pile: list[CardType] = field(default_factory=list)
     draw_pile_count: int = 0
     discard_pile_count: int = 0
 
@@ -113,7 +116,8 @@ class GameState:
                 "draw_pile_count": ps.draw_pile_count,
                 "discard_pile_count": ps.discard_pile_count,
             }
-            # Per design/19 D3: only include draw_pile / discard_pile when not None.
+            # Per design/34: draw_pile and discard_pile are always serialized
+            # since both players' piles are mutually visible.
             if ps.draw_pile is not None:
                 result["draw_pile"] = [c.value for c in ps.draw_pile]
             if ps.discard_pile is not None:

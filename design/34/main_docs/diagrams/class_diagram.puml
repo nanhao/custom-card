@@ -1,0 +1,116 @@
+@startuml
+' Class Diagram — 56-d Input + Mutual Pile Visibility (intention #34)
+' Shows key classes and their relationships after the change.
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+
+package "game" {
+    class GameState {
+        + round: int
+        + cycle: int
+        + round_in_cycle: int
+        + players: dict[str, PlayerState]
+        + is_over: bool
+        + winner: str | None
+        + mode: str
+        + round_log: list[RoundResult]
+        --
+        + to_dict(gs: GameState): dict
+    }
+
+    class PlayerState {
+        + hp: int
+        + energy: int
+        + statuses: list[PlayerStatus]
+        + hand: list[CardType]
+        + history: list[PlayerHistoryItem]
+        + draw_pile: list[CardType]
+        + discard_pile: list[CardType]
+        + draw_pile_count: int
+        + discard_pile_count: int
+    }
+
+    class GameCore {
+        + get_state(player_perspective: str | None): GameState
+    }
+}
+
+package "app" {
+    class Converter {
+        + NUM_CARD_TYPES: int = 7
+        + ALL_CARD_TYPES: frozenset[CardType]
+        --
+        + build_input_vector(state: GameState, player_key: str): list[float]
+        + action_to_policy_index(card: CardType | None, build_target: CardType | None): int
+        + policy_index_to_action(index: int): tuple[CardType | None, CardType | None]
+        + build_cost(card_type: CardType): int
+    }
+}
+
+package "ai" {
+    class "GRUPolicyModel\n(rnn_v1)" as GRUPolicyModel {
+        + INITIAL_HIDDEN_STATE: list[float]
+        --
+        + forward(x, hidden, mask_fn, temperature): tuple
+    }
+
+    class "GRUPolicyModelV2\n(rnn_v2)" as GRUPolicyModelV2 {
+        + INITIAL_HIDDEN_STATE: list[float]
+        --
+        + forward(x, hidden, mask_fn, temperature): tuple
+    }
+
+    class "ai.constants" as Constants {
+        + INPUT_SIZE: int = 56
+        + HIDDEN_SIZE: int = 32
+        + NUM_CARD_TYPES: int = 7
+        + POLICY_OUTPUT_SIZE: int = 14
+    }
+}
+
+package "frontend" {
+    class GameBoard {
+        --
+        + pileViewer: { pid, draw_pile, discard_pile }
+        + onViewPiles(pid: string): void
+    }
+
+    class App {
+        + state: GameState
+        --
+        + handleViewPiles(pid: string): void
+    }
+}
+
+GameCore ..> GameState : creates
+GameState *-- PlayerState
+Converter ..> GameState : reads\ndraw_pile, discard_pile\nalways non-None
+GRUPolicyModel ..> Constants : INPUT_SIZE=56
+GRUPolicyModelV2 ..> Constants : INPUT_SIZE=56,\nSKIP_INPUT_SIZE=88
+App ..> GameState : receives from API\nalways full piles
+GameBoard ..> App : pileViewer prop
+
+note right of PlayerState
+  draw_pile/discard_pile
+  type changed:
+  list[CardType] | None
+  → list[CardType]
+  (always present)
+end note
+
+note right of Converter
+  build_input_vector
+  returns 56-d:
+  0-5:   metadata
+  6-12:  own hand
+  13-19: opp hand
+  20-25: status lifetimes
+  26-32: own discard
+  33-39: opp discard (NEW)
+  40-46: own draw
+  47-53: opp draw (NEW)
+  54-55: last actions
+end note
+
+@enduml

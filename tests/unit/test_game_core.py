@@ -256,18 +256,18 @@ class TestGetState:
         assert p1.draw_pile_count >= 0
         assert p1.discard_pile_count >= 0
 
-    def test_player_perspective_hides_opponent_piles(self):
-        """With player_perspective='1', P1 sees own pile contents, P2 sees counts."""
+    def test_player_perspective_now_shows_all_piles(self):
+        """Design/34: player_perspective deprecated; both players see all piles."""
         gm = GameCore(mode="pvp")
         gm.start_game()
         gs = gm.get_state(player_perspective="1")
         p1 = gs.players["1"]
         p2 = gs.players["2"]
-        # P1 sees his own pile details
+        # Both players see full pile details (design/34)
         assert p1.draw_pile is not None
         assert isinstance(p1.draw_pile, list)
-        # P2 only sees counts
-        assert p2.draw_pile is None
+        assert p2.draw_pile is not None
+        assert isinstance(p2.draw_pile, list)
         assert isinstance(p2.draw_pile_count, int)
 
     def test_hand_elements_are_cardtype(self):
@@ -282,15 +282,15 @@ class TestGetState:
             assert isinstance(card, CardType), f"{card!r} is not CardType"
             assert not isinstance(card, str), f"{card!r} should not be str"
 
-    def test_default_perspective_hides_both_piles(self):
-        """TC-GC-06: Default perspective hides both players' pile contents."""
+    def test_default_perspective_shows_both_piles(self):
+        """Design/34: default perspective shows both players' pile contents."""
         gm = GameCore(mode="pvp")
         gm.start_game()
         gs = gm.get_state()  # perspective=None
-        assert gs.players["1"].draw_pile is None
-        assert gs.players["2"].draw_pile is None
-        assert gs.players["1"].discard_pile is None
-        assert gs.players["2"].discard_pile is None
+        assert gs.players["1"].draw_pile is not None
+        assert gs.players["2"].draw_pile is not None
+        assert gs.players["1"].discard_pile is not None
+        assert gs.players["2"].discard_pile is not None
         # Both players should have pile counts
         assert isinstance(gs.players["1"].draw_pile_count, int)
         assert isinstance(gs.players["2"].draw_pile_count, int)

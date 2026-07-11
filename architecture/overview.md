@@ -18,7 +18,7 @@ The current game (design/11+) introduces a deep strategic system on top of the o
   - **Defense (防御)** — blocks attack damage.
   - **Guard (联防)** — blocks heavy strike damage and its fragile effect.
   - **Fragile (脆弱)** — prevents gaining defense/guard (design/24).
-- **Mutual Hand Visibility**: Both players can see each other's current hand (design/27).
+- **Mutual Hand & Pile Visibility**: Both players can see each other's current hand (design/27), discard pile, and draw pile (design/34).
 - **Win Condition**: A player wins when the opponent's HP reaches 0; no maximum round limit.
 
 ---
@@ -103,21 +103,24 @@ Pure ML — no knowledge of game rules.
 | `training_config.py` | `TrainingConfig` dataclass — PPO hyperparameters |
 | `training_runner.py` | PPO training loop — GAE computation, policy/value loss, gradient accumulation (three-phase) |
 | `training_utils.py` | Training artifact generation — CSV loss/grad logging + PNG charts |
-| `rnn_v1/model.py` | Split GRU models: `GRUPolicyModel` (15→32→13) + `GRUValueModel` (15→32→1) |
+| `rnn_v1/model.py` | Split GRU models: `GRUPolicyModel` (56→32→14) + `GRUValueModel` (56→32→1) |
 
-**Model Architecture (design/14, design/27)**:
-- Input: 42-d vector (design/27)
+**Model Architecture (design/14, design/34)**:
+- Input: 56-d vector (design/34)
   - Metadata (6): HP×2, energy×2, round_in_cycle, cycle
   - Own hand counts (7): attack, defense, heavy, counter, energy, build, flex
   - Opponent hand counts (7): same order
   - Own status lifetimes (3): DEFENSE, GUARD, FRAGILE (0 if absent)
   - Opponent status lifetimes (3): same order
   - Own discard pile counts (7)
+  - Opponent discard pile counts (7)
   - Own draw pile counts (7)
+  - Opponent draw pile counts (7)
   - Last actions (2): own last policy index, opponent last policy index (-1 if first round)
 - Policy: GRU(32) → Linear(32→14) → softmax (14-d: 0=pass, even=play, odd=build+target, design/28)
 - Value: GRU(32) → Linear(32→1) → scalar value estimate (no tanh)
 - Mask function (injected via forward): blocks illegal actions (cards not in hand, insufficient energy for build); pass always legal
+- rnn_v2 adds skip connection: Input(56)+GRU_out(32) → Concat(88) → MLP(88→64→32→14/1) (design/34)
 
 ### 3.3 App Layer (`src/backend/app/`)
 

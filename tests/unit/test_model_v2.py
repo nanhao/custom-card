@@ -1,4 +1,4 @@
-"""Unit tests for rnn_v2 skip-connection models (design/31 test_cases.md)."""
+"""Unit tests for rnn_v2 skip-connection models (design/34 test_cases.md)."""
 
 import torch
 import pytest
@@ -23,11 +23,20 @@ class TestPolicyModelV2:
     """TC-PV2: GRUPolicyModelV2 structure and forward propagation."""
 
     def test_constants(self):
-        """TC-PV2-01: INPUT_SIZE=42, HIDDEN_SIZE=32, POLICY_OUTPUT_SIZE=14, NUM_CARD_TYPES=7."""
-        assert INPUT_SIZE == 42
+        """TC-PV2-01: INPUT_SIZE=56, HIDDEN_SIZE=32, POLICY_OUTPUT_SIZE=14, NUM_CARD_TYPES=7."""
+        assert INPUT_SIZE == 56
         assert HIDDEN_SIZE == 32
         assert POLICY_OUTPUT_SIZE == 14
         assert NUM_CARD_TYPES == 7
+
+    def test_skip_input_size_and_fc1(self):
+        """TC-IS-04/05: SKIP_INPUT_SIZE=88, fc1.in_features=88."""
+        model = GRUPolicyModelV2()
+        assert model.fc1.in_features == 88, f"Expected fc1.in_features=88, got {model.fc1.in_features}"
+        assert model.fc2.in_features == 64
+        assert model.fc_policy.out_features == POLICY_OUTPUT_SIZE
+        value_model = GRUValueModelV2()
+        assert value_model.fc1.in_features == 88
 
     def test_forward_output_shapes(self):
         """TC-PV2-02: probs=(1,14), log_probs=(1,14), new_hidden=(1,1,32), sums ≈ 1.0."""
