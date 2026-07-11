@@ -140,14 +140,17 @@ export default function App() {
     await doPlayCard(card, null, null);
   }
 
-  /** User selected the build mode (build or dismantle) for 构建/拆解. */
+  /** User selected the build mode (build or dismantle) or a build target card. */
   async function handleSelectBuildTarget(card, mode) {
     if (mode === 'build') {
-      // Build mode: show target card selection dialog
+      // Build mode chosen from dual-mode dialog: show target card selection
       setBuildPhase('select_target');
       return;
     }
-    // Should not reach here — handled by handleSelectDismantleTarget
+    // Build target card selected: execute build
+    setBuildPhase(null);
+    setPendingBuild(null);
+    await doPlayCard('build', card, null);
   }
 
   /** User selected a dismantle target card. */
