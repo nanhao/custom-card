@@ -218,8 +218,8 @@ class TestGameStateToDict:
         )
         result = GameState.to_dict(gs)
         assert result["players"]["1"]["history"] == [
-            {"card": "attack", "build_target": None},
-            {"card": "build", "build_target": "counter"},
+            {"card": "attack", "build_target": None, "dismantle_target": None},
+            {"card": "build", "build_target": "counter", "dismantle_target": None},
         ]
 
     def test_draw_pile_always_serialized(self):

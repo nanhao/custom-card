@@ -123,12 +123,17 @@ export default function GameBoard({
           if (state.is_over && state.winner === pid) cls += ' winner';
           if (state.is_over && state.winner !== 'draw' && state.winner !== pid) cls += ' loser';
 
-          // History chips — design/14: c is {card, build_target}
+          // History chips — design/37: c is {card, build_target, dismantle_target}
           const chips = (p.history || []).map((c, i) => {
             const cardStr = typeof c === 'string' ? c : c.card;
-            const label = c.build_target
-              ? `${CARD_ICONS[cardStr]}→${CARD_ICONS[c.build_target]}`
-              : CARD_ICONS[cardStr];
+            let label;
+            if (c.dismantle_target) {
+              label = `🗑️${CARD_ICONS[c.dismantle_target]}`;
+            } else if (c.build_target) {
+              label = `${CARD_ICONS[cardStr]}→${CARD_ICONS[c.build_target]}`;
+            } else {
+              label = CARD_ICONS[cardStr];
+            }
             return <span key={i} className={`hist-chip chip-${cardStr}`} title={label}>{label}</span>;
           });
 
