@@ -12,14 +12,16 @@ from src.backend.game.card_type import CardType
 from src.backend.game.card_def import CardDef, get_card_def, get_initial_draw_pile
 from src.backend.game.resolver import (
     AttackDamageResolver,
+    BonusDefenseResolver,
+    BuildResolver,
+    FlexDamageResolver,
+    GainEnergyResolver,
     GrantDefenseResolver,
-    GrantGuardResolver,
     GrantFragileResolver,
+    GrantGuardResolver,
     HeavyDamageResolver,
     ReflectResolver,
-    GainEnergyResolver,
-    FlexDamageResolver,
-    BuildResolver,
+    RemoveDefenseResolver,
 )
 
 
@@ -68,6 +70,49 @@ class TestGetCardDef:
         # Per design/23: icon field removed.
         assert "icon" not in CardDef.__dataclass_fields__
 
+    def test_card_def_has_description_field(self):
+        """TC-01-01: CardDef has description field, non-empty for all cards."""
+        assert "description" in CardDef.__dataclass_fields__
+        for ct in CardType:
+            cd = get_card_def(ct)
+            assert isinstance(cd.description, str), f"{ct.name}: description is not str"
+            assert cd.description, f"{ct.name}: description is empty"
+
+    def test_card_def_has_tags_field(self):
+        """TC-01-02: CardDef has tags field, type is tuple[str, ...]."""
+        assert "tags" in CardDef.__dataclass_fields__
+        for ct in CardType:
+            cd = get_card_def(ct)
+            assert isinstance(cd.tags, tuple), f"{ct.name}: tags is not tuple"
+
+    def test_attack_tags(self):
+        """TC-01-03: ATTACK tags = ('攻',)."""
+        assert get_card_def(CardType.ATTACK).tags == ("攻",)
+
+    def test_defense_tags(self):
+        """TC-01-04: DEFENSE tags = ('防',)."""
+        assert get_card_def(CardType.DEFENSE).tags == ("防",)
+
+    def test_flex_tags(self):
+        """TC-01-05: FLEX tags = ('攻', '防')."""
+        assert get_card_def(CardType.FLEX).tags == ("攻", "防")
+
+    def test_energy_tags_empty(self):
+        """TC-01-06: ENERGY tags = ()."""
+        assert get_card_def(CardType.ENERGY).tags == ()
+
+    def test_build_tags_empty(self):
+        """TC-01-07: BUILD tags = ()."""
+        assert get_card_def(CardType.BUILD).tags == ()
+
+    def test_heavy_tags(self):
+        """HEAVY tags = ('攻',)."""
+        assert get_card_def(CardType.HEAVY).tags == ("攻",)
+
+    def test_counter_tags(self):
+        """COUNTER tags = ('防',)."""
+        assert get_card_def(CardType.COUNTER).tags == ("防",)
+
     def test_build_cost_counter(self):
         """TC-CD-04: COUNTER → build_cost=2."""
         cd = get_card_def(CardType.COUNTER)
@@ -99,6 +144,16 @@ class TestGetCardDef:
         """TC-CD-03 (design/24): COUNTER display_name is '防守反击'."""
         cd = get_card_def(CardType.COUNTER)
         assert cd.display_name == "防守反击"
+
+    def test_display_names_intention36(self):
+        """TC-02: display_name changes per intention #36."""
+        assert get_card_def(CardType.ATTACK).display_name == "连续击"
+        assert get_card_def(CardType.DEFENSE).display_name == "格挡"
+        assert get_card_def(CardType.HEAVY).display_name == "破防重击"
+        assert get_card_def(CardType.COUNTER).display_name == "防守反击"
+        assert get_card_def(CardType.ENERGY).display_name == "聚能"
+        assert get_card_def(CardType.BUILD).display_name == "构建"
+        assert get_card_def(CardType.FLEX).display_name == "攻守兼备"
 
     def test_icon_removed(self):
         """Design/23 TC-CD-02: accessing icon raises AttributeError."""
@@ -146,26 +201,26 @@ class TestCardDefResolvers:
         assert cd.resolvers == (AttackDamageResolver,)
 
     def test_resolvers_count_per_card_type(self):
-        """TC-CD-02: each CardType has correct number of resolvers."""
+        """TC-CD-02: each CardType has correct number of resolvers (intention #36)."""
         expected = {
-            CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 2,
-            CardType.COUNTER: 2, CardType.ENERGY: 1, CardType.BUILD: 1,
-            CardType.FLEX: 2,
+            CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 3,
+            CardType.COUNTER: 3, CardType.ENERGY: 1, CardType.BUILD: 1,
+            CardType.FLEX: 3,
         }
         for ct, count in expected.items():
             cd = get_card_def(ct)
             assert len(cd.resolvers) == count, f"{ct.name}: expected {count}, got {len(cd.resolvers)}"
 
     def test_resolvers_types_per_card_type(self):
-        """TC-CD-03: each CardType's resolvers have correct types."""
+        """TC-CD-03: each CardType's resolvers have correct types (intention #36)."""
         expected = {
             CardType.ATTACK: {AttackDamageResolver},
             CardType.DEFENSE: {GrantDefenseResolver, GrantGuardResolver},
-            CardType.HEAVY: {HeavyDamageResolver, GrantFragileResolver},
-            CardType.COUNTER: {GrantDefenseResolver, ReflectResolver},
+            CardType.HEAVY: {HeavyDamageResolver, RemoveDefenseResolver, GrantFragileResolver},
+            CardType.COUNTER: {GrantDefenseResolver, ReflectResolver, GrantGuardResolver},
             CardType.ENERGY: {GainEnergyResolver},
             CardType.BUILD: {BuildResolver},
-            CardType.FLEX: {GrantDefenseResolver, FlexDamageResolver},
+            CardType.FLEX: {GrantDefenseResolver, BonusDefenseResolver, FlexDamageResolver},
         }
         for ct, types_set in expected.items():
             cd = get_card_def(ct)

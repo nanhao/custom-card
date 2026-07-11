@@ -158,6 +158,40 @@ class Player:
         """
         return has_active_status(self.statuses, status_type)
 
+    def extend_status(self, status_type: StatusType, extra: int) -> None:
+        """Extend the lifetime of an existing active status.
+
+        Finds the first active status (lifetime > 0) matching the given type
+        and adds `extra` to its lifetime. If no matching active status exists,
+        grants a new status with initial lifetime = extra.
+
+        Per intention #36 D3: used by GrantFragileResolver for additive
+        fragile (+2 rounds).
+
+        Args:
+            status_type: Status type to extend (e.g. StatusType.FRAGILE).
+            extra: Number of rounds to add to the current lifetime.
+        """
+        for s in self.statuses:
+            if s.status_type == status_type and s.lifetime > 0:
+                s.lifetime += extra
+                return
+        # No active status found — grant a new one.
+        self.grant_status(status_type, lifetime=extra)
+
+    def remove_status(self, status_type: StatusType) -> None:
+        """Remove all instances of the given status type.
+
+        Per intention #36: used by RemoveDefenseResolver to strip opponent's
+        DEFENSE when 破防重击 is played.
+
+        Args:
+            status_type: Status type to remove (e.g. StatusType.DEFENSE).
+        """
+        self.statuses = [
+            s for s in self.statuses if s.status_type != status_type
+        ]
+
     def get_consecutive_attack_count(self) -> int:
         """Count consecutive ATTACK cards from the end of history.
 

@@ -189,6 +189,8 @@ def _register_routes(app: Flask) -> None:
                 "type": ct.value,
                 "display_name": cd.display_name,
                 "build_cost": cd.build_cost,
+                "description": cd.description,
+                "tags": list(cd.tags),
             })
         return jsonify({"cards": cards}), 200
 

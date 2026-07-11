@@ -1,0 +1,113 @@
+@startuml class_diagram
+skinparam defaultFontName Microsoft YaHei
+skinparam classFontName Microsoft YaHei
+
+title CardDef & Resolver Hierarchy — Intention #36
+
+package "game/card_def.py" as card_def {
+    class CardDef <<dataclass, frozen>> {
+        card_type: CardType
+        build_cost: int
+        display_name: str
+        description: str
+        tags: tuple[str, ...]
+        resolvers: tuple[type, ...]
+    }
+
+    note right of CardDef
+        NEW: description, tags
+        Per D7: tags is tuple[str, ...]
+        Empty tags = ()
+    end note
+}
+
+package "game/resolver/" as resolver {
+    abstract class Resolver {
+        +get_priority(): int
+        +resolve(ctx, details): None
+    }
+
+    class AttackDamageResolver {
+        +get_priority(): int {return 10}
+        +resolve(ctx, details): None
+    }
+
+    class GrantDefenseResolver {
+        +get_priority(): int {return 11}
+        +resolve(ctx, details): None
+    }
+
+    class GrantGuardResolver {
+        +get_priority(): int {return 12}
+        +resolve(ctx, details): None
+    }
+
+    class HeavyDamageResolver {
+        +get_priority(): int {return 10}
+        +resolve(ctx, details): None
+    }
+
+    class RemoveDefenseResolver <<NEW>> {
+        +get_priority(): int {return 10}
+        +resolve(ctx, details): None
+    }
+
+    class GrantFragileResolver <<MODIFIED>> {
+        +FRAGILE_EXTRA: int = 2
+        +get_priority(): int {return 10}
+        +resolve(ctx, details): None
+    }
+
+    class ReflectResolver <<MODIFIED>> {
+        +get_priority(): int {return 10}
+        +resolve(ctx, details): None
+    }
+
+    class GainEnergyResolver <<MODIFIED>> {
+        +get_priority(): int {return 10}
+        +resolve(ctx, details): None
+    }
+
+    class FlexDamageResolver {
+        +get_priority(): int {return 10}
+        +resolve(ctx, details): None
+    }
+
+    class BonusDefenseResolver <<NEW>> {
+        +get_priority(): int {return 11}
+        +resolve(ctx, details): None
+    }
+
+    class BuildResolver {
+        +get_priority(): int {return 10}
+        +resolve(ctx, details): None
+    }
+}
+
+resolver.Resolver <|-- resolver.AttackDamageResolver
+resolver.Resolver <|-- resolver.GrantDefenseResolver
+resolver.Resolver <|-- resolver.GrantGuardResolver
+resolver.Resolver <|-- resolver.HeavyDamageResolver
+resolver.Resolver <|-- resolver.RemoveDefenseResolver
+resolver.Resolver <|-- resolver.GrantFragileResolver
+resolver.Resolver <|-- resolver.ReflectResolver
+resolver.Resolver <|-- resolver.GainEnergyResolver
+resolver.Resolver <|-- resolver.FlexDamageResolver
+resolver.Resolver <|-- resolver.BonusDefenseResolver
+resolver.Resolver <|-- resolver.BuildResolver
+
+package "game/player.py" as player {
+    class Player {
+        +grant_status(status_type, lifetime): None
+        +extend_status(status_type, extra): None <<NEW>>
+        +remove_status(status_type): None <<NEW>>
+        +has_status(status_type): bool
+        +add_energy(amount): None
+        +take_damage(amount): None
+    }
+}
+
+card_def.CardDef --> resolver.Resolver : resolvers refers to
+resolver.Resolver --> player.Player : reads/modifies
+
+@enduml

@@ -1,0 +1,39 @@
+@startuml heavy_flow
+skinparam defaultFontName Microsoft YaHei
+skinparam activityFontName Microsoft YaHei
+
+title 破防重击（HEAVY）结算流程 — Intention #36
+
+|CardResolver|
+start
+:收集所有 Resolver，按 priority 排序;
+
+|HeavyDamageResolver (P10)|
+:检查对方是否有 GUARD;
+if (对方有 GUARD?) then (是)
+    :记录 "blocked by GUARD";
+else (否)
+    :对方受到 1 点伤害;
+endif
+
+|RemoveDefenseResolver (P10)|
+:检查对方是否有 DEFENSE;
+if (对方有 DEFENSE?) then (是)
+    :移除对方 DEFENSE;
+    :记录 "removes opponent DEFENSE";
+else (否)
+    :无操作;
+endif
+
+|GrantFragileResolver (P10)|
+:检查对方是否有 GUARD;
+if (对方有 GUARD?) then (是)
+    :记录 "Fragile blocked by GUARD";
+else (否)
+    :调用 opponent.extend_status(FRAGILE, extra=2);
+    :记录 "extends FRAGILE by 2 rounds";
+endif
+
+stop
+
+@enduml

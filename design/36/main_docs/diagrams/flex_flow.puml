@@ -1,0 +1,45 @@
+@startuml flex_flow
+skinparam defaultFontName Microsoft YaHei
+skinparam activityFontName Microsoft YaHei
+
+title 攻守兼备（FLEX）结算流程 — Intention #36
+
+|CardResolver|
+start
+:收集所有 Resolver，按 priority 排序;
+
+|GrantDefenseResolver (P11)|
+:检查 card_owner 是否有 FRAGILE;
+if (有 FRAGILE?) then (是)
+    :记录 "DEFENSE blocked by FRAGILE";
+else (否)
+    :card_owner.grant_status(DEFENSE);
+    :记录 "gains DEFENSE";
+endif
+
+|BonusDefenseResolver (P11)|
+:检查 card_owner 是否有 FRAGILE;
+if (有 FRAGILE?) then (是)
+    :记录 "Bonus DEFENSE blocked by FRAGILE";
+else (否)
+    :检查 history[-1].card;
+    :通过 get_card_def() 获取上轮卡牌的 tags;
+    if ("防" in tags?) then (是)
+        :card_owner.grant_status(DEFENSE);
+        :记录 "gains +1 bonus DEFENSE";
+    else (否)
+        :无额外防御;
+    endif
+endif
+
+|FlexDamageResolver (P10)|
+:检查对方是否有 DEFENSE;
+if (对方有 DEFENSE?) then (是)
+    :记录 "blocked by opponent defense";
+else (否)
+    :对方受到 1 点伤害;
+endif
+
+stop
+
+@enduml

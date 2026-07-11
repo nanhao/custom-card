@@ -125,9 +125,9 @@ class TestCardDefResolvers:
 
     def test_all_card_types_have_resolvers(self):
         """TC-RG-03: every CardType has correct resolver counts."""
-        expected = {CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 2,
-                    CardType.COUNTER: 2, CardType.ENERGY: 1, CardType.BUILD: 1,
-                    CardType.FLEX: 2}
+        expected = {CardType.ATTACK: 1, CardType.DEFENSE: 2, CardType.HEAVY: 3,
+                    CardType.COUNTER: 3, CardType.ENERGY: 1, CardType.BUILD: 1,
+                    CardType.FLEX: 3}
         for ct, count in expected.items():
             cd = get_card_def(ct)
             assert len(cd.resolvers) == count, f"{ct.name}: expected {count}, got {len(cd.resolvers)}"
@@ -598,7 +598,7 @@ class TestGrantFragileResolver:
         assert GrantFragileResolver().get_priority() == 10
 
     def test_grants_fragile_to_opponent(self):
-        """TC-GF-02: grants FRAGILE (lifetime=2) when opponent has no GUARD."""
+        """TC-GF-02: extends FRAGILE by 2 rounds when opponent has no GUARD."""
         gm, ctx = _make_ctx(source="1")
         details = ResolveDetails()
         GrantFragileResolver().resolve(ctx, details)
@@ -606,7 +606,7 @@ class TestGrantFragileResolver:
         fragile = [ps for ps in gm.player_2.statuses if ps.status_type == StatusType.FRAGILE]
         assert len(fragile) == 1
         assert fragile[0].lifetime == 2
-        assert any("gains FRAGILE" in d for d in details.details)
+        assert any("extends FRAGILE by 2 rounds" in d for d in details.details)
 
     def test_blocked_by_opponent_guard(self):
         """TC-GF-03: blocked when opponent has GUARD."""
@@ -692,15 +692,19 @@ class TestFragilePriorityInteraction:
     """TC-PR-01 ~ TC-PR-02: Priority ensures same-round defense before fragile."""
 
     def test_heavy_vs_defense_same_round(self):
-        """TC-PR-01: DEFENSE (pri=11) granted before FRAGILE (pri=10) applied."""
+        """TC-PR-01: DEFENSE (pri=11) granted before HEAVY P10 resolvers run.
+
+        Per intention #36: HEAVY now includes RemoveDefenseResolver (P10)
+        which removes DEFENSE after it was granted. So P1 loses DEFENSE.
+        """
         gm = GameCore(mode="pvp")
         gm.start_game()
         gm.player_1.hp = 20
         gm.player_2.hp = 20
         tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.HEAVY])
         CardResolver.resolve(tasks)
-        # P1: DEFENSE granted (pri=11 before pri=10 fragile)
-        assert gm.player_1.has_status(StatusType.DEFENSE)
+        # P1: DEFENSE granted (pri=11), then removed by HEAVY's RemoveDefense (P10)
+        assert not gm.player_1.has_status(StatusType.DEFENSE)
         # P1: FRAGILE applied (HEAVY's GrantFragileResolver pri=10, no GUARD)
         assert gm.player_1.has_status(StatusType.FRAGILE)
         # P1: HEAVY damage (1) applied (no GUARD)

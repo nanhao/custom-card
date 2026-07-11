@@ -206,3 +206,57 @@ class TestGameStateSerialization:
         assert isinstance(data["state"], dict)
         # state has expected fields
         assert data["state"]["round"] == 2
+
+
+class TestListCards:
+    """TC-11: GET /api/cards returns description and tags (intention #36)."""
+
+    def test_cards_have_description(self, api_client):
+        """TC-11-01: every card has non-empty description."""
+        resp = api_client.get("/api/cards")
+        data = resp.get_json()
+        cards = data["cards"]
+        assert len(cards) == 7
+        for card in cards:
+            assert "description" in card, f"missing description in {card['type']}"
+            assert isinstance(card["description"], str)
+            assert card["description"], f"empty description for {card['type']}"
+
+    def test_cards_have_tags(self, api_client):
+        """TC-11-02: every card has tags as list."""
+        resp = api_client.get("/api/cards")
+        cards = resp.get_json()["cards"]
+        for card in cards:
+            assert "tags" in card, f"missing tags in {card['type']}"
+            assert isinstance(card["tags"], list)
+
+    def test_energy_tags_empty(self, api_client):
+        """TC-11-03: ENERGY tags is empty list."""
+        resp = api_client.get("/api/cards")
+        cards = resp.get_json()["cards"]
+        energy = next(c for c in cards if c["type"] == "energy")
+        assert energy["tags"] == []
+
+    def test_new_display_names(self, api_client):
+        """TC-11-04: display_names match intention #36."""
+        resp = api_client.get("/api/cards")
+        cards = {c["type"]: c for c in resp.get_json()["cards"]}
+        assert cards["attack"]["display_name"] == "连续击"
+        assert cards["defense"]["display_name"] == "格挡"
+        assert cards["heavy"]["display_name"] == "破防重击"
+        assert cards["counter"]["display_name"] == "防守反击"
+        assert cards["energy"]["display_name"] == "聚能"
+        assert cards["build"]["display_name"] == "构建"
+        assert cards["flex"]["display_name"] == "攻守兼备"
+
+    def test_tags_values(self, api_client):
+        """Verify tag values for all cards."""
+        resp = api_client.get("/api/cards")
+        cards = {c["type"]: c for c in resp.get_json()["cards"]}
+        assert cards["attack"]["tags"] == ["攻"]
+        assert cards["defense"]["tags"] == ["防"]
+        assert cards["heavy"]["tags"] == ["攻"]
+        assert cards["counter"]["tags"] == ["防"]
+        assert cards["flex"]["tags"] == ["攻", "防"]
+        assert cards["build"]["tags"] == []
+        assert cards["energy"]["tags"] == []
