@@ -65,7 +65,7 @@ class V1TrainingRunner(BaseTrainingRunner):
             dtype=torch.float32, device=device,
         ).view(1, 1, HIDDEN_SIZE)
         gru_out, _ = value_model.gru(x, h)
-        v_new = value_model.fc_value(gru_out.squeeze(1)).squeeze()
+        v_new = value_model.fc_value(gru_out.squeeze(1)).squeeze(-1)
 
         v_target = torch.tensor(value_targets, dtype=torch.float32, device=device)
         value_loss = config.value_coef * nn.functional.mse_loss(v_new, v_target)

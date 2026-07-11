@@ -103,7 +103,7 @@ class TestTrainCLIEpochArgs:
                 "--sample-path", sample,
                 "--output-dir", td,
                 "--model", "rnn_v2.1",
-                "--policy-epoch", "10",
+                "--policy-epoch", "1",
             ])
             # Should fail later (model weight not found), not at arg parse
             # argparse success means --policy-epoch was accepted
@@ -119,7 +119,7 @@ class TestTrainCLIEpochArgs:
                 "--sample-path", sample,
                 "--output-dir", td,
                 "--model", "rnn_v2.1",
-                "--policy-epoch", "10",
+                "--policy-epoch", "1",
                 "--value-epoch", "5",
             ])
             stderr = result.stderr.lower()

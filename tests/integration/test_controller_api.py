@@ -49,11 +49,14 @@ class TestPlayRound:
     def test_round_result_has_energy_and_statuses(self, api_client):
         resp = api_client.post("/api/games", json={"mode": "pvp"})
         gid = resp.get_json()["game_id"]
-        state = resp.get_json()["state"]
-        hand_1 = state["players"]["1"]["hand"]
-        hand_2 = state["players"]["2"]["hand"]
-        if "energy" not in hand_1 or "defense" not in hand_2:
-            pytest.skip("required cards (energy/defense) not in initial hand")
+        # Directly inject required cards into hands to avoid random draw flakiness
+        from src.backend.game.card_type import CardType
+        app_instance = api_client.application
+        store = app_instance.config["SESSION_STORE"]
+        gm, metadata = store.load(gid)
+        gm.player_1.hand = [CardType.ENERGY, CardType.ATTACK, CardType.ATTACK]
+        gm.player_2.hand = [CardType.DEFENSE, CardType.ATTACK, CardType.ATTACK]
+        store.save(gid, gm)
         resp = api_client.post(f"/api/games/{gid}/play",
                                json={"cards_1": ["energy"], "cards_2": ["defense"]})
         rr = resp.get_json()["round_result"]
