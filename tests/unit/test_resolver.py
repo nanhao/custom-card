@@ -244,19 +244,28 @@ class TestGrantDefenseResolver:
 
 
 class TestGrantGuardResolver:
-    """TC-GG-01 ~ TC-GG-03. Priority 12 ensures pre-round DEFENSE is visible."""
+    """TC-GG-01 ~ TC-GG-03. Guard granted when last round played defense-granting card."""
 
-    def test_grants_guard_with_pre_existing_defense(self):
-        """card_owner has DEFENSE → GUARD granted."""
+    def test_grants_guard_after_last_round_defense(self):
+        """card_owner played DEFENSE last round → GUARD granted."""
         gm, ctx = _make_ctx(
             source="1",
-            statuses_1=[PlayerStatus(StatusType.DEFENSE, 1)],
+            history_1=[PlayerHistoryItem(CardType.DEFENSE, None)],
         )
         GrantGuardResolver().resolve(ctx, ResolveDetails())
         assert any(ps.status_type == StatusType.GUARD for ps in gm.player_1.statuses)
 
-    def test_no_guard_without_pre_defense(self):
-        """card_owner has no DEFENSE → no GUARD."""
+    def test_no_guard_without_defense_last_round(self):
+        """card_owner played ATTACK last round → no GUARD."""
+        gm, ctx = _make_ctx(
+            source="1",
+            history_1=[PlayerHistoryItem(CardType.ATTACK, None)],
+        )
+        GrantGuardResolver().resolve(ctx, ResolveDetails())
+        assert not any(ps.status_type == StatusType.GUARD for ps in gm.player_1.statuses)
+
+    def test_no_guard_empty_history(self):
+        """First round (empty history) → no GUARD."""
         gm, ctx = _make_ctx(source="1")
         GrantGuardResolver().resolve(ctx, ResolveDetails())
         assert not any(ps.status_type == StatusType.GUARD for ps in gm.player_1.statuses)
@@ -265,10 +274,8 @@ class TestGrantGuardResolver:
         """Already has GUARD → no duplicate."""
         gm, ctx = _make_ctx(
             source="1",
-            statuses_1=[
-                PlayerStatus(StatusType.DEFENSE, 1),
-                PlayerStatus(StatusType.GUARD, 1),
-            ],
+            statuses_1=[PlayerStatus(StatusType.GUARD, 1)],
+            history_1=[PlayerHistoryItem(CardType.DEFENSE, None)],
         )
         GrantGuardResolver().resolve(ctx, ResolveDetails())
         guard_count = sum(1 for ps in gm.player_1.statuses
@@ -499,7 +506,8 @@ class TestPriorityOrdering:
         """DEFENSE card: GUARD (12) checked before DEFENSE (11) granted."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        gm.player_1.statuses = [PlayerStatus(StatusType.DEFENSE, 1)]
+        # Simulate having played DEFENSE last round (history-based check).
+        gm.player_1.history = [PlayerHistoryItem(CardType.DEFENSE, None)]
         tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.ENERGY])
         result = CardResolver.resolve(tasks)
         types = {ps.status_type for ps in gm.player_1.statuses}
@@ -653,13 +661,11 @@ class TestFragileBlocksGuard:
     """TC-GG-01 ~ TC-GG-02: FRAGILE blocks GrantGuardResolver."""
 
     def test_guard_blocked_by_fragile(self):
-        """TC-GG-01: with FRAGILE and pre-round DEFENSE, GUARD is not granted."""
+        """TC-GG-01: with FRAGILE, GUARD not granted despite last-round DEFENSE."""
         gm, ctx = _make_ctx(
             source="1",
-            statuses_1=[
-                PlayerStatus(StatusType.DEFENSE, 1),
-                PlayerStatus(StatusType.FRAGILE, 2),
-            ],
+            statuses_1=[PlayerStatus(StatusType.FRAGILE, 2)],
+            history_1=[PlayerHistoryItem(CardType.DEFENSE, None)],
         )
         details = ResolveDetails()
         GrantGuardResolver().resolve(ctx, details)
@@ -667,10 +673,10 @@ class TestFragileBlocksGuard:
         assert any("blocked by FRAGILE" in d for d in details.details)
 
     def test_guard_granted_without_fragile(self):
-        """TC-GG-02: with pre-round DEFENSE and no FRAGILE, GUARD is granted."""
+        """TC-GG-02: last-round DEFENSE and no FRAGILE, GUARD is granted."""
         gm, ctx = _make_ctx(
             source="1",
-            statuses_1=[PlayerStatus(StatusType.DEFENSE, 1)],
+            history_1=[PlayerHistoryItem(CardType.DEFENSE, None)],
         )
         details = ResolveDetails()
         GrantGuardResolver().resolve(ctx, details)
