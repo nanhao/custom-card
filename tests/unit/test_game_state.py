@@ -149,7 +149,7 @@ class TestGameStateToDict:
             players={"1": ps1, "2": ps2},
             is_over=False, winner=None, mode="pvp", round_log=[],
         )
-        result = GameState.to_dict(gs)
+        result = gs.to_dict()
         assert result["round"] == 1
         assert result["cycle"] == 1
         assert result["round_in_cycle"] == 1
@@ -179,7 +179,7 @@ class TestGameStateToDict:
             players={"1": ps1, "2": ps2},
             is_over=False, winner=None, mode="pvp", round_log=[],
         )
-        result = GameState.to_dict(gs)
+        result = gs.to_dict()
         assert result["players"]["1"]["hand"] == ["attack", "defense"]
         assert result["players"]["1"]["draw_pile"] == ["build"]
         assert all(isinstance(s, str) for s in result["players"]["1"]["hand"])
@@ -196,7 +196,7 @@ class TestGameStateToDict:
             players={"1": ps1, "2": ps2},
             is_over=False, winner=None, mode="pvp", round_log=[],
         )
-        result = GameState.to_dict(gs)
+        result = gs.to_dict()
         assert result["players"]["1"]["statuses"] == [
             {"type": "defense", "lifetime": 1}
         ]
@@ -216,7 +216,7 @@ class TestGameStateToDict:
             players={"1": ps1, "2": ps2},
             is_over=False, winner=None, mode="pvp", round_log=[],
         )
-        result = GameState.to_dict(gs)
+        result = gs.to_dict()
         assert result["players"]["1"]["history"] == [
             {"card": "attack", "build_target": None, "dismantle_target": None},
             {"card": "build", "build_target": "counter", "dismantle_target": None},
@@ -234,7 +234,7 @@ class TestGameStateToDict:
             players={"1": ps1, "2": ps2},
             is_over=False, winner=None, mode="pvp", round_log=[],
         )
-        result = GameState.to_dict(gs)
+        result = gs.to_dict()
         # design/34: draw_pile always serialized, even when empty
         assert "draw_pile" in result["players"]["1"]
         assert result["players"]["1"]["draw_pile"] == []
@@ -276,7 +276,7 @@ class TestGameStateToDict:
             players={"1": ps1, "2": ps2},
             is_over=False, winner=None, mode="pvp", round_log=[rr],
         )
-        result = GameState.to_dict(gs)
+        result = gs.to_dict()
         assert len(result["round_log"]) == 1
         log_entry = result["round_log"][0]
         assert log_entry["round"] == 1
@@ -296,8 +296,8 @@ class TestGameStateToDict:
             players={"1": ps1, "2": ps2},
             is_over=False, winner=None, mode="pvp", round_log=[],
         )
-        result1 = GameState.to_dict(gs)
-        result2 = GameState.to_dict(gs)
+        result1 = gs.to_dict()
+        result2 = gs.to_dict()
         assert result1 == result2
         # Original unchanged
         assert gs.players["1"].hp == 20

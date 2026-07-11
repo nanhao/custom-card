@@ -78,8 +78,7 @@ class GameState:
     # Serialization
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def to_dict(gs: GameState) -> dict:
+    def to_dict(self) -> dict:
         """Serialize a GameState to a JSON-safe dict.
 
         Converts CardType → string via .value, PlayerStatus → dict via
@@ -126,15 +125,15 @@ class GameState:
             return result
 
         return {
-            "round": gs.round,
-            "cycle": gs.cycle,
-            "round_in_cycle": gs.round_in_cycle,
+            "round": self.round,
+            "cycle": self.cycle,
+            "round_in_cycle": self.round_in_cycle,
             "players": {
-                "1": _serialize_player(gs.players["1"]),
-                "2": _serialize_player(gs.players["2"]),
+                "1": _serialize_player(self.players["1"]),
+                "2": _serialize_player(self.players["2"]),
             },
-            "is_over": gs.is_over,
-            "winner": gs.winner,
-            "mode": gs.mode,
-            "round_log": [RoundResult.to_dict(rr) for rr in gs.round_log],
+            "is_over": self.is_over,
+            "winner": self.winner,
+            "mode": self.mode,
+            "round_log": [RoundResult.to_dict(rr) for rr in self.round_log],
         }

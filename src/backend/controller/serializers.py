@@ -9,7 +9,6 @@ All card values use the `CardType.value` string (e.g. "attack", "defense").
 
 from src.backend.game.card_type import CardType
 from src.backend.game.game_core import RoundResult
-from src.backend.game.game_state import GameState
 
 # ---------------------------------------------------------------------------
 # CardType ↔ string
@@ -62,25 +61,6 @@ def round_result_to_dict(rr: RoundResult) -> dict:
         dict with nested structure matching the round_result API schema.
     """
     return RoundResult.to_dict(rr)
-
-
-# ---------------------------------------------------------------------------
-# GameState → dict
-# ---------------------------------------------------------------------------
-
-
-def game_state_to_dict(gs: GameState) -> dict:
-    """Serialize a GameState to a JSON-safe dict.
-
-    Thin wrapper that delegates to GameState.to_dict().
-
-    Args:
-        gs: The GameState value object to serialize.
-
-    Returns:
-        dict with the same structure as the old get_state() return value.
-    """
-    return GameState.to_dict(gs)
 
 
 # ---------------------------------------------------------------------------

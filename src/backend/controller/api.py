@@ -39,7 +39,6 @@ from src.backend.app.converter import Converter
 from src.backend.controller.serializers import (
     card_to_str,
     error_response,
-    game_state_to_dict,
     round_result_to_dict,
     str_to_card,
 )
@@ -151,7 +150,7 @@ def _register_routes(app: Flask) -> None:
                 return jsonify(error_response(error_msg, "MISSING_AI", 400)), 400
             return jsonify(error_response(error_msg, "BAD_REQUEST", 400)), 400
 
-        state_dict = game_state_to_dict(gs)
+        state_dict = gs.to_dict()
         state_dict["ai"] = ai_name
 
         return jsonify({
@@ -223,7 +222,7 @@ def _register_routes(app: Flask) -> None:
         perspective = request.args.get("perspective")
 
         gs = gm.get_state(player_perspective=perspective)
-        state_dict = game_state_to_dict(gs)
+        state_dict = gs.to_dict()
         state_dict["ai"] = metadata["ai"] if metadata else None
 
         return jsonify({
@@ -368,7 +367,7 @@ def _register_routes(app: Flask) -> None:
 
         # Build response state with AI metadata
         gs = gm.get_state()
-        state_dict = game_state_to_dict(gs)
+        state_dict = gs.to_dict()
         state_dict["ai"] = metadata["ai"] if metadata else None
 
         return jsonify({
