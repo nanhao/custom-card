@@ -29,5 +29,5 @@ class StrongDefenseResolver(Resolver):
         if ctx.card_owner.has_status(StatusType.FRAGILE):
             details.add("DEFENSE(lifetime=2) blocked by FRAGILE")
             return
-        ctx.card_owner.grant_status(StatusType.DEFENSE, lifetime=2)
+        ctx.card_owner.extend_status(StatusType.DEFENSE, 2)
         details.add("gains DEFENSE (lifetime=2)")

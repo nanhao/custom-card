@@ -182,37 +182,37 @@ class TestPlayerHistoryItem:
 
 
 class TestGrantStatus:
-    """TC-PS-01, TC-PS-02: grant_status (design/21)."""
+    """TC-PS-01, TC-PS-02: _grant_status (private, no dedup)."""
 
     def test_grant_status_on_empty(self):
-        """TC-PS-01: grant_status(DEFENSE) adds PlayerStatus with lifetime=1."""
+        """TC-PS-01: _grant_status(DEFENSE) adds PlayerStatus with lifetime=1."""
         p = Player(statuses=[])
-        p.grant_status(StatusType.DEFENSE)
+        p._grant_status(StatusType.DEFENSE)
         assert len(p.statuses) == 1
         assert p.statuses[0].status_type == StatusType.DEFENSE
         assert p.statuses[0].lifetime == 1
 
     def test_grant_status_appends_not_overwrites(self):
-        """TC-PS-02: grant_status appends, does not replace existing."""
+        """TC-PS-02: _grant_status appends, does not replace existing."""
         p = Player(statuses=[PlayerStatus(StatusType.DEFENSE, 1)])
-        p.grant_status(StatusType.GUARD)
+        p._grant_status(StatusType.GUARD)
         assert len(p.statuses) == 2
         assert p.statuses[0].status_type == StatusType.DEFENSE
         assert p.statuses[1].status_type == StatusType.GUARD
         assert p.statuses[1].lifetime == 1
 
     def test_grant_status_custom_lifetime(self):
-        """design/24: grant_status(FRAGILE, lifetime=2) sets lifetime=2."""
+        """design/24: _grant_status(FRAGILE, lifetime=2) sets lifetime=2."""
         p = Player(statuses=[])
-        p.grant_status(StatusType.FRAGILE, lifetime=2)
+        p._grant_status(StatusType.FRAGILE, lifetime=2)
         assert len(p.statuses) == 1
         assert p.statuses[0].status_type == StatusType.FRAGILE
         assert p.statuses[0].lifetime == 2
 
     def test_grant_status_fragile_default_lifetime(self):
-        """grant_status(FRAGILE) without explicit lifetime defaults to 1."""
+        """_grant_status(FRAGILE) without explicit lifetime defaults to 1."""
         p = Player(statuses=[])
-        p.grant_status(StatusType.FRAGILE)
+        p._grant_status(StatusType.FRAGILE)
         assert p.statuses[0].lifetime == 1
 
     def test_has_status_detects_fragile(self):

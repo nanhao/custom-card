@@ -16,6 +16,7 @@
   --energy: #f1c40f;
   --build: #1abc9c;
   --flex: #e67e22;
+  --iron-defense: #5d6d7e;
   --green: #2ecc71;
 }
 
@@ -259,6 +260,10 @@ body {
 }
 .card-flex {
   background: var(--flex);
+  color: #fff;
+}
+.card-iron_defense {
+  background: var(--iron-defense);
   color: #fff;
 }
 

@@ -11,6 +11,7 @@ import random
 from dataclasses import dataclass, field
 
 from src.backend.game.card_type import CardType
+from src.backend.game.constants import INITIAL_HP, INITIAL_ENERGY
 from src.backend.game.player_state import StatusType, PlayerStatus, has_active_status
 
 # Energy cap per design/11 intention §1
@@ -44,8 +45,8 @@ class Player:
     """Represents one player's state in the v2 game.
 
     Attribute:
-        hp: Current HP, default 30 (design/38), clamped to >= 0.
-        energy: Current energy, default 2 (design/38), clamped to [0, 5].
+        hp: Current HP, default INITIAL_HP (design/38), clamped to >= 0.
+        energy: Current energy, default INITIAL_ENERGY (design/38), clamped to [0, 5].
         statuses: List of active PlayerStatus instances (design/15).
         hand: Cards currently in hand.
         draw_pile: Cards remaining in the draw pile.
@@ -54,8 +55,8 @@ class Player:
                  Each entry records both the card played and build_target.
     """
 
-    hp: int = 30
-    energy: int = 2
+    hp: int = INITIAL_HP
+    energy: int = INITIAL_ENERGY
     statuses: list[PlayerStatus] = field(default_factory=list)
     hand: list[CardType] = field(default_factory=list)
     draw_pile: list[CardType] = field(default_factory=list)
@@ -135,12 +136,12 @@ class Player:
     # Statuses
     # ------------------------------------------------------------------
 
-    def grant_status(self, status_type: StatusType, lifetime: int = 1) -> None:
-        """Grant a status with specified lifetime, appending to the statuses list.
+    def _grant_status(self, status_type: StatusType, lifetime: int = 1) -> None:
+        """Grant a status with specified lifetime (internal, no deduplication).
 
-        Per design/21: no deduplication — the caller is responsible for
-        ensuring no duplicate statuses are granted.
-        Per design/24: lifetime parameter added (default 1).
+        External callers should use extend_status() to ensure proper
+        status merging. This method always appends a new status without
+        checking for duplicates.
 
         Args:
             status_type: The status type to grant (e.g. StatusType.DEFENSE).
@@ -182,7 +183,7 @@ class Player:
                 s.lifetime += extra
                 return
         # No active status found — grant a new one.
-        self.grant_status(status_type, lifetime=extra)
+        self._grant_status(status_type, lifetime=extra)
 
     def remove_status(self, status_type: StatusType) -> None:
         """Remove all instances of the given status type.

@@ -28,6 +28,7 @@ from src.backend.game.resolver import (
     ReflectResolver,
     GainEnergyResolver,
     FlexDamageResolver,
+    StrongDefenseResolver,
     BuildResolver,
 )
 
@@ -247,6 +248,29 @@ class TestGrantDefenseResolver:
 
     def test_get_priority_returns_11(self):
         assert GrantDefenseResolver().get_priority() == 11
+
+    def test_defense_extends_existing(self):
+        """TC-DEF-EXT: Granting DEFENSE when already has DEFENSE extends lifetime."""
+        gm, ctx = _make_ctx(source="1")
+        # Grant first DEFENSE
+        GrantDefenseResolver().resolve(ctx, ResolveDetails())
+        assert len(gm.player_1.statuses) == 1
+        assert gm.player_1.statuses[0].status_type == StatusType.DEFENSE
+        assert gm.player_1.statuses[0].lifetime == 1
+        # Grant second DEFENSE — should extend, not duplicate
+        GrantDefenseResolver().resolve(ctx, ResolveDetails())
+        assert len(gm.player_1.statuses) == 1  # Still only one status
+        assert gm.player_1.statuses[0].lifetime == 2  # Lifetime merged
+
+    def test_strong_defense_extends_existing(self):
+        """IRON_DEFENSE extends existing DEFENSE instead of duplicating."""
+        gm, ctx = _make_ctx(source="1")
+        # Grant DEFENSE first (lifetime=1)
+        GrantDefenseResolver().resolve(ctx, ResolveDetails())
+        # Then grant Strong DEFENSE (lifetime=2) — should extend to 3
+        StrongDefenseResolver().resolve(ctx, ResolveDetails())
+        assert len(gm.player_1.statuses) == 1
+        assert gm.player_1.statuses[0].lifetime == 3
 
 
 # =============================================================================

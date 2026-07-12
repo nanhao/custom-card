@@ -20,5 +20,5 @@ class GrantDefenseResolver(Resolver):
         if ctx.card_owner.has_status(StatusType.FRAGILE):
             details.add("DEFENSE blocked by FRAGILE")
             return
-        ctx.card_owner.grant_status(StatusType.DEFENSE)
+        ctx.card_owner.extend_status(StatusType.DEFENSE, 1)
         details.add("gains DEFENSE")

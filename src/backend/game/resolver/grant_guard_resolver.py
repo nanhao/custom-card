@@ -45,7 +45,5 @@ class GrantGuardResolver(Resolver):
         if ctx.card_owner.has_status(StatusType.FRAGILE):
             details.add("GUARD blocked by FRAGILE")
             return
-        if ctx.card_owner.has_status(StatusType.GUARD):
-            return
-        ctx.card_owner.grant_status(StatusType.GUARD)
+        ctx.card_owner.extend_status(StatusType.GUARD, 1)
         details.add("gains GUARD (played defense last round)")
