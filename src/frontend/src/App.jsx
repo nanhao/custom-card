@@ -27,6 +27,8 @@ export default function App() {
   const [cardMeta, setCardMeta] = useState(null);  // card metadata from API
   const [phase, setPhase] = useState('loading'); // loading | select | reveal | gameover
   const [p1Card, setP1Card] = useState(null);    // buffered Player 1 card
+  const [p1BuildTarget, setP1BuildTarget] = useState(null);       // PVP P1 build target
+  const [p1DismantleTarget, setP1DismantleTarget] = useState(null); // PVP P1 dismantle target
   const [roundLog, setRoundLog] = useState([]);    // accumulated round results
   const [error, setError] = useState(null);
 
@@ -97,6 +99,8 @@ export default function App() {
     setGameId(null);
     setState(null);
     setP1Card(null);
+    setP1BuildTarget(null);
+    setP1DismantleTarget(null);
     setRoundLog([]);
     setError(null);
     setPhase('loading');
@@ -201,8 +205,10 @@ export default function App() {
         setPhase('select');
       }
     } else {
-      // PVP: buffer P1 card, show pass screen
+      // PVP: buffer P1 card + build/dismantle targets, show pass screen
       setP1Card(card);
+      setP1BuildTarget(buildTarget);
+      setP1DismantleTarget(dismantleTarget);
       setPhase('pvp_pass');
     }
   }
@@ -250,7 +256,7 @@ export default function App() {
 
     setPhase('loading');
     try {
-      const data = await playRound(gameId, p1Card, card);
+      const data = await playRound(gameId, p1Card, card, p1BuildTarget, p1DismantleTarget);
       setState({
         ...data.state,
         players: {
@@ -261,6 +267,8 @@ export default function App() {
       });
       setRoundLog(prev => [...prev, data.round_result]);
       setP1Card(null);
+      setP1BuildTarget(null);
+      setP1DismantleTarget(null);
       const isGameOver = data.round_result.after_resolve.is_game_over
         || data.round_result.after_end_actions.is_game_over;
       setPhase(isGameOver ? 'gameover' : 'reveal');
@@ -275,7 +283,7 @@ export default function App() {
     if (phase !== 'pvp_pass' || mode !== 'pvp') return;
     setPhase('loading');
     try {
-      const data = await playRound(gameId, p1Card, null);
+      const data = await playRound(gameId, p1Card, null, p1BuildTarget, p1DismantleTarget);
       setState({
         ...data.state,
         players: {
@@ -286,6 +294,8 @@ export default function App() {
       });
       setRoundLog(prev => [...prev, data.round_result]);
       setP1Card(null);
+      setP1BuildTarget(null);
+      setP1DismantleTarget(null);
       const isGameOver = data.round_result.after_resolve.is_game_over
         || data.round_result.after_end_actions.is_game_over;
       setPhase(isGameOver ? 'gameover' : 'reveal');

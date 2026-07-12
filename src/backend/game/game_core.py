@@ -13,6 +13,8 @@ when draw pile is empty during draw_cards(), instead of at every cycle start.
 Per architecture D9, this module is pure logic — no UI, no I/O.
 """
 
+import random
+
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def, get_initial_draw_pile
 from src.backend.game.constants import ROUNDS_PER_CYCLE, CARDS_PER_CYCLE, INITIAL_HP
@@ -73,6 +75,9 @@ class GameCore:
         initial_pile = get_initial_draw_pile()
         self.player_1 = Player(hp=20, draw_pile=list(initial_pile))
         self.player_2 = Player(hp=20, draw_pile=list(initial_pile))
+        # Shuffle draw piles so cards are dealt randomly (DBG standard).
+        random.shuffle(self.player_1.draw_pile)
+        random.shuffle(self.player_2.draw_pile)
         self.round_number = 1
         self.cycle_number = 1
         self.round_in_cycle = 1

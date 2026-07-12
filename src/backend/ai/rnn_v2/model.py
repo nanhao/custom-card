@@ -33,7 +33,7 @@ from src.backend.ai.constants import (  # shared constants (design/31)
     POLICY_OUTPUT_SIZE,
 )
 
-SKIP_INPUT_SIZE = INPUT_SIZE + HIDDEN_SIZE  # 88: GRU_out(32) + raw_input(56)
+SKIP_INPUT_SIZE = INPUT_SIZE + HIDDEN_SIZE  # 94: GRU_out(32) + raw_input(62)
 
 # ---------------------------------------------------------------------------
 # GRUPolicyModelV2
@@ -198,7 +198,7 @@ class GRUValueModelV2(nn.Module):
         """
         gru_out, new_hidden = self.gru(x, hidden)
         gru_out = gru_out.squeeze(0)  # (1, 32)
-        x_squeezed = x.squeeze(0)     # (1, 56)
+        x_squeezed = x.squeeze(0)     # (1, 62)
 
         # Skip connection: concat GRU output with raw input (design/31 D1)
         combined = torch.cat([gru_out, x_squeezed], dim=-1)  # (1, 94)

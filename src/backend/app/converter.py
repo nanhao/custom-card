@@ -25,7 +25,7 @@ Policy output per intention/output.md (24-d):
 All methods are stateless. No PyTorch dependency — pure data transformation.
 """
 
-from src.backend.ai.rnn_v1.model import INPUT_SIZE, POLICY_OUTPUT_SIZE
+from src.backend.ai.constants import INPUT_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def
 from src.backend.game.game_state import GameState
@@ -64,7 +64,9 @@ class Converter:
     #
     # Format: (card_type, play_index, build_index, dismantle_index).
     #   card_type: CardType enum member.
-    #   play_index: policy output index for pure play (None for BUILD).
+    #   play_index: policy output index for pure play (None for BUILD because
+    #               BUILD cannot be played without a target — it must be used
+    #               in either build or dismantle mode).
     #   build_index: policy output index for build + target.
     #   dismantle_index: policy output index for dismantle + target.
     #
@@ -128,7 +130,7 @@ class Converter:
         """Build the 62-d input vector from a GameState (design/37).
 
         Per design/19 D6: accepts GameState directly instead of dict.
-        Per design/34: 56-d format — own/opponent hand, status lifetimes,
+        Per design/37: 62-d format — own/opponent hand, status lifetimes,
         own/opponent discard/draw pile counts, last actions.
         Input layout per intention/input.md.
 
@@ -329,16 +331,15 @@ class Converter:
 
     @staticmethod
     def _count_by_card_type(cards: list[CardType]) -> list[float]:
-        """Count occurrences of each CardType in a card list (design/27).
+        """Count occurrences of each CardType in a card list (design/37).
 
-        Returns a 7-element float list in _CARD_TYPE_ORDER sequence
-        (attack, defense, heavy, counter, energy, build, flex).
+        Returns an 8-element float list in _CARD_TYPE_ORDER sequence.
 
         Args:
             cards: List of CardType values to count.
 
         Returns:
-            list[float] of length 7 — count per card type.
+            list[float] of length 8 — count per card type.
         """
         counts = [0.0] * Converter.NUM_CARD_TYPES
         for card in cards:

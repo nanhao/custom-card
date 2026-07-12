@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.ai.rnn_v1.model import HIDDEN_SIZE, INPUT_SIZE, POLICY_OUTPUT_SIZE
+from src.backend.ai.constants import HIDDEN_SIZE, INPUT_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.app.converter import Converter
 from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.app.selfplay_runner import SelfPlayRunner

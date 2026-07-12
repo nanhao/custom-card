@@ -144,7 +144,7 @@ def get_card_def(card_type: CardType) -> CardDef:
     in the `resolvers` field, replacing the deleted CardResolverRegistry.
 
     Args:
-        card_type: Any of the 7 CardType enum members.
+        card_type: Any of the 8 CardType enum members.
 
     Returns:
         Immutable CardDef with card_type, build_cost, display_name,

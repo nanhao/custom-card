@@ -6,6 +6,8 @@ Uses Flask test client with tmp_path-isolated saves. PVP mode to avoid AI loadin
 
 import pytest
 
+from src.backend.game.card_type import CardType
+
 
 class TestGetStateV2:
     """TC-API-01: GET /api/games/{id} returns v2 fields."""
@@ -106,18 +108,17 @@ class TestRoundResultSerialization:
     def test_hp_reflects_damage(self, api_client):
         resp = api_client.post("/api/games", json={"mode": "pvp"})
         gid = resp.get_json()["game_id"]
-        state = resp.get_json()["state"]
-        hand_1 = state["players"]["1"]["hand"]
-        hand_2 = state["players"]["2"]["hand"]
+        # Set hands manually to guarantee ATTACK for damage test
+        from src.backend.game.session_store import SessionStore
+        app_instance = api_client.application
+        store: SessionStore = app_instance.config["SESSION_STORE"]
+        gm, _meta = store.load(gid)
+        gm.player_1.hand = [CardType.ATTACK]
+        gm.player_2.hand = [CardType.ATTACK]
+        store.save(gid, gm)
         # Use attack for both to test HP damage
         resp = api_client.post(f"/api/games/{gid}/play",
                                json={"cards_1": ["attack"], "cards_2": ["attack"]})
-        if resp.status_code != 200:
-            # Fallback: use first available cards from hand
-            resp = api_client.post(
-                f"/api/games/{gid}/play",
-                json={"cards_1": [hand_1[0]], "cards_2": [hand_2[0]]},
-            )
         rr = resp.get_json()["round_result"]
         assert rr["after_resolve"]["hp_1"] == 19
         assert rr["after_resolve"]["hp_2"] == 19

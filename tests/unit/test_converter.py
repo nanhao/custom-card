@@ -398,8 +398,12 @@ class TestBuildInputVector62D:
 
     def test_build_adds_to_opponent_draw(self):
         """After play_round with BUILD+ATTACK, opponent draw has ATTACK (design/37: draw_pile)."""
+        import random
         from src.backend.game.game_core import GameCore
         gc = GameCore()
+        # Seed RNG so shuffle is deterministic (initial draw pile order known).
+        # With seed=0: remaining draw=[FLEX, IRON_DEFENSE] after dealing 5.
+        random.seed(0)
         gc.start_game()
         # Ensure BUILD is in P1's hand and energy is sufficient
         gc.player_1.hand = [CardType.BUILD]

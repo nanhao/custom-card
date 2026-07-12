@@ -6,6 +6,7 @@ design/37 implementation, which led to runtime errors when AI selected
 dismantle actions.
 """
 
+import pytest
 import torch
 
 from src.backend.ai.constants import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
@@ -129,67 +130,81 @@ class TestApiDismantleTarget:
     """Verify the API passes dismantle_target_1 to GameCore."""
 
     def test_pve_play_round_passes_dismantle_to_gamecore(self, api_client):
-        """PVE dismantle: API forwards AI's dismantle_target to play_round."""
-        # Create a game and set up P1 hand with BUILD and discard with ATTACK
-        resp = api_client.post("/api/games", json={"mode": "pvp"})
+        """PVE dismantle: API forwards AI's dismantle_target to play_round.
+
+        Creates a PVE game, patches ai_select_action to return BUILD + dismantle,
+        sets up P2's hand/discard, and verifies the round result contains
+        DISMANTLE in details.
+        """
+        from unittest.mock import patch
+
+        # Create PVE game
+        resp = api_client.post("/api/games", json={"mode": "pve", "ai": "rnn_v1.1"})
+        assert resp.status_code == 201
         gid = resp.get_json()["game_id"]
 
-        # Play first round to get discard pile content
-        state = resp.get_json()["state"]
-        # Manually set up: P1 has BUILD, discard has ATTACK
-        from src.backend.controller.api import create_app
-        from src.backend.game.card_type import CardType
+        # Set up P2: BUILD in hand, ATTACK in discard, energy=0 (dismantle needs no energy)
+        from src.backend.game.session_store import SessionStore
+        app_instance = api_client.application
+        store: SessionStore = app_instance.config["SESSION_STORE"]
+        gm, metadata = store.load(gid)
+        gm.player_2.hand = [CardType.BUILD]
+        gm.player_2.energy = 0
+        gm.player_2.discard_pile = [CardType.ATTACK]
+        gm.player_1.hand = [CardType.DEFENSE]
+        store.save(gid, gm, ai=metadata.get("ai"), ai_state=metadata.get("ai_state"),
+                   ai_value_state=metadata.get("ai_value_state"))
 
-        # We can't easily mock AI, so test the PVP dismantle path instead
-        # Set up P1 with BUILD in hand, ATTACK in discard
-        # Directly test via the Flask test client
+        # Patch ai_select_action to pick dismantle ATTACK (P2 is AI in PVE)
+        app_manager = app_instance.config["APP_MANAGER"]
+        with patch.object(
+            app_manager, "ai_select_action",
+            return_value=(CardType.BUILD, None, CardType.ATTACK, [0.0] * 32),
+        ):
+            resp2 = api_client.post(f"/api/games/{gid}/play", json={
+                "cards_1": ["defense"],
+            })
+
+        assert resp2.status_code == 200, (
+            f"Expected 200, got {resp2.status_code}: {resp2.get_json()}"
+        )
+        rr = resp2.get_json()["round_result"]
+        # Verify P2's dismantle happened
+        details = rr["after_resolve"]["details"]
+        assert any("DISMANTLE attack" in d or "dismantle" in d.lower() for d in details), \
+            f"DISMANTLE not found in details: {details}"
 
     def test_pvp_dismantle_request_accepted(self, api_client):
         """PVP: dismantle_target_1 in request body is accepted and passed through."""
+        from src.backend.game.session_store import SessionStore
+
         resp = api_client.post("/api/games", json={"mode": "pvp"})
         gid = resp.get_json()["game_id"]
 
-        # P1 plays BUILD + dismantle ATTACK from discard
-        # First round: just play some cards to populate discard
-        state = resp.get_json()["state"]
+        # Set hands manually (avoid random-deal flakiness from shuffling).
+        app_instance = api_client.application
+        store: SessionStore = app_instance.config["SESSION_STORE"]
+        gm, _meta = store.load(gid)
+        gm.player_1.hand = [CardType.ATTACK]
+        gm.player_2.hand = [CardType.DEFENSE]
+        store.save(gid, gm)
+
+        # Round 1: P1 plays ATTACK (goes to discard), P2 plays DEFENSE
         resp = api_client.post(f"/api/games/{gid}/play", json={
             "cards_1": ["attack"],
             "cards_2": ["defense"],
         })
         assert resp.status_code == 200
 
-        # Now P1 has ATTACK in discard. Give P1 BUILD in hand.
-        state2 = resp.get_json()["state"]
-        # We need to give P1 a BUILD card. Let's craft the state directly.
-        # Actually, we can just play another round with BUILD.
-        # The initial hand might not contain BUILD, let's create a fresh game and set it up.
-        resp2 = api_client.post("/api/games", json={"mode": "pvp"})
-        gid2 = resp2.get_json()["game_id"]
-
-        # Round 1: P1 plays ATTACK (goes to discard), P2 plays DEFENSE
-        api_client.post(f"/api/games/{gid2}/play", json={
-            "cards_1": ["attack"],
-            "cards_2": ["defense"],
-        })
-
-        # Now manually inject BUILD into P1's hand via direct state manipulation
-        # (This tests the API's dismantle_target_1 handling)
-        from src.backend.controller.api import create_app
-        from src.backend.game.session_store import SessionStore
-
-        # Get the Flask app's config to access SessionStore
-        app_instance = api_client.application
-        store: SessionStore = app_instance.config["SESSION_STORE"]
-        gm, metadata = store.load(gid2)
-
-        # Inject BUILD into P1's hand and ATTACK to discard
+        # Now manually inject BUILD into P1's hand and ATTACK to discard
+        gm, _meta = store.load(gid)
         gm.player_1.hand = [CardType.BUILD, CardType.ATTACK]
         gm.player_1.discard_pile = [CardType.ATTACK, CardType.DEFENSE]
         gm.player_2.hand = [CardType.DEFENSE, CardType.ATTACK]
-        store.save(gid2, gm)
+        store.save(gid, gm)
 
         # Round 2: P1 plays BUILD with dismantle ATTACK
-        resp3 = api_client.post(f"/api/games/{gid2}/play", json={
+        resp3 = api_client.post(f"/api/games/{gid}/play", json={
             "cards_1": ["build"],
             "cards_2": ["defense"],
             "dismantle_target_1": "attack",

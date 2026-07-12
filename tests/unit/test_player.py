@@ -234,8 +234,12 @@ class TestDrawCards:
         )
         result = p.draw_cards(3)
         assert result == 3
-        assert p.hand == [CardType.ATTACK, CardType.DEFENSE, CardType.HEAVY]
-        assert p.draw_pile == [CardType.COUNTER, CardType.ENERGY]
+        # Shuffle makes order random; verify card set and counts
+        all_cards = p.hand + p.draw_pile
+        expected = [CardType.ATTACK, CardType.DEFENSE, CardType.HEAVY, CardType.COUNTER, CardType.ENERGY]
+        assert sorted(all_cards, key=lambda c: c.value) == sorted(expected, key=lambda c: c.value)
+        assert len(p.hand) == 3
+        assert len(p.draw_pile) == 2
         assert p.discard_pile == [CardType.BUILD, CardType.FLEX]
 
     # --- 1.2 抽牌堆恰好够 ---
@@ -247,7 +251,9 @@ class TestDrawCards:
         )
         result = p.draw_cards(2)
         assert result == 2
-        assert p.hand == [CardType.ATTACK, CardType.DEFENSE]
+        assert sorted(p.hand, key=lambda c: c.value) == sorted(
+            [CardType.ATTACK, CardType.DEFENSE], key=lambda c: c.value,
+        )
         assert p.draw_pile == []
         assert p.discard_pile == [CardType.HEAVY]
 
@@ -261,7 +267,7 @@ class TestDrawCards:
         result = p.draw_cards(5)
         assert result == 5
         assert len(p.hand) == 5
-        assert p.hand[0] == CardType.ATTACK  # First card from draw_pile
+        assert CardType.ATTACK in p.hand  # from draw_pile
         assert p.draw_pile == []
         assert p.discard_pile == []
 
@@ -297,7 +303,9 @@ class TestDrawCards:
         )
         result = p.draw_cards(5)
         assert result == 2
-        assert p.hand == [CardType.ATTACK, CardType.DEFENSE]
+        assert sorted(p.hand, key=lambda c: c.value) == sorted(
+            [CardType.ATTACK, CardType.DEFENSE], key=lambda c: c.value,
+        )
         assert p.draw_pile == []
         assert p.discard_pile == []
 
@@ -339,5 +347,8 @@ class TestDrawCards:
         )
         result = p.draw_cards(2)
         assert result == 2
-        assert p.hand == [CardType.COUNTER, CardType.ATTACK, CardType.DEFENSE]
+        assert len(p.hand) == 3
+        assert CardType.COUNTER in p.hand  # original hand preserved
+        assert CardType.ATTACK in p.hand
+        assert CardType.DEFENSE in p.hand
         assert p.draw_pile == []

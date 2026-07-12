@@ -53,22 +53,23 @@ from src.backend.ai.constants import (  # shared constants (design/31)
 
 
 class GRUPolicyModel(nn.Module):
-    """GRU-based policy network with 14-d output (design/14, design/34, design/28).
+    """GRU-based policy network with 24-d output (design/37).
 
-    Architecture: Input(56) -> GRU(32, 1 layer) -> Linear(32->14) -> softmax.
+    Architecture: Input(62) -> GRU(32, 1 layer) -> Linear(32->24) -> softmax.
 
-    Input (56-d, per intention/input.md, design/34):
+    Input (62-d, per intention/input.md, design/37):
         [HP_own, HP_opp, energy_own, energy_opp, round, cycle |
-         own_hand_counts(7) | opp_hand_counts(7) |
+         own_hand_counts(8) | opp_hand_counts(8) |
          own_status_lifetimes(3) | opp_status_lifetimes(3) |
-         own_discard_counts(7) | opp_discard_counts(7) |
-         own_draw_counts(7) | opp_draw_counts(7) |
+         own_discard_counts(8) | opp_discard_counts(8) |
+         own_draw_counts(8) | opp_draw_counts(8) |
          last_own, last_opp]
 
-    Output (14-d, design/28):
+    Output (24-d, design/37):
         index 0:                     pass (no card played)
-        odd indices (1,3,5,7,9,11,13): build + build target
-        even indices (2,4,6,8,10,12):  pure card play
+        build indices (odd):         build + build target
+        dismantle indices (even>0):  dismantle + dismantle target
+        play indices (even>0):       pure card play
     """
 
     INITIAL_HIDDEN_STATE: list[float] = [0.0] * HIDDEN_SIZE
@@ -82,7 +83,7 @@ class GRUPolicyModel(nn.Module):
             num_layers=1,
             batch_first=False,
         )
-        self.fc_policy = nn.Linear(HIDDEN_SIZE, POLICY_OUTPUT_SIZE)  # 14 outputs (design/28)
+        self.fc_policy = nn.Linear(HIDDEN_SIZE, POLICY_OUTPUT_SIZE)  # 24 outputs (design/37)
 
     def forward(
         self,
@@ -91,25 +92,25 @@ class GRUPolicyModel(nn.Module):
         mask_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
         temperature: float = 1.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Run one GRU step, apply optional two-segment mask and temperature.
+        """Run one GRU step, apply optional mask and temperature.
 
         Args:
-            x: Input tensor of shape (1, 1, 56).
+            x: Input tensor of shape (1, 1, 62).
             hidden: Hidden state tensor of shape (1, 1, 32).
-            mask_fn: Optional callable that takes policy logits (1,14) and
-                     returns masked logits (1,14). If None, no masking.
+            mask_fn: Optional callable that takes policy logits (1,24) and
+                     returns masked logits (1,24). If None, no masking.
             temperature: Temperature for softmax. 0 = greedy argmax.
 
         Returns:
             (probs, log_probs, new_hidden):
-                probs: (1, 14) masked probability distribution.
-                log_probs: (1, 14) log-probabilities.
+                probs: (1, 24) masked probability distribution.
+                log_probs: (1, 24) log-probabilities.
                 new_hidden: (1, 1, 32) updated GRU hidden state.
         """
         gru_out, new_hidden = self.gru(x, hidden)
         gru_out = gru_out.squeeze(0)  # (1, 32)
 
-        policy_logits = self.fc_policy(gru_out)  # (1, 14)
+        policy_logits = self.fc_policy(gru_out)  # (1, 24)
         if mask_fn is not None:
             policy_logits = mask_fn(policy_logits)
 
@@ -135,15 +136,15 @@ class GRUPolicyModel(nn.Module):
 class GRUValueModel(nn.Module):
     """GRU-based value network for state evaluation.
 
-    Architecture: Input(56) -> GRU(32, 1 layer) -> Linear(32->1).
+    Architecture: Input(62) -> GRU(32, 1 layer) -> Linear(32->1).
     No tanh — value can exceed [-1, 1].
 
-    Input (56-d, per intention/input.md, design/34):
+    Input (62-d, per intention/input.md, design/37):
         [HP_own, HP_opp, energy_own, energy_opp, round, cycle |
-         own_hand_counts(7) | opp_hand_counts(7) |
+         own_hand_counts(8) | opp_hand_counts(8) |
          own_status_lifetimes(3) | opp_status_lifetimes(3) |
-         own_discard_counts(7) | opp_discard_counts(7) |
-         own_draw_counts(7) | opp_draw_counts(7) |
+         own_discard_counts(8) | opp_discard_counts(8) |
+         own_draw_counts(8) | opp_draw_counts(8) |
          last_own, last_opp]
     """
 
@@ -168,7 +169,7 @@ class GRUValueModel(nn.Module):
         """Run one GRU step, return scalar value estimate.
 
         Args:
-            x: Input tensor of shape (1, 1, 56).
+            x: Input tensor of shape (1, 1, 62).
             hidden: Hidden state tensor of shape (1, 1, 32).
 
         Returns:

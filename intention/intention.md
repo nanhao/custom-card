@@ -525,3 +525,7 @@ train.py 增加一个参数： value_epoch。用于指定训练 value 网络的 
 初始生命值改为30点。
 初始能量数改为2点。
 前端 ui 要展示状态的剩余回合数。
+
+# intention_id=39
+- 增加卡牌“打击要害”
+同时，网络的 input 和 output 也要修改，见 intention/input.md 和 intention/output.md。

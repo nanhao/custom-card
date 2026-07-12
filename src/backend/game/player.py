@@ -267,11 +267,11 @@ class Player:
                 if not self.discard_pile:
                     break  # Both piles empty, stop drawing
                 # Shuffle discard_pile and move to draw_pile
-                random.shuffle(self.discard_pile)
                 self.draw_pile = self.discard_pile
                 self.discard_pile = []
 
-            # Draw as many as possible from draw_pile
+            # Shuffle then draw front cards — each draw batch is random
+            random.shuffle(self.draw_pile)
             take: int = min(needed, len(self.draw_pile))
             self.hand.extend(self.draw_pile[:take])
             self.draw_pile = self.draw_pile[take:]
