@@ -17,13 +17,13 @@ class TestStartGame:
     """TC-GC-01: start_game initialization."""
 
     def test_start_game_state(self):
-        """After start_game: hp=20, energy=0, hand=5, round=1, cycle=1, round_in_cycle=1."""
+        """After start_game: hp=30, energy=2, hand=5, round=1, cycle=1, round_in_cycle=1 (design/38)."""
         gm = GameCore(mode="pvp")
         gm.start_game()
-        assert gm.player_1.hp == 20
-        assert gm.player_2.hp == 20
-        assert gm.player_1.energy == 0
-        assert gm.player_2.energy == 0
+        assert gm.player_1.hp == 30
+        assert gm.player_2.hp == 30
+        assert gm.player_1.energy == 2
+        assert gm.player_2.energy == 2
         assert len(gm.player_1.hand) == 5
         assert len(gm.player_2.hand) == 5
         assert len(gm.player_1.draw_pile) == 2
@@ -249,8 +249,8 @@ class TestGetState:
         assert gs.round_in_cycle == 1
         p1 = gs.players["1"]
         p2 = gs.players["2"]
-        assert p1.hp == 20
-        assert p1.energy >= 0
+        assert p1.hp == 30  # design/38
+        assert p1.energy == 2  # design/38
         assert isinstance(p1.statuses, list)
         assert isinstance(p1.hand, list)
         assert p1.draw_pile_count >= 0
@@ -927,7 +927,7 @@ class TestDesign26Draw:
         gm.player_1.hand = [CardType.ENERGY]
         gm.player_2.hand = [CardType.ATTACK]
         gm.play_round([CardType.ENERGY], [CardType.ATTACK])
-        assert gm.player_1.energy == 1
+        assert gm.player_1.energy == 3  # design/38: initial=2, ENERGY +1
 
     def test_build_cost_not_affected(self):
         """TC-REG-03: build cost unchanged with new cycle params."""

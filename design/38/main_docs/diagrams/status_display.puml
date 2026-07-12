@@ -1,0 +1,34 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+
+title 前端状态剩余回合展示流程 — 设计 #38
+
+actor "玩家" as U
+participant "App.jsx" as App
+participant "api.js" as API
+participant "Flask API\ncontroller/api.py" as Flask
+participant "GameCore" as GC
+participant "GameBoard.jsx" as GB
+
+U -> App: ① 点击 "Next Round"
+App -> API: ② getState(gameId)
+API -> Flask: ③ GET /api/games/{gameId}
+Flask -> GC: ④ get_state()
+GC -> GC: ⑤ 构建 PlayerState\n(statuses 含 lifetime)
+GC --> Flask: GameState
+Flask --> API: players.1.statuses = [("defense", 2)]
+API --> App: state
+App -> GB: ⑥ 传入 state prop
+GB -> GB: ⑦ renderStatusBar()\nstatusTags = s.type + " (" + s.lifetime + ")"
+
+note right of GB
+  渲染结果:
+  <span class="status-tag tag-defense">
+    defense (2)
+  </span>
+end note
+
+GB --> U: ⑧ 状态栏显示 "defense (2)"
+
+@enduml

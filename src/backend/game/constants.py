@@ -8,5 +8,7 @@ and resolver modules. These have zero dependencies on other game/ modules.
 ROUNDS_PER_CYCLE: int = 3
 # Design/26 D2: draw 5 cards per cycle start.
 CARDS_PER_CYCLE: int = 5
-# Player initial HP.
-INITIAL_HP: int = 20
+# Design/38: Player initial HP.
+INITIAL_HP: int = 30
+# Design/38: Player initial energy.
+INITIAL_ENERGY: int = 2

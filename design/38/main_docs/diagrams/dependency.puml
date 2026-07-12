@@ -1,0 +1,56 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+
+title 依赖关系图 — 设计 #38
+
+package "game/" {
+  [constants.py] as C
+  [card_def.py] as CD
+  [player.py] as P
+  [player_state.py] as PS
+  [game_state.py] as GS
+  [game_core.py] as GC
+}
+
+package "controller/" {
+  [api.py] as API
+  [serializers.py] as SER
+}
+
+package "frontend/" {
+  [GameBoard.jsx] as GB
+}
+
+C -down-> P : INITIAL_HP, INITIAL_ENERGY
+C -down-> GC : INITIAL_HP, INITIAL_ENERGY
+CD -down-> GC : get_initial_draw_pile()
+PS --> P : PlayerStatus
+PS --> GS : PlayerStatus
+P --> GC : Player
+GS --> GC : GameState, PlayerState
+GC --> API : RoundResult, GameState
+API --> SER : serializers
+API --> GB : REST JSON
+
+note right of C
+  变更: INITIAL_HP=30
+  新增: INITIAL_ENERGY=2
+end note
+
+note right of CD
+  变更: get_initial_draw_pile()
+  返回新牌堆组成
+end note
+
+note right of P
+  变更: hp 默认 30
+  energy 默认 2
+end note
+
+note bottom of GB
+  变更: statusTags 显示
+  type + " (" + lifetime + ")"
+end note
+
+@enduml

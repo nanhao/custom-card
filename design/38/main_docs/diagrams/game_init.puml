@@ -1,0 +1,28 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+
+title 游戏初始化流程 — 设计 #38
+
+participant "GameCore" as GC
+participant "card_def" as CD
+participant "Player" as P
+participant "random" as R
+
+GC -> CD: ① get_initial_draw_pile()
+CD --> GC: 3xATTACK, 2xDEFENSE, 1xENERGY, 1xBUILD
+
+GC -> P: ② Player(hp=30, energy=2, draw_pile=...)
+note right: 使用 INITIAL_HP=30\n使用 INITIAL_ENERGY=2
+P --> GC: player_1
+
+GC -> P: ③ Player(hp=30, energy=2, draw_pile=...)
+P --> GC: player_2
+
+GC -> R: ④ random.shuffle(player_1.draw_pile)
+GC -> R: ⑤ random.shuffle(player_2.draw_pile)
+
+GC -> GC: ⑥ _start_cycle()
+note right: 洗牌、发5张手牌\n2张留在抽牌堆
+
+@enduml

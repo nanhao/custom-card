@@ -414,7 +414,7 @@ class TestBuildInputVector62D:
         vec = Converter.build_input_vector(gs, player_key="2")
         # P1 draw pile (opponent's draw from P2 perspective): should contain the built ATTACK
         # ATTACK is position 1 → index 52+1=53
-        assert vec[53] == 1.0  # ATTACK in opponent (P1) draw_pile
+        assert vec[53] == 2.0  # ATTACK in opponent (P1) draw_pile (design/38: 3 initial ATTACK)
         # P2 discard pile (own): contains DEFENSE at position 2 → index 28+2=30
         assert vec[30] == 1.0  # DEFENSE in own (P2) discard
 

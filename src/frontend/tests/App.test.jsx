@@ -27,11 +27,11 @@ import * as api from '../src/api.js';
 const STATE = {
   round: 1, cycle: 1, round_in_cycle: 1,
   players: {
-    '1': { hp: 20, energy: 0, statuses: [],
-      hand: ['attack', 'attack', 'defense', 'heavy', 'counter', 'energy', 'build'], history: [],
+    '1': { hp: 30, energy: 2, statuses: [],
+      hand: ['attack', 'attack', 'attack', 'defense', 'defense', 'energy', 'build'], history: [],
       draw_pile_count: 0, discard_pile_count: 0 },
-    '2': { hp: 20, energy: 0, statuses: [],
-      hand: ['attack', 'attack', 'defense', 'heavy', 'counter', 'energy', 'build'], history: [],
+    '2': { hp: 30, energy: 2, statuses: [],
+      hand: ['attack', 'attack', 'attack', 'defense', 'defense', 'energy', 'build'], history: [],
       draw_pile_count: 0, discard_pile_count: 0 },
   },
   is_over: false, winner: null, mode: 'pvp', ai: null, round_log: [],
@@ -83,15 +83,15 @@ describe('PVE flow', () => {
       round_result: {
         round: 1, cycle: 1, round_in_cycle: 1,
         cards_1: ['attack'], cards_2: ['defense'],
-        before: { statuses_1: [], statuses_2: [], energy_1: 0, energy_2: 0, hp_1: 20, hp_2: 20 },
+        before: { statuses_1: [], statuses_2: [], energy_1: 2, energy_2: 2, hp_1: 30, hp_2: 30 },
         after_resolve: {
-          damage_1: 0, damage_2: 0, hp_1: 20, hp_2: 20,
-          energy_1: 0, energy_2: 0,
+          damage_1: 0, damage_2: 0, hp_1: 30, hp_2: 30,
+          energy_1: 2, energy_2: 2,
           statuses_1: [], statuses_2: [{"type": "defense", "lifetime": 1}],
           details: ['blocked'], is_game_over: false, winner: null,
         },
         end_actions: { cycle_ended: false, bleed_damage_1: 0, bleed_damage_2: 0 },
-        after_end_actions: { is_game_over: false, winner: null, round: 2, cycle: 1, round_in_cycle: 2, hand_cards_1: [], hand_cards_2: [], statuses_1: [], statuses_2: [], energy_1: 0, energy_2: 0, hp_1: 20, hp_2: 20 },
+        after_end_actions: { is_game_over: false, winner: null, round: 2, cycle: 1, round_in_cycle: 2, hand_cards_1: [], hand_cards_2: [], statuses_1: [], statuses_2: [], energy_1: 2, energy_2: 2, hp_1: 30, hp_2: 30 },
       },
       state: { ...PVE_STATE, round: 2, round_in_cycle: 2 },
     });

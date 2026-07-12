@@ -15,8 +15,8 @@ function mockErrorResponse(error, code, status = 400) {
 const STATE = {
   round: 1, cycle: 1, round_in_cycle: 1,
   players: {
-    '1': { hp: 20, energy: 0, statuses: [], hand: ['attack'], history: [], draw_pile_count: 0, discard_pile_count: 0 },
-    '2': { hp: 20, energy: 0, statuses: [], hand: ['attack'], history: [], draw_pile_count: 0, discard_pile_count: 0 },
+    '1': { hp: 30, energy: 2, statuses: [], hand: ['attack'], history: [], draw_pile_count: 0, discard_pile_count: 0 },
+    '2': { hp: 30, energy: 2, statuses: [], hand: ['attack'], history: [], draw_pile_count: 0, discard_pile_count: 0 },
   },
   is_over: false, winner: null, mode: 'pvp', ai: null, round_log: [],
 };
@@ -27,7 +27,7 @@ describe('createGame', () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ game_id: 'abc', state: STATE }, true, 201));
     const r = await api.createGame();
     expect(r.game_id).toBe('abc');
-    expect(r.state.players['1'].hp).toBe(20);
+    expect(r.state.players['1'].hp).toBe(30);
   });
   it('PVE sends mode and ai', async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ game_id: 'pve', state: { ...STATE, mode: 'pve' } }, true, 201));

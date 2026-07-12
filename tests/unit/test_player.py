@@ -15,10 +15,10 @@ class TestPlayerDefaults:
     """TC-PL-01: default values."""
 
     def test_default_values(self):
-        """Player() creates with hp=20, energy=0, all lists empty."""
+        """Player() creates with hp=30, energy=2, all lists empty (design/38)."""
         p = Player()
-        assert p.hp == 20
-        assert p.energy == 0
+        assert p.hp == 30
+        assert p.energy == 2
         assert p.statuses == []
         assert p.hand == []
         assert p.draw_pile == []

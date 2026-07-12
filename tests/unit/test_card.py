@@ -175,14 +175,14 @@ class TestGetInitialDrawPile:
         assert len(pile) == 7
 
     def test_correct_composition(self):
-        """TC-CD-04: 2×ATTACK, 1 each of DEFENSE/HEAVY/COUNTER/ENERGY/BUILD, no FLEX."""
+        """TC-CD-04 (design/38): 3×ATTACK, 2×DEFENSE, 1×ENERGY, 1×BUILD, no HEAVY/COUNTER/FLEX."""
         pile = get_initial_draw_pile()
-        assert pile.count(CardType.ATTACK) == 2
-        assert pile.count(CardType.DEFENSE) == 1
-        assert pile.count(CardType.HEAVY) == 1
-        assert pile.count(CardType.COUNTER) == 1
+        assert pile.count(CardType.ATTACK) == 3
+        assert pile.count(CardType.DEFENSE) == 2
         assert pile.count(CardType.ENERGY) == 1
         assert pile.count(CardType.BUILD) == 1
+        assert pile.count(CardType.HEAVY) == 0
+        assert pile.count(CardType.COUNTER) == 0
         assert pile.count(CardType.FLEX) == 0
 
     def test_returns_new_list_each_call(self):
@@ -249,6 +249,20 @@ class TestCardDefResolvers:
         assert get_card_def(CardType.COUNTER).build_cost == 2
         assert get_card_def(CardType.FLEX).build_cost == 2
         assert get_card_def(CardType.ATTACK).build_cost == 1
+
+
+class TestGameConstants:
+    """TC-GC-01: Game constants (design/38)."""
+
+    def test_initial_hp(self):
+        """TC2.1: INITIAL_HP = 30."""
+        from src.backend.game.constants import INITIAL_HP
+        assert INITIAL_HP == 30
+
+    def test_initial_energy(self):
+        """TC3.1: INITIAL_ENERGY = 2."""
+        from src.backend.game.constants import INITIAL_ENERGY
+        assert INITIAL_ENERGY == 2
 
 
 class TestEffectTypeRemoved:

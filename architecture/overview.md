@@ -8,10 +8,10 @@ A 2-player turn-based card game with simultaneous card resolution, AI opponents 
 
 The current game (design/11+) introduces a deep strategic system on top of the original v1 rules:
 
-- **Players**: 2, each starting with 20 HP.
+- **Players**: 2, each starting with 30 HP (design/38).
 - **Card Types**: 8 — Attack (连续击), Defense (格挡), Heavy Strike (破防重击), Counter (防守反击), Energy (聚能), Build/Dismantle (构建/拆解), Flex (攻守兼备), Iron Defense (严防死守).
-- **Energy System**: Each player has an energy bar (0–5). Cards have a `build_cost` (1 or 2). Playing cards costs _no_ energy; only _building_ new cards via the Build card consumes energy.
-- **Deck System**: Each player has a draw pile and discard pile. No initial hand — cards are drawn at cycle start via `Player.draw_cards()`. Initial draw pile: 2× Attack + 1 each of Defense, Heavy, Counter, Energy, Build (7 cards, no Flex, no Iron Defense).
+- **Energy System**: Each player has an energy bar (0–5), starting at 2 (design/38). Cards have a `build_cost` (1 or 2). Playing cards costs _no_ energy; only _building_ new cards via the Build card consumes energy.
+- **Deck System**: Each player has a draw pile and discard pile. No initial hand — cards are drawn at cycle start via `Player.draw_cards()`. Initial draw pile (design/38): 3× Attack + 2× Defense + 1× Energy + 1× Build (7 cards, no Heavy/Counter/Flex/Iron Defense).
 - **Cycle (轮) System**: A cycle consists of 3 rounds (design/26 D1). At each cycle start, all hands are discarded to discard pile, then 5 cards are drawn from draw pile via smart draw (design/35): discard pile is only shuffled into draw pile when draw pile is empty during drawing. The initial draw pile contains 7 cards (design/26 D3), so 2 cards remain after the first deal. At cycle end, each player loses 1 HP (bleed) to prevent infinite loops.
 - **Priority Resolution**: Each card effect has a priority (10, 11, or 12). Higher priority effects resolve first.
 - **Status System**: Players can gain statuses with managed lifetimes:

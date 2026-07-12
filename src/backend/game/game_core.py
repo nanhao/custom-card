@@ -17,7 +17,7 @@ import random
 
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def, get_initial_draw_pile
-from src.backend.game.constants import ROUNDS_PER_CYCLE, CARDS_PER_CYCLE, INITIAL_HP
+from src.backend.game.constants import ROUNDS_PER_CYCLE, CARDS_PER_CYCLE, INITIAL_HP, INITIAL_ENERGY
 from src.backend.game.game_state import GameState, PlayerState
 from src.backend.game.player import Player, PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
@@ -68,13 +68,14 @@ class GameCore:
     def start_game(self) -> None:
         """Initialize both players and start the first cycle.
 
-        Sets HP=20, energy=0, initializes the draw pile with 7 cards,
-        then triggers _start_cycle() to shuffle and deal 5 cards per hand.
+        Per design/38: Sets HP=30, energy=2, initializes the draw pile
+        with 7 cards, then triggers _start_cycle() to shuffle and deal
+        5 cards per hand.
         Per design/26 D3: 2 cards remain in draw pile.
         """
         initial_pile = get_initial_draw_pile()
-        self.player_1 = Player(hp=20, draw_pile=list(initial_pile))
-        self.player_2 = Player(hp=20, draw_pile=list(initial_pile))
+        self.player_1 = Player(hp=INITIAL_HP, energy=INITIAL_ENERGY, draw_pile=list(initial_pile))
+        self.player_2 = Player(hp=INITIAL_HP, energy=INITIAL_ENERGY, draw_pile=list(initial_pile))
         # Shuffle draw piles so cards are dealt randomly (DBG standard).
         random.shuffle(self.player_1.draw_pile)
         random.shuffle(self.player_2.draw_pile)
@@ -330,7 +331,7 @@ class GameCore:
             """Build a PlayerState snapshot from a Player instance."""
             if p is None:
                 return PlayerState(
-                    hp=INITIAL_HP, energy=0, statuses=[], hand=[], history=[],
+                    hp=INITIAL_HP, energy=INITIAL_ENERGY, statuses=[], hand=[], history=[],
                 )
             # Deep-copy statuses and hand to prevent mutation of the snapshot.
             statuses = [

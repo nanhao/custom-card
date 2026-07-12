@@ -1,0 +1,75 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+
+title 类图 — 设计 #38 涉及的核心类
+
+class constants <<module>> {
+  + INITIAL_HP: int = 30
+  + INITIAL_ENERGY: int = 2
+  + ROUNDS_PER_CYCLE: int = 3
+  + CARDS_PER_CYCLE: int = 5
+}
+
+class card_def <<module>> {
+  + get_initial_draw_pile(): list[CardType]
+  + get_card_def(card_type): CardDef
+}
+note right of card_def::get_initial_draw_pile
+  返回: 3×ATTACK, 2×DEFENSE,
+  1×ENERGY, 1×BUILD
+end note
+
+class Player {
+  + hp: int = 30
+  + energy: int = 2
+  + statuses: list[PlayerStatus]
+  + hand: list[CardType]
+  + draw_pile: list[CardType]
+  + discard_pile: list[CardType]
+  + history: list[PlayerHistoryItem]
+  --
+  + play_card(card)
+  + draw_cards(count)
+}
+
+class PlayerStatus {
+  + status_type: StatusType
+  + lifetime: int
+  --
+  + to_dict(): dict
+}
+note right of PlayerStatus::to_dict
+  返回 {"type": "defense",
+        "lifetime": 2}
+end note
+
+class GameCore {
+  - player_1: Player
+  - player_2: Player
+  - round_number: int
+  - cycle_number: int
+  + mode: str
+  --
+  + start_game()
+  + play_round(cards_1, cards_2, ...)
+  + get_state(): GameState
+}
+
+class GameBoard <<React Component>> {
+  + state: GameState
+  + cardMeta: list
+  --
+  renderStatusBar()
+}
+note right of GameBoard::renderStatusBar
+  statusTags 渲染:
+  s.type + " (" + s.lifetime + ")"
+end note
+
+GameCore --> constants : uses
+GameCore --> card_def : uses
+GameCore --> Player : creates
+Player --> PlayerStatus : has
+GameBoard --> PlayerStatus : reads lifetime
+@enduml

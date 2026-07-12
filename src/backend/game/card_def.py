@@ -156,17 +156,17 @@ def get_card_def(card_type: CardType) -> CardDef:
 def get_initial_draw_pile() -> list[CardType]:
     """Return the standard 7-card initial draw pile (fresh copy).
 
-    Composition: 2×ATTACK, 1 each of DEFENSE/HEAVY/COUNTER/ENERGY/BUILD.
-    FLEX is not included in the initial draw pile.
+    Composition (design/38): 3×ATTACK, 2×DEFENSE, 1×ENERGY, 1×BUILD.
+    HEAVY and COUNTER are no longer in the initial draw pile.
 
     Returns a fresh list on each call to prevent shared-mutation bugs.
     """
     return [
         CardType.ATTACK,
         CardType.ATTACK,
+        CardType.ATTACK,
         CardType.DEFENSE,
-        CardType.HEAVY,
-        CardType.COUNTER,
+        CardType.DEFENSE,
         CardType.ENERGY,
         CardType.BUILD,
     ]

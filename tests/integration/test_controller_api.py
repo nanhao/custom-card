@@ -24,7 +24,7 @@ class TestGetStateV2:
         p1 = resp.get_json()["state"]["players"]["1"]
         assert "energy" in p1
         assert "statuses" in p1
-        assert p1["energy"] == 0
+        assert p1["energy"] == 2  # design/38: initial energy=2
 
     def test_state_has_pile_counts(self, api_client):
         resp = api_client.post("/api/games", json={"mode": "pvp"})
@@ -62,7 +62,7 @@ class TestPlayRound:
         resp = api_client.post(f"/api/games/{gid}/play",
                                json={"cards_1": ["energy"], "cards_2": ["defense"]})
         rr = resp.get_json()["round_result"]
-        assert rr["after_resolve"]["energy_1"] == 1
+        assert rr["after_resolve"]["energy_1"] == 3  # design/38: initial energy=2, ENERGY +1
         # Statuses now in design/15 dict format: [{"type": "defense", "lifetime": 1}]
         assert any(s["type"] == "defense" for s in rr["after_resolve"]["statuses_2"])
 
@@ -82,8 +82,10 @@ class TestPlayRound:
         gid = resp.get_json()["game_id"]
         state = resp.get_json()["state"]
         hand_1 = state["players"]["1"]["hand"]
+        # Pick a non-BUILD card to avoid BUILD dual-mode validation
+        non_build = [c for c in hand_1 if c != "build"]
         resp = api_client.post(f"/api/games/{gid}/play",
-                               json={"cards_1": [hand_1[0]]})
+                               json={"cards_1": [non_build[0]]})
         assert resp.status_code == 200
         assert resp.get_json()["round_result"]["cards_2"] == []
 
@@ -120,8 +122,8 @@ class TestRoundResultSerialization:
         resp = api_client.post(f"/api/games/{gid}/play",
                                json={"cards_1": ["attack"], "cards_2": ["attack"]})
         rr = resp.get_json()["round_result"]
-        assert rr["after_resolve"]["hp_1"] == 19
-        assert rr["after_resolve"]["hp_2"] == 19
+        assert rr["after_resolve"]["hp_1"] == 29  # design/38: initial HP=30, -1
+        assert rr["after_resolve"]["hp_2"] == 29  # design/38: initial HP=30, -1
 
 
 class TestCreateAndDelete:

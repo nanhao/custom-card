@@ -54,8 +54,8 @@ class Player:
                  Each entry records both the card played and build_target.
     """
 
-    hp: int = 20
-    energy: int = 0
+    hp: int = 30
+    energy: int = 2
     statuses: list[PlayerStatus] = field(default_factory=list)
     hand: list[CardType] = field(default_factory=list)
     draw_pile: list[CardType] = field(default_factory=list)
