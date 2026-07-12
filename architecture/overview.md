@@ -18,6 +18,7 @@ The current game (design/11+) introduces a deep strategic system on top of the o
   - **Defense (防御)** — blocks attack damage.
   - **Guard (联防)** — blocks heavy strike damage and its fragile effect.
   - **Fragile (脆弱)** — prevents gaining defense/guard (design/24).
+  - Status remaining turns are displayed in the frontend UI (design/38).
 - **Mutual Hand & Pile Visibility**: Both players can see each other's current hand (design/27), discard pile, and draw pile (design/34).
 - **Win Condition**: A player wins when the opponent's HP reaches 0; no maximum round limit.
 

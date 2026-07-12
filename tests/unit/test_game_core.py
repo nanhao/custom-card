@@ -960,3 +960,75 @@ class TestDesign26Draw:
         assert len(gm.player_1.hand) == 5
         assert len(gm.player_1.draw_pile) == 7  # 12 - 5
         assert len(gm.player_1.discard_pile) == 0
+
+
+class TestDesign38:
+    """Test cases per design/38 test_cases.md — TC3.4, TC5.2, TC7.1."""
+
+    def test_energy_capped_at_max(self):
+        """TC3.4: Energy capped at MAX_ENERGY=5 even after multiple ENERGY plays."""
+        from src.backend.game.player import MAX_ENERGY
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.ENERGY, CardType.ENERGY, CardType.ENERGY,
+                            CardType.ENERGY, CardType.ENERGY]
+        gm.player_2.hand = [CardType.DEFENSE, CardType.DEFENSE, CardType.DEFENSE,
+                            CardType.DEFENSE, CardType.DEFENSE]
+        # Play ENERGY 5 times to push energy beyond cap
+        for _ in range(5):
+            gm.play_round([CardType.ENERGY], [CardType.DEFENSE])
+        assert gm.player_1.energy <= MAX_ENERGY
+
+    def test_build_with_initial_energy(self):
+        """TC5.2: BUILD with initial energy=2, build cost=1 → energy becomes 1."""
+        gm = GameCore(mode="pvp")
+        gm.start_game()
+        gm.player_1.hand = [CardType.BUILD]
+        gm.player_2.hand = [CardType.ATTACK]
+        result = gm.play_round(
+            [CardType.BUILD], [CardType.ATTACK],
+            build_target_1=CardType.ATTACK,
+        )
+        assert gm.player_1.energy == 1  # 2 - 1 = 1
+        assert CardType.ATTACK in gm.player_1.draw_pile
+
+    def test_old_save_compatibility(self):
+        """TC7.1: Old save with hp=20, energy=0 preserved after loading."""
+        from src.backend.game.session_store import SessionStore
+        import json, tempfile, os
+        # Construct old-format save JSON with hp=20, energy=0
+        old_save = {
+            "hp": 20,
+            "energy": 0,
+            "statuses": [],
+            "hand": ["attack"],
+            "draw_pile": ["defense"],
+            "discard_pile": [],
+            "history": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Point config to temp dir
+            config_path = os.path.join(tmpdir, "config.json")
+            save_dir = os.path.join(tmpdir, "saves")
+            os.makedirs(save_dir, exist_ok=True)
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump({"save_dir": save_dir}, f)
+            # Write old-format game file
+            game_file = os.path.join(save_dir, "test-game.json")
+            data = {
+                "game_mode": "pvp",
+                "player_1": old_save,
+                "player_2": old_save,
+                "round": 1,
+                "cycle": 1,
+                "round_in_cycle": 1,
+                "is_over": False,
+                "winner": None,
+                "round_log": [],
+            }
+            with open(game_file, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            store = SessionStore(config_path)
+            gm, meta = store.load("test-game")
+            assert gm.player_1.hp == 20  # Old value preserved, not overwritten to 30
+            assert gm.player_1.energy == 0  # Old value preserved, not overwritten to 2

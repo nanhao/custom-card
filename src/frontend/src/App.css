@@ -480,10 +480,6 @@ body {
   background: var(--gold);
   color: #1a1a2e;
 }
-.tag-fragile {
-  background: var(--accent);
-  color: #fff;
-}
 
 .round-info {
   text-align: center;

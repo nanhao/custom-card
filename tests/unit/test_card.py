@@ -184,6 +184,7 @@ class TestGetInitialDrawPile:
         assert pile.count(CardType.HEAVY) == 0
         assert pile.count(CardType.COUNTER) == 0
         assert pile.count(CardType.FLEX) == 0
+        assert pile.count(CardType.IRON_DEFENSE) == 0
 
     def test_returns_new_list_each_call(self):
         """Each call returns a fresh list — no shared-mutation bugs."""

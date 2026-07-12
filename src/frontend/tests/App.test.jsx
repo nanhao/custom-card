@@ -114,15 +114,15 @@ describe('Game over', () => {
       round_result: {
         round: 1, cycle: 1, round_in_cycle: 1,
         cards_1: ['attack'], cards_2: ['defense'],
-        before: { statuses_1: [], statuses_2: [], energy_1: 0, energy_2: 0, hp_1: 20, hp_2: 20 },
+        before: { statuses_1: [], statuses_2: [], energy_1: 2, energy_2: 2, hp_1: 30, hp_2: 30 },
         after_resolve: {
-          damage_1: 0, damage_2: 20, hp_1: 20, hp_2: 0,
-          energy_1: 0, energy_2: 0,
+          damage_1: 0, damage_2: 30, hp_1: 30, hp_2: 0,
+          energy_1: 2, energy_2: 2,
           statuses_1: [], statuses_2: [],
           details: [], is_game_over: true, winner: '1',
         },
         end_actions: { cycle_ended: false, bleed_damage_1: 0, bleed_damage_2: 0 },
-        after_end_actions: { is_game_over: true, winner: '1', round: 1, cycle: 1, round_in_cycle: 1, hand_cards_1: [], hand_cards_2: [], statuses_1: [], statuses_2: [], energy_1: 0, energy_2: 0, hp_1: 20, hp_2: 0 },
+        after_end_actions: { is_game_over: true, winner: '1', round: 1, cycle: 1, round_in_cycle: 1, hand_cards_1: [], hand_cards_2: [], statuses_1: [], statuses_2: [], energy_1: 2, energy_2: 2, hp_1: 30, hp_2: 0 },
       },
       state: { ...PVE_STATE, is_over: true, winner: '1' },
     });
@@ -145,11 +145,11 @@ describe('Next round', () => {
                  '2': { ...STATE.players['2'], hand: STATE.players['2'].hand.slice(0,-1), history: ['defense'] } } };
     api.playRound.mockResolvedValueOnce({
       round_result: { round: 1, cycle: 1, round_in_cycle: 1, cards_1: ['attack'], cards_2: ['defense'],
-        before: { statuses_1: [], statuses_2: [], energy_1: 0, energy_2: 0, hp_1: 20, hp_2: 20 },
-        after_resolve: { damage_1: 0, damage_2: 0, hp_1: 20, hp_2: 20, energy_1: 0, energy_2: 0, statuses_1: [], statuses_2: ['defense'],
+        before: { statuses_1: [], statuses_2: [], energy_1: 2, energy_2: 2, hp_1: 30, hp_2: 30 },
+        after_resolve: { damage_1: 0, damage_2: 0, hp_1: 30, hp_2: 30, energy_1: 2, energy_2: 2, statuses_1: [], statuses_2: ['defense'],
         details: [], is_game_over: false, winner: null },
         end_actions: { cycle_ended: false, bleed_damage_1: 0, bleed_damage_2: 0 },
-        after_end_actions: { is_game_over: false, winner: null, round: 2, cycle: 1, round_in_cycle: 2, hand_cards_1: [], hand_cards_2: [], statuses_1: [], statuses_2: [], energy_1: 0, energy_2: 0, hp_1: 20, hp_2: 20 } },
+        after_end_actions: { is_game_over: false, winner: null, round: 2, cycle: 1, round_in_cycle: 2, hand_cards_1: [], hand_cards_2: [], statuses_1: [], statuses_2: [], energy_1: 2, energy_2: 2, hp_1: 30, hp_2: 30 } },
       state: after,
     });
     api.getState.mockResolvedValueOnce({ game_id: GID, state: after });

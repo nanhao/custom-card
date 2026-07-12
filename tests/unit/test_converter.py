@@ -401,8 +401,8 @@ class TestBuildInputVector62D:
         import random
         from src.backend.game.game_core import GameCore
         gc = GameCore()
-        # Seed RNG so shuffle is deterministic (initial draw pile order known).
-        # With seed=0: remaining draw=[FLEX, IRON_DEFENSE] after dealing 5.
+        # Seed RNG so shuffle is deterministic.
+        # With seed=0 and new initial pile (design/38): 3×ATTACK,2×DEFENSE,1×ENERGY,1×BUILD.
         random.seed(0)
         gc.start_game()
         # Ensure BUILD is in P1's hand and energy is sufficient

@@ -1,8 +1,8 @@
-"""Player state container for the custom card game v2 (design/11, design/16).
+"""Player state container for the custom card game v2 (design/11, design/16, design/38).
 
 Per architecture D2, Player is a data container (dataclass) with minimal
-behavior. It holds hp (default 20), energy (0-5), statuses, hand, draw_pile,
-discard_pile, and history (list[PlayerHistoryItem] — design/16 D1).
+behavior. It holds hp (default 30, design/38), energy (0-5, default 2, design/38),
+statuses, hand, draw_pile, discard_pile, and history (list[PlayerHistoryItem] — design/16 D1).
 
 Per architecture D9, this module is pure logic — no UI, no I/O.
 """
@@ -44,8 +44,8 @@ class Player:
     """Represents one player's state in the v2 game.
 
     Attribute:
-        hp: Current HP, default 20, clamped to >= 0.
-        energy: Current energy, default 0, clamped to [0, 5].
+        hp: Current HP, default 30 (design/38), clamped to >= 0.
+        energy: Current energy, default 2 (design/38), clamped to [0, 5].
         statuses: List of active PlayerStatus instances (design/15).
         hand: Cards currently in hand.
         draw_pile: Cards remaining in the draw pile.
