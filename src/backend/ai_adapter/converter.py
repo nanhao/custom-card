@@ -25,7 +25,7 @@ Policy output per intention/output.md (24-d):
 All methods are stateless. No PyTorch dependency — pure data transformation.
 """
 
-from src.backend.ai.constants import INPUT_SIZE, POLICY_OUTPUT_SIZE
+from src.backend.ai.rnn_v2.constants import INPUT_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def
 from src.backend.game.game_state_snapshot import GameStateSnapshot

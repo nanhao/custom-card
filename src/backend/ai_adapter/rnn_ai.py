@@ -10,7 +10,7 @@ import importlib
 import torch
 import torch.nn as nn
 
-from src.backend.ai.constants import HIDDEN_SIZE, INPUT_SIZE
+from src.backend.ai.rnn_v2.constants import HIDDEN_SIZE, INPUT_SIZE
 from src.backend.ai_adapter.ai_interface import AiInterface
 from src.backend.ai_adapter.converter import Converter
 from src.backend.game.card_type import CardType

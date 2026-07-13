@@ -3,7 +3,7 @@
 import torch
 
 from src.backend.ai_adapter.rnn_ai import RnnAiAdapter
-from src.backend.ai.constants import POLICY_OUTPUT_SIZE
+from src.backend.ai.rnn_v2.constants import POLICY_OUTPUT_SIZE
 from src.backend.game.card_type import CardType
 
 

@@ -14,7 +14,7 @@ from math import gcd
 import uuid
 
 from src.backend.ai_adapter.ai_registry import AiRegistry
-from src.backend.ai.constants import HIDDEN_SIZE
+from src.backend.ai.rnn_v2.constants import HIDDEN_SIZE
 from src.backend.game.card_type import CardType
 from src.backend.game.game_core import GameCore
 from src.backend.game.game_state_snapshot import GameStateSnapshot

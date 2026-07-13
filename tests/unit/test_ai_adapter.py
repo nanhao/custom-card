@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from src.backend.ai.constants import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
+from src.backend.ai.rnn_v2.constants import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.ai.rnn_v1.model import GRUPolicyModel
 from src.backend.ai_adapter.ai_interface import AiInterface
 from src.backend.ai_adapter.ai_registry import AiRegistry

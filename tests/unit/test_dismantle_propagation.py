@@ -9,7 +9,7 @@ dismantle actions.
 import pytest
 import torch
 
-from src.backend.ai.constants import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
+from src.backend.ai.rnn_v2.constants import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.ai_adapter.converter import Converter
 from src.backend.game.card_type import CardType
 from src.backend.game.player_history_item import PlayerHistoryItem

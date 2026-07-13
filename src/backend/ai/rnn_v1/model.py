@@ -39,7 +39,7 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 
-from src.backend.ai.constants import (  # shared constants (design/31)
+from src.backend.ai.rnn_v2.constants import (  # shared constants (design/31)
     HIDDEN_SIZE,
     INPUT_SIZE,
     NUM_CARD_TYPES,
