@@ -1,4 +1,4 @@
-"""AI Self-Play CLI — thin wrapper around AppManager.run_selfplay().
+"""AI Self-Play CLI — thin wrapper around TrainingManager.run_selfplay().
 
 Per design/5 D1, this script contains NO business logic — only argument
 parsing and delegation. The game loop lives in app/selfplay_runner.py.
@@ -24,9 +24,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from src.backend.app.app_manager import AppManager
-from src.backend.app.selfplay_config import SelfPlayConfig
-from src.backend.game.session_store import SessionStore
+from src.backend.training.selfplay_config import SelfPlayConfig
+from src.backend.training.training_manager import TrainingManager
 from src.backend.log.structured_logger import LoggerBuilder
 
 
@@ -147,10 +146,9 @@ def main() -> None:
         perspective=args.perspective,
     )
 
-    # Create AppManager and run
-    store = SessionStore()
-    app = AppManager(store)
-    app.run_selfplay(config)
+    # Create TrainingManager and run
+    training = TrainingManager()
+    training.run_selfplay(config)
 
 
 if __name__ == "__main__":

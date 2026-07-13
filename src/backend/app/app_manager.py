@@ -8,9 +8,6 @@ Per design/28: policy output 14-d — pass at index 0, even=play, odd=build.
 Public interface:
     create_game(mode, ai_name=None) -> (game_id, state)
     ai_select_action(state, hidden_state, ai_name) -> (card_type, build_target, new_hidden)
-    ai_sample_action(state, h_pol, h_val, ai_name, temp, player_key)
-        -> (card_type, build_target, new_h_pol, log_prob, value, new_h_val)
-    run_selfplay(config) -> SelfPlayResult
 """
 
 from math import gcd
@@ -18,8 +15,6 @@ import uuid
 
 from src.backend.ai_adapter.ai_registry import AiRegistry
 from src.backend.ai.constants import HIDDEN_SIZE
-from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
-from src.backend.app.selfplay_runner import SelfPlayRunner
 from src.backend.game.card_type import CardType
 from src.backend.game.game_core import GameCore
 from src.backend.game.game_state_snapshot import GameStateSnapshot
@@ -99,35 +94,3 @@ class AppManager:
     ) -> tuple[CardType | None, CardType | None, CardType | None, list[float]]:
         ai_interface = AiRegistry.get_ai_interface(ai_name)
         return ai_interface.ai_select_action(state, hidden_state)
-
-    # ------------------------------------------------------------------
-    # AI Temperature-Based Action Sampling (self-play mode)
-    # ------------------------------------------------------------------
-
-    def ai_sample_action(
-        self,
-        state: GameStateSnapshot,
-        hidden_state_policy: list[float],
-        hidden_state_value: list[float],
-        ai_name: str,
-        temperature: float,
-        player_key: str = "2",
-    ) -> tuple[CardType | None, CardType | None, CardType | None, list[float], float | None, float, list[float]]:
-        """Select AI card with temperature-based sampling via AiInterface."""
-        ai_interface = AiRegistry.get_ai_interface(ai_name)
-        return ai_interface.ai_sample_action(
-            state, hidden_state_policy, hidden_state_value,
-            temperature, player_key,
-        )
-
-    # ------------------------------------------------------------------
-    # Self-play game loop
-    # ------------------------------------------------------------------
-
-    def run_selfplay(self, config: SelfPlayConfig) -> SelfPlayResult:
-        """Execute all self-play games and return aggregate results.
-
-        Thin wrapper that delegates to SelfPlayRunner.
-        """
-        runner = SelfPlayRunner(self.ai_sample_action)
-        return runner.run(config)

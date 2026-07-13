@@ -18,9 +18,9 @@ import pytest
 
 from src.backend.ai.constants import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.ai_adapter.converter import Converter
-from src.backend.app.selfplay_runner import SelfPlayRunner
-from src.backend.app.sample_collector import SampleCollector
-from src.backend.app.selfplay_config import SelfPlayConfig
+from src.backend.training.selfplay_runner import SelfPlayRunner
+from src.backend.training.sample_collector import SampleCollector
+from src.backend.training.selfplay_config import SelfPlayConfig
 from src.backend.game.card_type import CardType
 from src.backend.game.player_history_item import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
@@ -227,7 +227,7 @@ def _make_dismantle_sample_action():
     """Create a sample_action callable that plays a dismantle game.
 
     Returns a factory function with the same signature as
-    AppManager.ai_sample_action but with deterministic card selection:
+    TrainingManager.ai_sample_action but with deterministic card selection:
       - P1: Round 1 = BUILD + dismantle ATTACK, subsequent rounds = pass
       - P2: always plays DEFENSE
     """
@@ -291,7 +291,7 @@ class TestSelfPlayDismantleEndToEnd:
                 )
 
         with patch(
-            "src.backend.app.selfplay_runner.GameCore", autospec=True,
+            "src.backend.training.selfplay_runner.GameCore", autospec=True,
         ) as MockGameCore:
             mock_gm = MockGameCore.return_value
             type(mock_gm).is_over = PropertyMock(side_effect=[False, True])
@@ -335,7 +335,7 @@ class TestSelfPlayDismantleEndToEnd:
                 )
 
         with patch(
-            "src.backend.app.selfplay_runner.GameCore", autospec=True,
+            "src.backend.training.selfplay_runner.GameCore", autospec=True,
         ) as MockGameCore:
             mock_gm = MockGameCore.return_value
             type(mock_gm).is_over = PropertyMock(side_effect=[False, True])
@@ -393,7 +393,7 @@ class TestSelfPlayDismantleEndToEnd:
                 )
 
         with patch(
-            "src.backend.app.selfplay_runner.GameCore", autospec=True,
+            "src.backend.training.selfplay_runner.GameCore", autospec=True,
         ) as MockGameCore:
             mock_gm = MockGameCore.return_value
             type(mock_gm).is_over = PropertyMock(side_effect=[False, True, False, True, False, True])
@@ -481,7 +481,7 @@ class TestSelfPlayPlayRoundDismantle:
                 )
 
         with patch(
-            "src.backend.app.selfplay_runner.GameCore",
+            "src.backend.training.selfplay_runner.GameCore",
             autospec=True,
         ) as MockGameCore:
             mock_gm = MockGameCore.return_value
@@ -539,7 +539,7 @@ class TestSelfPlayPlayRoundDismantle:
                 )
 
         with patch(
-            "src.backend.app.selfplay_runner.GameCore",
+            "src.backend.training.selfplay_runner.GameCore",
             autospec=True,
         ) as MockGameCore:
             mock_gm = MockGameCore.return_value
@@ -600,7 +600,7 @@ class TestSelfPlayPlayRoundDismantle:
                 )
 
         with patch(
-            "src.backend.app.selfplay_runner.GameCore",
+            "src.backend.training.selfplay_runner.GameCore",
             autospec=True,
         ) as MockGameCore:
             mock_gm = MockGameCore.return_value

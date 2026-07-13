@@ -101,15 +101,17 @@ class TestAiSelectActionDismantle:
 class TestAiSampleActionDismantle:
     """Verify ai_sample_action returns dismantle_target."""
 
-    def test_sample_dismantle_returns_dismantle_target(self, app_manager):
+    def test_sample_dismantle_returns_dismantle_target(self):
         """ai_sample_action in dismantle mode returns dt in the 7-tuple."""
+        from src.backend.training.training_manager import TrainingManager
         state = make_game_state(
             hand_2=[CardType.BUILD],
             hp_1=20, hp_2=20, energy_2=0,
             discard_pile_2=[CardType.ATTACK],
         )
-        _force_policy_index(app_manager, 5)  # dismantle ATTACK
-        card, bt, dt, h_pol, lp, val, h_val = app_manager.ai_sample_action(
+        training = TrainingManager()
+        _force_policy_index(None, 5)  # dismantle ATTACK
+        card, bt, dt, h_pol, lp, val, h_val = training.ai_sample_action(
             state, [0.0] * 32, [0.0] * 32, "rnn_v1.1",
             temperature=0.0, player_key="2",
         )

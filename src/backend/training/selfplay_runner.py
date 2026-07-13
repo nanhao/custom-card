@@ -1,8 +1,8 @@
 """Self-play game loop — runs N AI-vs-AI games with temperature sampling.
 
-Per design/5 D1, the game loop lives in the app/ layer.
+Per design/5 D1, the game loop lives in the training/ layer.
 SelfPlayRunner encapsulates the loop: creating GameCore instances,
-querying both AIs via AppManager.ai_sample_action(), recording PPO
+querying both AIs via TrainingManager.ai_sample_action(), recording PPO
 samples, and producing aggregate statistics.
 
 Per design/6: emits structured log events via LoggerBuilder.get_logger()
@@ -15,8 +15,8 @@ written as a single JSON array file.
 import torch
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.app.sample_collector import SampleCollector
-from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
+from src.backend.training.sample_collector import SampleCollector
+from src.backend.training.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.game.game_core import GameCore
 from src.backend.log.structured_logger import LoggerBuilder
 
@@ -25,7 +25,7 @@ class SelfPlayRunner:
     """Execute self-play games and collect results.
 
     Receives a sample_action callable (dependency injection) to break
-    the bidirectional dependency with AppManager.
+    the bidirectional dependency with TrainingManager.
 
     Creates GameCore instances, handles PPO sample recording via the
     game → perspective → steps hierarchy (design/7), and logs progress.

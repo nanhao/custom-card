@@ -1,6 +1,6 @@
 """Self-play configuration and result value objects.
 
-Per design/5, these dataclasses are used by AppManager.run_selfplay()
+Per design/5, these dataclasses are used by TrainingManager.run_selfplay()
 and the SelfPlayRunner to configure and report self-play runs.
 """
 
