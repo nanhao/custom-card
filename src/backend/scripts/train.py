@@ -24,7 +24,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.backend.training.training_config import TrainingConfig
-from src.backend.ai.training_factory import TrainingRunnerFactory
+from src.backend.training.training_factory import TrainingRunnerFactory
 
 
 def _build_parser() -> argparse.ArgumentParser:
