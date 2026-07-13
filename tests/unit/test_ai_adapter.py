@@ -12,7 +12,7 @@ from src.backend.ai.rnn_v1.model import GRUPolicyModel
 from src.backend.ai_adapter.ai_interface import AiInterface
 from src.backend.ai_adapter.ai_registry import AiRegistry
 from src.backend.ai_adapter.rnn_ai import RnnAiAdapter
-from src.backend.app.converter import Converter
+from src.backend.ai_adapter.converter import Converter
 from src.backend.game.card_type import CardType
 
 

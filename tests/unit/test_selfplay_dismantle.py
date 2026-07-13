@@ -17,7 +17,7 @@ from unittest.mock import patch
 import pytest
 
 from src.backend.ai.constants import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
-from src.backend.app.converter import Converter
+from src.backend.ai_adapter.converter import Converter
 from src.backend.app.selfplay_runner import SelfPlayRunner
 from src.backend.app.selfplay_config import SelfPlayConfig
 from src.backend.game.card_type import CardType
