@@ -1,0 +1,109 @@
+@startuml rnn_v2_architecture
+skinparam backgroundColor #FEFEFE
+skinparam rectangleBackgroundColor #E8F0FE
+skinparam rectangleBorderColor #1A73E8
+skinparam defaultFontName Microsoft YaHei
+
+title rnn_v2 网络结构图 (design/37) — GRU + Skip Connection + 3-Layer MLP Head
+
+' ─── Legend ───
+legend right
+  |= 符号 |= 说明 |
+  | (*) | 逐元素乘法 (Hadamard) |
+  | sigmoid | Sigmoid 激活 |
+  | + | 逐元素加法 |
+  | Concat | 向量拼接 |
+endlegend
+
+' =============================================
+' INPUT
+' =============================================
+rectangle "**Input**\n(1, 1, 62)\nHP_own, HP_opp, energy_own,\nenergy_opp, round, cycle,\nhand_counts(7+7),\nstatus_lifetimes(3+3),\ndiscard_counts(7+7),\ndraw_counts(7+7),\nlast_own, last_opp" as INPUT #FFF9C4
+
+rectangle "**Hidden State h_{t-1}**\n(1, 1, 32)\ninit: all zeros" as HIDDEN #FFF9C4
+
+' =============================================
+' GRU CELL (expanded)
+' =============================================
+package "**GRU Cell** (nn.GRU, 1 layer)" as GRU_BOX #E3F2FD {
+
+    rectangle "**Reset Gate r_t**\nsigmoid(Wr * [h_{t-1}, x_t] + br)\n(1, 32)" as RESET #C8E6C9
+
+    rectangle "**Update Gate z_t**\nsigmoid(Wz * [h_{t-1}, x_t] + bz)\n(1, 32)" as UPDATE #C8E6C9
+
+    rectangle "**Candidate n_t**\ntanh(Wn * [r_t (*) h_{t-1}, x_t] + bn)\n(1, 32)" as NEWGATE #FFE0B2
+
+    rectangle "**Output h_t**\n(1 - z_t) (*) n_t + z_t (*) h_{t-1}\n(1, 32)" as HOUT #BBDEFB
+}
+
+' =============================================
+' SKIP CONNECTION
+' =============================================
+rectangle "**Skip Connection**\nConcat[h_t(32), x_t(62)]\n-> (1, 94)" as CONCAT #E1BEE7
+
+' =============================================
+' POLICY HEAD (3-layer MLP)
+' =============================================
+package "**Policy Head** (3-Layer MLP)" as PHEAD #ECEFF1 {
+    rectangle "**FC1**\nLinear(94->64)\n+ ReLU\n(1, 64)" as P_FC1 #D7CCC8
+    rectangle "**FC2**\nLinear(64->32)\n+ ReLU\n(1, 32)" as P_FC2 #D7CCC8
+    rectangle "**FC_policy**\nLinear(32->24)\n+ Softmax\n(1, 24)" as P_FC3 #D7CCC8
+}
+
+rectangle "**Policy Output**\nprobs (1, 24)\npass(0) + 8×(play, build, dismantle)" as P_OUT #A5D6A7
+
+' =============================================
+' VALUE HEAD (3-layer MLP)
+' =============================================
+package "**Value Head** (3-Layer MLP)" as VHEAD #ECEFF1 {
+    rectangle "**FC1**\nLinear(94->64)\n+ ReLU\n(1, 64)" as V_FC1 #D7CCC8
+    rectangle "**FC2**\nLinear(64->32)\n+ ReLU\n(1, 32)" as V_FC2 #D7CCC8
+    rectangle "**FC_value**\nLinear(32->1)\n(1, 1)\nno tanh" as V_FC3 #D7CCC8
+}
+
+rectangle "**Value Output**\nscalar (1, 1)" as V_OUT #90CAF9
+
+' =============================================
+' ARROWS
+' =============================================
+
+' Input to GRU gates
+INPUT -down-> RESET : x_t (62)
+INPUT -down-> UPDATE : x_t (62)
+INPUT -down-> NEWGATE : x_t (62)
+
+' Hidden to GRU gates
+HIDDEN -down-> RESET : h_{t-1} (32)
+HIDDEN -down-> UPDATE : h_{t-1} (32)
+
+' Reset gate output to candidate
+RESET -right-> NEWGATE : "r_t\n----\n(*) h_{t-1} (Hadamard)"
+
+' Update gate to output
+UPDATE -down-> HOUT
+
+' Candidate to output
+NEWGATE -right-> HOUT
+
+' GRU output h_t to Concat
+HOUT -down-> CONCAT : "h_t (32)"
+
+' Skip connection: raw input to Concat
+INPUT -down-> CONCAT : "x_t (62)"
+
+' Concat to Policy Head
+CONCAT -down-> P_FC1 : "(1, 94)"
+P_FC1 -down-> P_FC2
+P_FC2 -down-> P_FC3
+P_FC3 -down-> P_OUT
+
+' Concat to Value Head
+CONCAT -down-> V_FC1 : "(1, 94)"
+V_FC1 -down-> V_FC2
+V_FC2 -down-> V_FC3
+V_FC3 -down-> V_OUT
+
+' Hidden state feedback
+HOUT .up.> HIDDEN : "next step\nh_t -> h_{t-1}"
+
+@enduml

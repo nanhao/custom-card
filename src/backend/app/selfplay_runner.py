@@ -18,7 +18,7 @@ from pathlib import Path
 import torch
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.app.converter import Converter
+from src.backend.ai_adapter.converter import Converter
 from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.game.game_core import GameCore
 from src.backend.log.structured_logger import LoggerBuilder

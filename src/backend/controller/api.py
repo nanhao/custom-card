@@ -35,7 +35,6 @@ _FRONTEND_DIST = _FRONTEND_SRC / "dist"
 
 from src.backend.ai.registry import list_ais
 from src.backend.app.app_manager import AppManager
-from src.backend.app.converter import Converter
 from src.backend.controller.serializers import (
     card_to_str,
     error_response,
@@ -300,14 +299,6 @@ def _register_routes(app: Flask) -> None:
             except Exception as exc:
                 return jsonify(error_response(
                     f"AI inference failed: {exc}", "AI_INFERENCE_ERROR", 500
-                )), 500
-
-            # Validate AI output (defense in depth).
-            # Per design/28: card_type=None means pass, which is valid.
-            if card_type is not None and card_type not in Converter.ALL_CARD_TYPES:
-                return jsonify(error_response(
-                    f"AI returned invalid card: {card_type!r}",
-                    "AI_INFERENCE_ERROR", 500
                 )), 500
 
             # Per design/28: pass → empty cards_2. Per design/37: dismantle_target.
