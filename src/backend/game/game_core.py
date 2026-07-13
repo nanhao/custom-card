@@ -472,7 +472,7 @@ class GameCore:
 
     def _validate_build_dual_mode(
         self,
-        player: "Player",
+        player: Player,
         build_target: CardType | None,
         dismantle_target: CardType | None,
     ) -> None:
@@ -490,9 +490,6 @@ class GameCore:
             ValueError: If both or neither targets are set, if build mode has
                         insufficient energy, or dismantle target not in discard.
         """
-        # Lazy import to avoid circular dependency at module level.
-        from src.backend.game.player import Player  # noqa: PLC0415
-
         # Must have exactly one target (mutually exclusive)
         if build_target is None and dismantle_target is None:
             raise ValueError(
