@@ -10,8 +10,8 @@ Contains:
     - SampleLoader: training sample JSON loading and validation
 """
 
-from src.backend.training.training_manager import TrainingManager
-from src.backend.training.selfplay_runner import SelfPlayRunner
+from src.backend.training.rnn_v2.training_manager import TrainingManager
+from src.backend.training.rnn_v2.selfplay_runner import SelfPlayRunner
 from src.backend.training.rnn_v2.sample_collector import SampleCollector
 from src.backend.training.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.training.training_runner import BaseTrainingRunner

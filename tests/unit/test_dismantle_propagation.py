@@ -103,7 +103,7 @@ class TestAiSampleActionDismantle:
 
     def test_sample_dismantle_returns_dismantle_target(self):
         """ai_sample_action in dismantle mode returns dt in the 7-tuple."""
-        from src.backend.training.training_manager import TrainingManager
+        from src.backend.training.rnn_v2.training_manager import TrainingManager
         state = make_game_state(
             hand_2=[CardType.BUILD],
             hp_1=20, hp_2=20, energy_2=0,

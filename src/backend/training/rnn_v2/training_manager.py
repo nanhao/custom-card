@@ -15,7 +15,7 @@ from src.backend.ai_adapter.ai_registry import AiRegistry
 from src.backend.game.card_type import CardType
 from src.backend.game.game_state_snapshot import GameStateSnapshot
 from src.backend.training.selfplay_config import SelfPlayConfig, SelfPlayResult
-from src.backend.training.selfplay_runner import SelfPlayRunner
+from src.backend.training.rnn_v2.selfplay_runner import SelfPlayRunner
 
 
 class TrainingManager:

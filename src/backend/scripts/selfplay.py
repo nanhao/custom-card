@@ -25,7 +25,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.backend.training.selfplay_config import SelfPlayConfig
-from src.backend.training.training_manager import TrainingManager
+from src.backend.training.rnn_v2.training_manager import TrainingManager
 from src.backend.log.structured_logger import LoggerBuilder
 
 
