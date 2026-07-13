@@ -19,6 +19,7 @@ import pytest
 from src.backend.ai.constants import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.ai_adapter.converter import Converter
 from src.backend.app.selfplay_runner import SelfPlayRunner
+from src.backend.app.sample_collector import SampleCollector
 from src.backend.app.selfplay_config import SelfPlayConfig
 from src.backend.game.card_type import CardType
 from src.backend.game.player_history_item import PlayerHistoryItem
@@ -77,7 +78,7 @@ class TestBuildGameSampleDismantle:
             },
         ]
 
-        result = SelfPlayRunner._build_game_sample(
+        result = SampleCollector._build_game_sample(
             game_samples=game_samples,
             game_id=1,
             winner=None,
@@ -114,7 +115,7 @@ class TestBuildGameSampleDismantle:
             },
         ]
 
-        result = SelfPlayRunner._build_game_sample(
+        result = SampleCollector._build_game_sample(
             game_samples=game_samples,
             game_id=2,
             winner="1",
@@ -161,7 +162,7 @@ class TestBuildGameSampleDismantle:
             },
         ]
 
-        result = SelfPlayRunner._build_game_sample(
+        result = SampleCollector._build_game_sample(
             game_samples=game_samples,
             game_id=3,
             winner="1",
@@ -202,7 +203,7 @@ class TestBuildGameSampleDismantle:
             "log_prob": -3.0,
         }]
 
-        result = SelfPlayRunner._build_game_sample(
+        result = SampleCollector._build_game_sample(
             game_samples=game_samples,
             game_id=4,
             winner=None,

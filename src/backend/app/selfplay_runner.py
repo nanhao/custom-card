@@ -12,13 +12,10 @@ Per design/7: sample output uses game → perspective → steps hierarchy
 written as a single JSON array file.
 """
 
-import json
-from pathlib import Path
-
 import torch
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.ai_adapter.converter import Converter
+from src.backend.app.sample_collector import SampleCollector
 from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.game.game_core import GameCore
 from src.backend.log.structured_logger import LoggerBuilder
@@ -103,22 +100,23 @@ class SelfPlayRunner:
         # Track which AI models have been loaded (for model_loaded event)
         loaded_models: set[str] = set()
 
-        # Collect structured game sample dicts in memory.
-        # Per design/7 D3, all games are buffered and written as a
-        # single JSON array file at the end (replaces per-game JSONL).
-        all_game_samples: list[dict] = []
+        # Sample collector for PPO training data (design/39).
+        # Handles per-round recording, per-game building, and file writing.
+        collector = SampleCollector(
+            output_path=config.sample_output,
+            perspective=config.perspective,
+            ai1=config.ai1,
+            ai2=config.ai2,
+        )
 
         try:
             for game_idx in range(1, config.game_count + 1):
-                rounds_played, winner, p1_reward, p2_reward, game_sample = (
+                rounds_played, winner = (
                     self._play_one_game(
-                        config, game_idx, loaded_models,
+                        config, game_idx, loaded_models, collector,
                     )
                 )
                 total_rounds += rounds_played
-
-                if game_sample is not None:
-                    all_game_samples.append(game_sample)
 
                 if winner == "1":
                     ai1_wins += 1
@@ -128,27 +126,9 @@ class SelfPlayRunner:
                     draws += 1
 
         finally:
-            # Write all game samples as a single JSON array file.
-            # Per design/7 D3, file is only created if sample_output
-            # is configured. For game_count=0, this writes [] (TC-O4).
-            if config.sample_output:
-                sample_path = Path(config.sample_output)
-                sample_path.parent.mkdir(parents=True, exist_ok=True)
-                with sample_path.open("w", encoding="utf-8") as fh:
-                    json.dump(
-                        all_game_samples, fh,
-                        ensure_ascii=False,
-                    )
-                # Log sample_write event with total count
-                total_steps = sum(
-                    sum(len(p["steps"]) for p in g["perspectives"])
-                    for g in all_game_samples
-                )
-                logger.log(
-                    "DEBUG", "selfplay.sample_write",
-                    game_count=len(all_game_samples),
-                    total_steps=total_steps,
-                )
+            # Write all collected game samples as a single JSON array file.
+            # Per design/7 D3: flush delegates to SampleCollector.
+            collector.flush()
 
         # 4. Compute and return aggregate result
         total_games = config.game_count
@@ -189,25 +169,26 @@ class SelfPlayRunner:
         config: SelfPlayConfig,
         game_idx: int,
         loaded_models: set[str],
-    ) -> tuple[int, str | None, float, float, dict | None]:
+        collector: SampleCollector,
+    ) -> tuple[int, str | None]:
         """Play one complete self-play game.
 
         Creates a GameCore, runs the round loop with AI actions,
-        records PPO samples, emits structured log events, and
-        returns game outcome plus the structured game sample.
+        records PPO samples via SampleCollector, emits structured
+        log events, and returns game outcome.
 
-        Per design/7, the game sample follows the game → perspective
-        → steps hierarchy.
+        Per design/7, samples are recorded through the collector
+        using the game → perspective → steps hierarchy.
 
         Args:
             config: Self-play configuration.
             game_idx: 1-based game index (for logging).
             loaded_models: Set of AI names whose models are already
                 loaded. Updated in-place when a model is first used.
+            collector: SampleCollector for PPO sample recording.
 
         Returns:
-            (rounds_played, winner, p1_reward, p2_reward, game_sample)
-            tuple. game_sample is None if sample_output is not configured.
+            (rounds_played, winner) tuple.
         """
         logger = LoggerBuilder.get_logger()
 
@@ -228,9 +209,6 @@ class SelfPlayRunner:
         h1_val = [0.0] * 32
         h2_pol = [0.0] * 32
         h2_val = [0.0] * 32
-
-        # Per-step sample buffer for this game
-        game_samples: list[dict] = []
 
         # c. Round loop
         while not gm.is_over:
@@ -372,40 +350,14 @@ class SelfPlayRunner:
                     energy2_after=last_rr.after_resolve.energy_2,
                 )
 
-            # Record PPO samples (if sample output is configured)
-            # Per design/10 D2: filter by config.perspective
-            if config.sample_output is not None:
-                # Per design/27 D4: use perspective-specific states.
-                state_vec_p1 = Converter.build_input_vector(
-                    pre_state_p1, player_key="1"
+            # Record PPO samples via collector (design/39).
+            # Per design/10 D2: filtering is handled inside collector.
+            if collector.is_active:
+                collector.record_step(
+                    pre_state_p1, pre_state_p2,
+                    card1, bt1, dt1, val1, lp1,
+                    card2, bt2, dt2, val2, lp2,
                 )
-                state_vec_p2 = Converter.build_input_vector(
-                    pre_state_p2, player_key="2"
-                )
-                if config.perspective in ("ai1", "both"):
-                    # Compute policy index for P1's action (design/14)
-                    p1_action_idx = Converter.action_to_policy_index(
-                        card1, bt1, dt1,
-                    )
-                    game_samples.append({
-                        "player": "1",
-                        "input": state_vec_p1,
-                        "action": p1_action_idx,
-                        "value": val1,
-                        "log_prob": lp1,
-                    })
-                if config.perspective in ("ai2", "both"):
-                    # Compute policy index for P2's action (design/14)
-                    p2_action_idx = Converter.action_to_policy_index(
-                        card2, bt2, dt2,
-                    )
-                    game_samples.append({
-                        "player": "2",
-                        "input": state_vec_p2,
-                        "action": p2_action_idx,
-                        "value": val2,
-                        "log_prob": lp2,
-                    })
 
         # d. Determine winner and rewards
         winner = gm.winner
@@ -416,39 +368,26 @@ class SelfPlayRunner:
         else:  # draw
             p1_reward, p2_reward = 0.0, 0.0
 
-        # Derive rounds_played from round log, or from sample count
+        # Derive rounds_played from round log, or from collector step count
         # if round 1 errored before completing (round_log empty).
         # Per design/10 D2: account for perspective filtering when
         # computing rounds from sample count.
         if gm.round_log:
             rounds_played = gm.round_log[-1].round
-        elif game_samples:
-            # When perspective is "both", each round produces 2 entries.
-            # When filtered to "ai1" or "ai2", each round produces 1 entry.
-            entries_per_round = 1 if config.perspective in ("ai1", "ai2") else 2
-            rounds_played = len(game_samples) // entries_per_round
+        elif collector.is_active:
+            rounds_played = collector.rounds_from_steps()
         else:
             rounds_played = 0
 
-        # e. Build structured game sample.
+        # e. Build structured game sample via collector.
         # Per design/7 §2, rounds must be ≥1 — skip if none completed.
-        game_sample = None
-        if config.sample_output is not None and game_samples and rounds_played > 0:
-            game_sample = self._build_game_sample(
-                game_samples=game_samples,
-                game_id=game_idx,
-                winner=winner,
-                rounds_played=rounds_played,
-                p1_reward=p1_reward,
-                p2_reward=p2_reward,
-                ai1=config.ai1,
-                ai2=config.ai2,
-                perspective=config.perspective,
-            )
-            logger.log(
-                "DEBUG", "selfplay.sample_game_built",
-                game_idx=game_idx, count=len(game_samples),
-            )
+        collector.finish_game(
+            game_id=game_idx,
+            winner=winner,
+            p1_reward=p1_reward,
+            p2_reward=p2_reward,
+            rounds_played=rounds_played,
+        )
 
         # f. Print game summary
         winner_label = (
@@ -471,77 +410,7 @@ class SelfPlayRunner:
             rounds=rounds_played,
         )
 
-        return rounds_played, winner, p1_reward, p2_reward, game_sample
-
-    # ------------------------------------------------------------------
-    # Internal: Sample building
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _build_game_sample(
-        game_samples: list[dict],
-        game_id: int,
-        winner: str | None,
-        rounds_played: int,
-        p1_reward: float,
-        p2_reward: float,
-        ai1: str,
-        ai2: str,
-        perspective: str = "both",
-    ) -> dict:
-        """Build a structured game sample dict (game → perspective → steps).
-
-        Splits flat game_samples by 'player' field, assigns rewards,
-        and returns the hierarchy defined in design/7 interfaces.md §2.
-
-        Per design/10 D2: only perspectives matching the `perspective`
-        parameter are included in the output.
-        """
-        # Find the last step index for each player.
-        # Only the terminal step receives the game-outcome reward;
-        # all intermediate steps get 0.0 (sparse reward for GAE).
-        last_p1_idx = max(
-            (i for i, e in enumerate(game_samples) if e["player"] == "1"),
-            default=-1,
-        )
-        last_p2_idx = max(
-            (i for i, e in enumerate(game_samples) if e["player"] == "2"),
-            default=-1,
-        )
-
-        p1_steps: list[dict] = []
-        p2_steps: list[dict] = []
-        for i, entry in enumerate(game_samples):
-            if entry["player"] == "1":
-                reward = p1_reward if i == last_p1_idx else 0.0
-            else:
-                reward = p2_reward if i == last_p2_idx else 0.0
-            step = {
-                "input": entry["input"],
-                "action": entry["action"],
-                "reward": reward,
-                "value": entry["value"],
-                "log_prob": entry["log_prob"],
-            }
-            if entry["player"] == "1":
-                p1_steps.append(step)
-            else:
-                p2_steps.append(step)
-
-        # Build the structured game sample dict.
-        # Per design/10 D2: only include perspectives matching config.perspective.
-        perspectives: list[dict] = []
-        if perspective in ("ai1", "both"):
-            perspectives.append({"player": "1", "ai": ai1, "steps": p1_steps})
-        if perspective in ("ai2", "both"):
-            perspectives.append({"player": "2", "ai": ai2, "steps": p2_steps})
-
-        return {
-            "game_id": game_id,
-            "winner": winner,
-            "rounds": rounds_played,
-            "perspectives": perspectives,
-        }
+        return rounds_played, winner
 
     # ------------------------------------------------------------------
     # Internal: Summary printing
