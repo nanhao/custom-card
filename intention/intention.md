@@ -527,7 +527,7 @@ train.py 增加一个参数： value_epoch。用于指定训练 value 网络的 
 前端 ui 要展示状态的剩余回合数。
 
 # intention_id=39
-这是一个重构任务，把 RoundResult 类单独放一个文件。
+进行了大规模的代码重构，并废弃了 rnn_v1，为后面改变网络结构准备
 
 # intention_id=109
 模型架构大幅度调整。新的网络架构定义看 intention/new_network.md。
