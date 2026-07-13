@@ -195,13 +195,12 @@ class SelfPlayRunner:
         # a. Create game and log game_start
         gm = GameCore(mode="pvp")
         gm.start_game()
-        init_s1 = gm.get_state(player_perspective="1")
-        init_s2 = gm.get_state(player_perspective="2")
+        init_state = gm.get_state()
         logger.log(
             "INFO", "selfplay.game_start",
             game_idx=game_idx, game_count=config.game_count,
-            hand1=[c.value for c in init_s1.players["1"].hand],
-            hand2=[c.value for c in init_s2.players["2"].hand],
+            hand1=[c.value for c in init_state.players["1"].hand],
+            hand2=[c.value for c in init_state.players["2"].hand],
         )
 
         # b. Initialize dual hidden states per player (32-d, design/11)
@@ -213,9 +212,8 @@ class SelfPlayRunner:
         # c. Round loop
         while not gm.is_over:
             # Per design/27 D4: state with perspective so draw/discard piles are populated.
-            pre_state_p1 = gm.get_state(player_perspective="1")
-            pre_state_p2 = gm.get_state(player_perspective="2")
-            round_num = pre_state_p1.round
+            pre_state = gm.get_state()
+            round_num = pre_state.round
 
             # Determine if this round should use temperature sampling
             should_sample = (
@@ -232,15 +230,15 @@ class SelfPlayRunner:
             )
             try:
                 card1, bt1, dt1, h1_pol, lp1, val1, h1_val = self._sample_action(
-                    pre_state_p1, h1_pol, h1_val, config.ai1,
+                    pre_state, h1_pol, h1_val, config.ai1,
                     temperature=temp_p1, player_key="1",
                 )
             except Exception as exc:
                 logger.log(
                     "ERROR", "selfplay.action_error",
                     game_idx=game_idx, round=round_num, player="1",
-                    hand=[c.value for c in pre_state_p1.players["1"].hand],
-                    energy=pre_state_p1.players["1"].energy,
+                    hand=[c.value for c in pre_state.players["1"].hand],
+                    energy=pre_state.players["1"].energy,
                     temperature=temp_p1,
                     error_type=type(exc).__name__,
                     msg=str(exc),
@@ -256,15 +254,15 @@ class SelfPlayRunner:
             )
             try:
                 card2, bt2, dt2, h2_pol, lp2, val2, h2_val = self._sample_action(
-                    pre_state_p2, h2_pol, h2_val, config.ai2,
+                    pre_state, h2_pol, h2_val, config.ai2,
                     temperature=temp_p2, player_key="2",
                 )
             except Exception as exc:
                 logger.log(
                     "ERROR", "selfplay.action_error",
                     game_idx=game_idx, round=round_num, player="2",
-                    hand=[c.value for c in pre_state_p2.players["2"].hand],
-                    energy=pre_state_p2.players["2"].energy,
+                    hand=[c.value for c in pre_state.players["2"].hand],
+                    energy=pre_state.players["2"].energy,
                     temperature=temp_p2,
                     error_type=type(exc).__name__,
                     msg=str(exc),
@@ -296,10 +294,10 @@ class SelfPlayRunner:
                 bt2=bt2.value if bt2 else None,
                 dt1=dt1.value if dt1 else None,
                 dt2=dt2.value if dt2 else None,
-                hand1=[c.value for c in pre_state_p1.players["1"].hand],
-                hand2=[c.value for c in pre_state_p2.players["2"].hand],
-                energy1=pre_state_p1.players["1"].energy,
-                energy2=pre_state_p2.players["2"].energy,
+                hand1=[c.value for c in pre_state.players["1"].hand],
+                hand2=[c.value for c in pre_state.players["2"].hand],
+                energy1=pre_state.players["1"].energy,
+                energy2=pre_state.players["2"].energy,
                 temp1=temp_p1,
                 temp2=temp_p2,
             )
@@ -327,8 +325,8 @@ class SelfPlayRunner:
                     card2=card2.value if card2 else None,
                     bt1=bt1.value if bt1 else None,
                     bt2=bt2.value if bt2 else None,
-                    energy1=pre_state_p1.players["1"].energy,
-                    energy2=pre_state_p2.players["2"].energy,
+                    energy1=pre_state.players["1"].energy,
+                    energy2=pre_state.players["2"].energy,
                     error_type="ValueError",
                     msg=str(exc),
                 )
@@ -354,7 +352,7 @@ class SelfPlayRunner:
             # Per design/10 D2: filtering is handled inside collector.
             if collector.is_active:
                 collector.record_step(
-                    pre_state_p1, pre_state_p2,
+                    pre_state, pre_state,
                     card1, bt1, dt1, val1, lp1,
                     card2, bt2, dt2, val2, lp2,
                 )
