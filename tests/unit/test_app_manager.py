@@ -2,7 +2,7 @@
 
 import torch
 
-from src.backend.app.app_manager import AppManager
+from src.backend.ai_adapter.rnn_ai import RnnAiAdapter
 from src.backend.ai.constants import POLICY_OUTPUT_SIZE
 from src.backend.game.card_type import CardType
 
@@ -21,13 +21,13 @@ class TestMaskFn:
 
     def test_pass_never_masked(self):
         """Index 0 (pass) is always legal."""
-        mask_fn = AppManager._make_mask_fn([], energy=0)
+        mask_fn = RnnAiAdapter._make_mask_fn([], energy=0)
         masked = mask_fn(torch.zeros(1, self.POLICY_DIM))
         assert masked[0, 0].item() == 0.0
 
     def test_no_build_in_hand_blocks_build_and_dismantle(self):
         """hand=['attack','energy'] -- all build/dismantle indices masked."""
-        mask_fn = AppManager._make_mask_fn([CardType.ATTACK, CardType.ENERGY], energy=2)
+        mask_fn = RnnAiAdapter._make_mask_fn([CardType.ATTACK, CardType.ENERGY], energy=2)
         masked = mask_fn(torch.zeros(1, self.POLICY_DIM))
         # All build indices masked
         for i in [1, 4, 7, 10, 13, 16, 19, 22]:
@@ -41,7 +41,7 @@ class TestMaskFn:
 
     def test_energy_zero_blocks_build_but_not_dismantle(self):
         """energy=0 blocks build indices, dismantle still valid if BUILD in hand."""
-        mask_fn = AppManager._make_mask_fn(
+        mask_fn = RnnAiAdapter._make_mask_fn(
             [CardType.ATTACK, CardType.BUILD], energy=0,
             discard_pile=[CardType.ATTACK],
         )
@@ -57,7 +57,7 @@ class TestMaskFn:
 
     def test_build_targets_filtered_by_energy(self):
         """cost-1 targets legal, cost-2 targets legal with energy=2."""
-        mask_fn = AppManager._make_mask_fn([CardType.BUILD], energy=2)
+        mask_fn = RnnAiAdapter._make_mask_fn([CardType.BUILD], energy=2)
         masked = mask_fn(torch.zeros(1, self.POLICY_DIM))
         # Cost-1 build targets should NOT be masked
         for idx in [1, 4, 7, 10, 16]:  # BUILD, ATTACK, DEFENSE, HEAVY, ENERGY
@@ -69,7 +69,7 @@ class TestMaskFn:
 
     def test_energy_1_blocks_cost_2_targets(self):
         """cost-2 targets blocked with energy=1."""
-        mask_fn = AppManager._make_mask_fn([CardType.BUILD], energy=1)
+        mask_fn = RnnAiAdapter._make_mask_fn([CardType.BUILD], energy=1)
         masked = mask_fn(torch.zeros(1, self.POLICY_DIM))
         assert masked[0, 13].item() == float("-inf")  # COUNTER (cost 2)
         assert masked[0, 19].item() == float("-inf")  # FLEX (cost 2)
@@ -79,7 +79,7 @@ class TestMaskFn:
 
     def test_hand_cards_masked_at_play_indices(self):
         """Cards not in hand masked at play indices."""
-        mask_fn = AppManager._make_mask_fn([CardType.ATTACK, CardType.DEFENSE], energy=2)
+        mask_fn = RnnAiAdapter._make_mask_fn([CardType.ATTACK, CardType.DEFENSE], energy=2)
         masked = mask_fn(torch.zeros(1, self.POLICY_DIM))
         assert masked[0, 0].item() == 0.0  # pass always legal
         assert masked[0, 3].item() == 0.0  # play ATTACK (in hand)
@@ -90,7 +90,7 @@ class TestMaskFn:
 
     def test_dismantle_target_not_in_discard_masked(self):
         """Dismantle indices masked if card not in discard pile."""
-        mask_fn = AppManager._make_mask_fn(
+        mask_fn = RnnAiAdapter._make_mask_fn(
             [CardType.BUILD], energy=2,
             discard_pile=[CardType.ATTACK, CardType.DEFENSE],
         )
@@ -104,14 +104,14 @@ class TestMaskFn:
 
     def test_dismantle_all_masked_when_discard_empty(self):
         """All dismantle indices masked when discard pile is empty."""
-        mask_fn = AppManager._make_mask_fn([CardType.BUILD], energy=2, discard_pile=[])
+        mask_fn = RnnAiAdapter._make_mask_fn([CardType.BUILD], energy=2, discard_pile=[])
         masked = mask_fn(torch.zeros(1, self.POLICY_DIM))
         for i in [2, 5, 8, 11, 14, 17, 20, 23]:
             assert masked[0, i].item() == float("-inf"), f"dismantle idx {i} not masked"
 
     def test_iron_defense_play_and_build(self):
         """IRON_DEFENSE play and build indices work correctly."""
-        mask_fn = AppManager._make_mask_fn(
+        mask_fn = RnnAiAdapter._make_mask_fn(
             [CardType.BUILD, CardType.IRON_DEFENSE], energy=2,
         )
         masked = mask_fn(torch.zeros(1, self.POLICY_DIM))

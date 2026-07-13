@@ -378,6 +378,19 @@ class _FakePolicyModel(torch.nn.Module):
 
 
 def _force_policy_index(app_manager, index: int):
-    """Monkey-patch app_manager._get_policy_model and _get_value_model."""
-    app_manager._get_policy_model = lambda ai_name: _FakePolicyModel(index)
-    app_manager._get_value_model = lambda ai_name: _FakeValueModel()
+    """Inject a fake adapter into AiRegistry cache for 'rnn_v1.1'."""
+    from src.backend.ai_adapter.ai_registry import AiRegistry
+    from src.backend.ai_adapter.rnn_ai import RnnAiAdapter
+
+    AiRegistry._adapters.clear()
+    adapter = RnnAiAdapter(
+        policy_module="src.backend.ai.rnn_v1.model",
+        policy_class="GRUPolicyModel",
+        policy_weight_path="dummy.pth",
+        value_module="src.backend.ai.rnn_v1.model",
+        value_class="GRUValueModel",
+        value_weight_path="dummy.pth",
+    )
+    adapter._policy_model = _FakePolicyModel(index)
+    adapter._value_model_cache = _FakeValueModel()
+    AiRegistry._adapters["rnn_v1.1"] = adapter
