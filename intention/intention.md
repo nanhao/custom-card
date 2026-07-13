@@ -527,5 +527,8 @@ train.py 增加一个参数： value_epoch。用于指定训练 value 网络的 
 前端 ui 要展示状态的剩余回合数。
 
 # intention_id=39
-- 增加卡牌“打击要害”
-同时，网络的 input 和 output 也要修改，见 intention/input.md 和 intention/output.md。
+这是一个重构任务，把 RoundResult 类单独放一个文件。
+
+# intention_id=109
+模型架构大幅度调整。新的网络架构定义看 intention/new_network.md。
+rnn_v1 和 rnn_v2 废弃了，从 registry 里面移除，其代码不改变，也不用了。

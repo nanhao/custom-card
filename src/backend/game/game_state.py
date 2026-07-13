@@ -13,14 +13,11 @@ since both players' piles are mutually visible.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from src.backend.game.card_type import CardType
 from src.backend.game.player import PlayerHistoryItem
 from src.backend.game.player_state import PlayerStatus
-
-if TYPE_CHECKING:
-    from src.backend.game.game_core import RoundResult
+from src.backend.game.round_result import RoundResult
 
 
 @dataclass
@@ -95,9 +92,6 @@ class GameState:
             dict with nested players and round_log structures,
             matching the existing JSON API schema.
         """
-        # Lazy import to avoid circular dependency with game_core.py.
-        from src.backend.game.game_core import RoundResult  # noqa: F811
-
         def _serialize_player(ps: PlayerState) -> dict:
             """Serialize a single PlayerState to a JSON-safe dict."""
             result: dict = {
