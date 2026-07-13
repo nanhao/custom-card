@@ -36,7 +36,8 @@ class SelfPlayRunner:
     Attributes:
         _sample_action: Callable with signature:
             (state, h_pol, h_val, ai_name, temp, player_key)
-            → (card_type, build_target, new_h_pol, log_prob, value, new_h_val).
+            → (card_type, build_target, dismantle_target,
+               new_h_pol, log_prob, value, new_h_val).
     """
 
     def __init__(self, sample_action_fn):
@@ -45,7 +46,8 @@ class SelfPlayRunner:
         Args:
             sample_action_fn: Callable with signature:
                 (state, h_pol, h_val, ai_name, temp, player_key)
-                → (card_str, new_h_pol, log_prob, value, new_h_val)
+                → (card_type, build_target, dismantle_target,
+                   new_h_pol, log_prob, value, new_h_val)
         """
         self._sample_action = sample_action_fn
 
