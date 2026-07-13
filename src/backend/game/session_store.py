@@ -17,7 +17,8 @@ from pathlib import Path
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_initial_draw_pile
 from src.backend.game.game_core import GameCore, RoundResult, BeforeResolve, AfterResolve, EndActions, AfterEndActions
-from src.backend.game.player import Player, PlayerHistoryItem
+from src.backend.game.player import Player
+from src.backend.game.player_history_item import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.ai.rnn_v1.model import HIDDEN_SIZE
 

@@ -21,7 +21,7 @@ from src.backend.app.converter import Converter
 from src.backend.app.selfplay_runner import SelfPlayRunner
 from src.backend.app.selfplay_config import SelfPlayConfig
 from src.backend.game.card_type import CardType
-from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.player_history_item import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.log.structured_logger import LoggerBuilder
 from tests.helpers import make_game_state

@@ -11,7 +11,7 @@ import pytest
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def
 from src.backend.game.game_core import GameCore
-from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.player_history_item import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.game.resolver import (
     ResolveDetails,

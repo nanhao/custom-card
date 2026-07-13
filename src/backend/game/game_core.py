@@ -18,8 +18,10 @@ import random
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def, get_initial_draw_pile
 from src.backend.game.constants import ROUNDS_PER_CYCLE, CARDS_PER_CYCLE, INITIAL_HP, INITIAL_ENERGY
-from src.backend.game.game_state import GameState, PlayerState
-from src.backend.game.player import Player, PlayerHistoryItem
+from src.backend.game.game_state_snapshot import GameStateSnapshot
+from src.backend.game.player_state_snapshot import PlayerStateSnapshot
+from src.backend.game.player import Player
+from src.backend.game.player_history_item import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from src.backend.game.resolver import CardResolver
 from src.backend.game.resolver.base import ResolveContext, Resolver
@@ -308,11 +310,11 @@ class GameCore:
         self.round_log.append(result)
         return result
 
-    def get_state(self, player_perspective: str | None = None) -> GameState:
+    def get_state(self, player_perspective: str | None = None) -> GameStateSnapshot:
         """Return a read-only typed snapshot of the current game state.
 
-        Per design/19 D2: returns a GameState dataclass instead of a dict.
-        PlayerState fields use typed objects (CardType, PlayerStatus) — no
+        Per design/19 D2: returns a GameStateSnapshot dataclass instead of a dict.
+        PlayerStateSnapshot fields use typed objects (CardType, PlayerStatus) — no
         string or dict representations.
 
         Per design/34 D3: both players' draw_pile and discard_pile are always
@@ -324,13 +326,13 @@ class GameCore:
                                 Always returns full piles for both players.
 
         Returns:
-            GameState dataclass with typed fields.
+            GameStateSnapshot dataclass with typed fields.
         """
 
-        def _build_player_state(p: Player | None) -> PlayerState:
-            """Build a PlayerState snapshot from a Player instance."""
+        def _build_player_state(p: Player | None) -> PlayerStateSnapshot:
+            """Build a PlayerStateSnapshot from a Player instance."""
             if p is None:
-                return PlayerState(
+                return PlayerStateSnapshot(
                     hp=INITIAL_HP, energy=INITIAL_ENERGY, statuses=[], hand=[], history=[],
                 )
             # Deep-copy statuses and hand to prevent mutation of the snapshot.
@@ -340,7 +342,7 @@ class GameCore:
             hand = list(p.hand)
             history = list(p.history)
             # Per design/34: piles always fully visible to both players.
-            return PlayerState(
+            return PlayerStateSnapshot(
                 hp=p.hp, energy=p.energy,
                 statuses=statuses, hand=hand, history=history,
                 draw_pile=list(p.draw_pile),
@@ -349,7 +351,7 @@ class GameCore:
                 discard_pile_count=len(p.discard_pile),
             )
 
-        return GameState(
+        return GameStateSnapshot(
             round=self.round_number,
             cycle=self.cycle_number,
             round_in_cycle=self.round_in_cycle,

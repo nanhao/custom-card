@@ -26,7 +26,7 @@ from src.backend.app.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.app.selfplay_runner import SelfPlayRunner
 from src.backend.game.card_type import CardType
 from src.backend.game.game_core import GameCore
-from src.backend.game.game_state import GameState
+from src.backend.game.game_state_snapshot import GameStateSnapshot
 from src.backend.game.session_store import SessionStore
 
 
@@ -55,13 +55,13 @@ class AppManager:
 
     def create_game(
         self, mode: str, ai_name: str | None = None
-    ) -> tuple[str, GameState]:
-        """Create a new game session and return its ID and typed GameState.
+    ) -> tuple[str, GameStateSnapshot]:
+        """Create a new game session and return its ID and typed GameStateSnapshot.
 
         For PVE mode: validates ai_name, initializes hidden states to zeros (32-d).
         For PVP mode: creates a standard game with no AI metadata.
 
-        Per design/19 D8: ai is not part of GameState — it is injected by
+        Per design/19 D8: ai is not part of GameStateSnapshot — it is injected by
         the controller after to_dict() serialization.
 
         Args:
@@ -69,7 +69,7 @@ class AppManager:
             ai_name: AI name (required if mode=="pve").
 
         Returns:
-            (game_id, GameState) tuple.
+            (game_id, GameStateSnapshot) tuple.
 
         Raises:
             ValueError: If mode invalid or ai_name missing/unknown.
@@ -109,7 +109,7 @@ class AppManager:
     # ------------------------------------------------------------------
 
     def ai_select_action(
-        self, state: GameState, hidden_state: list[float], ai_name: str
+        self, state: GameStateSnapshot, hidden_state: list[float], ai_name: str
     ) -> tuple[CardType | None, CardType | None, CardType | None, list[float]]:
         """Select the AI's card greedily using policy network.
 
@@ -117,7 +117,7 @@ class AppManager:
         build_target/dismantle_target are non-None only when card_type=BUILD.
 
         Args:
-            state: GameState from GameCore.get_state().
+            state: GameStateSnapshot from GameCore.get_state().
             hidden_state: Current policy GRU hidden state (list of 32 floats).
             ai_name: AI name (e.g. "rnn_v2.1").
 
@@ -151,7 +151,7 @@ class AppManager:
 
     def ai_sample_action(
         self,
-        state: GameState,
+        state: GameStateSnapshot,
         hidden_state_policy: list[float],
         hidden_state_value: list[float],
         ai_name: str,

@@ -12,32 +12,11 @@ from dataclasses import dataclass, field
 
 from src.backend.game.card_type import CardType
 from src.backend.game.constants import INITIAL_HP, INITIAL_ENERGY
+from src.backend.game.player_history_item import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus, has_active_status
 
 # Energy cap per design/11 intention §1
 MAX_ENERGY = 5
-
-
-@dataclass
-class PlayerHistoryItem:
-    """Single entry in a player's action history (design/14 D8, design/37).
-
-    Records the card played, the build target (if build mode), and the
-    dismantle target (if dismantle mode) for a single round. Used by
-    GameCore.get_state() to provide complete action history.
-
-    Per design/37: dismantle_target field added for BUILD card's
-    dismantle mode (lower half of 构建/拆解).
-
-    Attributes:
-        card: The card played this round.
-        build_target: The card built via BUILD, or None.
-        dismantle_target: The card dismantled via BUILD, or None.
-    """
-
-    card: CardType | None  # None means pass (design/28)
-    build_target: CardType | None = None
-    dismantle_target: CardType | None = None  # design/37
 
 
 @dataclass

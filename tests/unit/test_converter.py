@@ -9,7 +9,7 @@ import pytest
 from src.backend.ai.rnn_v1.model import INPUT_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.app.converter import Converter
 from src.backend.game.card_type import CardType
-from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.player_history_item import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 from tests.helpers import make_game_state
 

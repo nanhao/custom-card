@@ -8,8 +8,8 @@ import pytest
 
 from src.backend.game.card_type import CardType
 from src.backend.game.game_core import GameCore
-from src.backend.game.game_state import GameState
-from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.game_state_snapshot import GameStateSnapshot
+from src.backend.game.player_history_item import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 
 
@@ -229,14 +229,14 @@ class TestGameEnd:
 
 
 class TestGetState:
-    """TC-GC-10: get_state returns GameState with typed fields."""
+    """TC-GC-10: get_state returns GameStateSnapshot with typed fields."""
 
     def test_get_state_returns_gamestate_not_dict(self):
-        """TC-GC-01: get_state() returns GameState, not dict."""
+        """TC-GC-01: get_state() returns GameStateSnapshot, not dict."""
         gm = GameCore(mode="pvp")
         gm.start_game()
         gs = gm.get_state()
-        assert isinstance(gs, GameState)
+        assert isinstance(gs, GameStateSnapshot)
         assert not isinstance(gs, dict)
 
     def test_get_state_fields(self):

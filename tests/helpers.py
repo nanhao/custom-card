@@ -1,14 +1,15 @@
 """Shared test helpers for unit and integration tests.
 
-Provides factory functions for constructing GameState instances
+Provides factory functions for constructing GameStateSnapshot instances
 and utility functions for reading test output files.
 """
 
 import json
 
 from src.backend.game.card_type import CardType
-from src.backend.game.game_state import GameState, PlayerState
-from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.game_state_snapshot import GameStateSnapshot
+from src.backend.game.player_state_snapshot import PlayerStateSnapshot
+from src.backend.game.player_history_item import PlayerHistoryItem
 
 
 def read_sample_file(path):
@@ -30,9 +31,9 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
                     cycle=1, round_in_cycle=1,
                     draw_pile_1=None, draw_pile_2=None,
                     discard_pile_1=None, discard_pile_2=None):
-    """Build a minimal GameState instance for testing.
+    """Build a minimal GameStateSnapshot instance for testing.
 
-    Per design/19: returns a typed GameState, not a dict.
+    Per design/19: returns a typed GameStateSnapshot, not a dict.
     Hand entries are CardType enum members.
 
     Args:
@@ -49,7 +50,7 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
         discard_pile_1, discard_pile_2: Discard piles (list of CardType). Default None.
 
     Returns:
-        GameState instance matching GameCore.get_state() output format.
+        GameStateSnapshot instance matching GameCore.get_state() output format.
     """
     if hand_1 is None:
         hand_1 = [CardType.ATTACK] * 5
@@ -65,14 +66,14 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
         statuses_2 = []
 
     def _build_player(hp, energy, statuses, hand, history, draw_pile, discard_pile):
-        """Build a PlayerState with draw/discard piles (design/27 D4).
+        """Build a PlayerStateSnapshot with draw/discard piles (design/27 D4).
 
         Per design/27 D4: piles default to empty lists, never None,
         since Converter.build_input_vector requires non-None piles.
         """
         dp = list(draw_pile) if draw_pile is not None else []
         dcp = list(discard_pile) if discard_pile is not None else []
-        return PlayerState(
+        return PlayerStateSnapshot(
             hp=hp, energy=energy,
             statuses=list(statuses),
             hand=list(hand), history=list(history),
@@ -81,7 +82,7 @@ def make_game_state(hand_1=None, hand_2=None, hp_1=20, hp_2=20,
             discard_pile_count=len(dcp),
         )
 
-    return GameState(
+    return GameStateSnapshot(
         round=round_num,
         cycle=cycle,
         round_in_cycle=round_in_cycle,

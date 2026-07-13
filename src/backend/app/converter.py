@@ -28,8 +28,8 @@ All methods are stateless. No PyTorch dependency — pure data transformation.
 from src.backend.ai.constants import INPUT_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.game.card_type import CardType
 from src.backend.game.card_def import get_card_def
-from src.backend.game.game_state import GameState
-from src.backend.game.player import PlayerHistoryItem
+from src.backend.game.game_state_snapshot import GameStateSnapshot
+from src.backend.game.player_history_item import PlayerHistoryItem
 from src.backend.game.player_state import StatusType, PlayerStatus
 
 
@@ -126,16 +126,16 @@ class Converter:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def build_input_vector(state: GameState, player_key: str = "2") -> list[float]:
-        """Build the 62-d input vector from a GameState (design/37).
+    def build_input_vector(state: GameStateSnapshot, player_key: str = "2") -> list[float]:
+        """Build the 62-d input vector from a GameStateSnapshot (design/37).
 
-        Per design/19 D6: accepts GameState directly instead of dict.
+        Per design/19 D6: accepts GameStateSnapshot directly instead of dict.
         Per design/37: 62-d format — own/opponent hand, status lifetimes,
         own/opponent discard/draw pile counts, last actions.
         Input layout per intention/input.md.
 
         Args:
-            state: GameState from GameCore.get_state().
+            state: GameStateSnapshot from GameCore.get_state().
             player_key: Which player's perspective — "1" or "2".
 
         Returns:
