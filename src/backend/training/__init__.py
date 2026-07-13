@@ -12,10 +12,10 @@ Contains:
 
 from src.backend.training.training_manager import TrainingManager
 from src.backend.training.selfplay_runner import SelfPlayRunner
-from src.backend.training.sample_collector import SampleCollector
+from src.backend.training.rnn_v2.sample_collector import SampleCollector
 from src.backend.training.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.training.training_runner import BaseTrainingRunner
 from src.backend.training.training_config import TrainingConfig
-from src.backend.training.sample_loader import SampleLoader
+from src.backend.training.rnn_v2.sample_loader import SampleLoader
 from src.backend.training.training_utils import compute_grad_norm, save_split_training_artifacts
 from src.backend.training.training_factory import TrainingRunnerFactory

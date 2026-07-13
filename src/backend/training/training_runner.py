@@ -18,7 +18,7 @@ import torch.nn as nn
 import torch.nn.utils as nn_utils
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.training.sample_loader import SampleLoader
+from src.backend.training.rnn_v2.sample_loader import SampleLoader
 from src.backend.training.training_config import TrainingConfig
 from src.backend.training.training_utils import (
     compute_grad_norm,

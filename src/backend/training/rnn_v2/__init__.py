@@ -1,0 +1,1 @@
+"""RNN v2 training — v2-specific training runner and sample handling (design/39)."""

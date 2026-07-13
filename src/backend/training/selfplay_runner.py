@@ -15,7 +15,7 @@ written as a single JSON array file.
 import torch
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.training.sample_collector import SampleCollector
+from src.backend.training.rnn_v2.sample_collector import SampleCollector
 from src.backend.training.selfplay_config import SelfPlayConfig, SelfPlayResult
 from src.backend.game.game_core import GameCore
 from src.backend.log.structured_logger import LoggerBuilder

@@ -28,7 +28,7 @@ class TrainingRunnerFactory:
         from src.backend.ai.registry import parse_ai_name
         name, _gen = parse_ai_name(model_name)
         if name == "rnn_v2":
-            from src.backend.ai.rnn_v2.v2_training_runner import V2TrainingRunner
+            from src.backend.training.rnn_v2.v2_training_runner import V2TrainingRunner
             return V2TrainingRunner()
         raise ValueError(
             f"Unknown or deprecated model: {name!r}. "

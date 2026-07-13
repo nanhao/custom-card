@@ -20,7 +20,7 @@ from src.backend.ai.rnn_v2.model import (
     POLICY_OUTPUT_SIZE,
 )
 from src.backend.training.training_config import TrainingConfig
-from src.backend.ai.rnn_v2.v2_training_runner import V2TrainingRunner
+from src.backend.training.rnn_v2.v2_training_runner import V2TrainingRunner
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +411,7 @@ class TestV2TrainingSmoke:
     def test_v2_training_completes_and_outputs_weights(self, tmp_path):
         """V2 three-phase training with fresh weights produces loadable output."""
         from src.backend.ai.rnn_v2.model import GRUPolicyModelV2, GRUValueModelV2
-        from src.backend.ai.rnn_v2.v2_training_runner import V2TrainingRunner
+        from src.backend.training.rnn_v2.v2_training_runner import V2TrainingRunner
 
         # -- Create fresh v2 weight files in gen1 dir --
         gen_dir = tmp_path / "rnn_v2" / "gen1"

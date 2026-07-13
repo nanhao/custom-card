@@ -19,7 +19,7 @@ import pytest
 from src.backend.ai.rnn_v2.constants import HIDDEN_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.ai_adapter.converter import Converter
 from src.backend.training.selfplay_runner import SelfPlayRunner
-from src.backend.training.sample_collector import SampleCollector
+from src.backend.training.rnn_v2.sample_collector import SampleCollector
 from src.backend.training.selfplay_config import SelfPlayConfig
 from src.backend.game.card_type import CardType
 from src.backend.game.player_history_item import PlayerHistoryItem

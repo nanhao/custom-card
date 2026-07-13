@@ -14,8 +14,8 @@ import pytest
 import torch
 
 from src.backend.ai.rnn_v2.model import INPUT_SIZE, POLICY_OUTPUT_SIZE
-from src.backend.ai.rnn_v2.v2_training_runner import V2TrainingRunner
-from src.backend.training.sample_loader import SampleLoader
+from src.backend.training.rnn_v2.v2_training_runner import V2TrainingRunner
+from src.backend.training.rnn_v2.sample_loader import SampleLoader
 from src.backend.training.training_config import TrainingConfig
 from src.backend.training.training_runner import BaseTrainingRunner
 
