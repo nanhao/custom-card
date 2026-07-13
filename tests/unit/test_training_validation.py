@@ -13,10 +13,11 @@ import tempfile
 import pytest
 import torch
 
-from src.backend.ai.rnn_v1.model import INPUT_SIZE, POLICY_OUTPUT_SIZE
-from src.backend.ai.rnn_v1.v1_training_runner import V1TrainingRunner
-from src.backend.ai.sample_loader import SampleLoader
-from src.backend.ai.training_config import TrainingConfig
+from src.backend.ai.rnn_v2.model import INPUT_SIZE, POLICY_OUTPUT_SIZE
+from src.backend.ai.rnn_v2.v2_training_runner import V2TrainingRunner
+from src.backend.training.sample_loader import SampleLoader
+from src.backend.training.training_config import TrainingConfig
+from src.backend.training.training_runner import BaseTrainingRunner
 
 
 # ---------------------------------------------------------------------------
@@ -65,8 +66,8 @@ def _make_minimal_sample(num_games: int = 1, steps_per_game: int = 3) -> list[di
 
 @pytest.fixture
 def runner():
-    """Create a fresh V1TrainingRunner instance."""
-    return V1TrainingRunner()
+    """Create a fresh V2TrainingRunner instance."""
+    return V2TrainingRunner()
 
 
 @pytest.fixture
@@ -146,7 +147,7 @@ class TestSplitTrainVal:
     def test_normal_split_half(self):
         """TC-SPLIT-01: 6 games x 2 perspectives, split=0.5."""
         perspectives = self._make_perspectives([2, 2, 2, 2, 2, 2])
-        train, val = V1TrainingRunner._split_train_val(perspectives, 0.5)
+        train, val = BaseTrainingRunner._split_train_val(perspectives, 0.5)
         assert len(train) + len(val) == 12
         assert 2 <= len(val) <= 10  # at least 1 game, at most 5 games
         assert len(train) >= 2  # at least 1 game in train
@@ -158,21 +159,21 @@ class TestSplitTrainVal:
     def test_split_zero_returns_empty_val(self):
         """TC-SPLIT-02: split=0 -> val empty, train has all."""
         perspectives = self._make_perspectives([2, 2, 2])
-        train, val = V1TrainingRunner._split_train_val(perspectives, 0.0)
+        train, val = BaseTrainingRunner._split_train_val(perspectives, 0.0)
         assert len(val) == 0
         assert len(train) == 6
 
     def test_single_game_keeps_train(self):
         """TC-SPLIT-03: only 1 game -> train has all, val empty."""
         perspectives = self._make_perspectives([3])
-        train, val = V1TrainingRunner._split_train_val(perspectives, 0.2)
+        train, val = BaseTrainingRunner._split_train_val(perspectives, 0.2)
         assert len(train) == 3
         assert len(val) == 0
 
     def test_same_game_perspectives_not_split(self):
         """TC-SPLIT-04: same game perspectives all go to same set."""
         perspectives = self._make_perspectives([3, 2])
-        train, val = V1TrainingRunner._split_train_val(perspectives, 0.5)
+        train, val = BaseTrainingRunner._split_train_val(perspectives, 0.5)
         train_gids = {p["game_id"] for p in train}
         val_gids = {p["game_id"] for p in val}
         assert len(train_gids & val_gids) == 0
@@ -190,7 +191,7 @@ class TestComputeValLoss:
     def test_val_loss_is_finite(self, runner, tmp_path):
         """TC-VAL-01: val_loss on valid perspectives returns finite float."""
         torch.manual_seed(123)
-        _, value_model, device = runner._build_models("rnn_v1.1")
+        _, value_model, device = runner._build_models("rnn_v2.1")
         dummy_sample = tmp_path / "dummy.json"
         dummy_sample.write_text(json.dumps([]), encoding="utf-8")
         output_dir = tmp_path / "output"
@@ -198,7 +199,7 @@ class TestComputeValLoss:
         config = TrainingConfig(
             sample_path=str(dummy_sample),
             output_dir=str(output_dir),
-            model="rnn_v1.1",
+            model="rnn_v2.1",
             policy_epoch=1,
             value_epoch=1,
             policy_lr=0.001,
@@ -226,7 +227,7 @@ class TestComputeValLoss:
     def test_val_loss_empty_returns_nan(self, runner, tmp_path):
         """TC-VAL-02: empty val set -> returns NaN."""
         torch.manual_seed(123)
-        _, value_model, device = runner._build_models("rnn_v1.1")
+        _, value_model, device = runner._build_models("rnn_v2.1")
         dummy_sample = tmp_path / "dummy.json"
         dummy_sample.write_text(json.dumps([]), encoding="utf-8")
         output_dir = tmp_path / "output"
@@ -234,7 +235,7 @@ class TestComputeValLoss:
         config = TrainingConfig(
             sample_path=str(dummy_sample),
             output_dir=str(output_dir),
-            model="rnn_v1.1",
+            model="rnn_v2.1",
             policy_epoch=1,
             value_epoch=1,
             policy_lr=0.001,
@@ -254,7 +255,7 @@ class TestComputeValLoss:
     def test_val_loss_all_none_returns_nan(self, runner, tmp_path):
         """TC-VAL-03: all perspectives return None loss -> returns NaN."""
         torch.manual_seed(123)
-        _, value_model, device = runner._build_models("rnn_v1.1")
+        _, value_model, device = runner._build_models("rnn_v2.1")
         dummy_sample = tmp_path / "dummy.json"
         dummy_sample.write_text(json.dumps([]), encoding="utf-8")
         output_dir = tmp_path / "output"
@@ -262,7 +263,7 @@ class TestComputeValLoss:
         config = TrainingConfig(
             sample_path=str(dummy_sample),
             output_dir=str(output_dir),
-            model="rnn_v1.1",
+            model="rnn_v2.1",
             policy_epoch=1,
             value_epoch=1,
             policy_lr=0.001,
@@ -309,7 +310,7 @@ class TestValidationIntegration:
         config = TrainingConfig(
             sample_path=str(sample_path),
             output_dir=str(output_dir),
-            model="rnn_v1.1",
+            model="rnn_v2.1",
             policy_epoch=1,
             value_epoch=2,
             policy_lr=0.001,
@@ -327,7 +328,7 @@ class TestValidationIntegration:
 
         random.seed(42)
         torch.manual_seed(42)
-        runner = V1TrainingRunner()
+        runner = V2TrainingRunner()
         runner.run(config)
 
         captured = capsys.readouterr().out
@@ -344,7 +345,7 @@ class TestValidationIntegration:
         config = TrainingConfig(
             sample_path=sample_file,
             output_dir=output_dir,
-            model="rnn_v1.1",
+            model="rnn_v2.1",
             policy_epoch=1,
             value_epoch=1,
             policy_lr=0.001,
@@ -362,7 +363,7 @@ class TestValidationIntegration:
 
         random.seed(42)
         torch.manual_seed(42)
-        runner = V1TrainingRunner()
+        runner = V2TrainingRunner()
         runner.run(config)
 
         captured = capsys.readouterr().out
@@ -380,7 +381,7 @@ class TestValidationIntegration:
         config = TrainingConfig(
             sample_path=str(sample_path),
             output_dir=str(output_dir),
-            model="rnn_v1.1",
+            model="rnn_v2.1",
             policy_epoch=1,
             value_epoch=1,
             policy_lr=0.001,
@@ -398,7 +399,7 @@ class TestValidationIntegration:
 
         random.seed(42)
         torch.manual_seed(42)
-        runner = V1TrainingRunner()
+        runner = V2TrainingRunner()
         runner.run(config)
 
         loss_csv = os.path.join(os.getcwd(), "loss", "loss.csv")

@@ -1,7 +1,6 @@
-"""V1 training runner — GRU bypass forward strategy for rnn_v1 models (design/31 D7).
+"""[DEPRECATED] V1 training runner — GRU bypass for rnn_v1 models (design/31 D7).
 
-Uses direct GRU internal access (model.gru + model.fc_*) for efficient
-full-sequence forward passes during training.
+rnn_v1 is deprecated. This class is kept for reference only.
 """
 
 import torch
@@ -13,12 +12,12 @@ from src.backend.ai.rnn_v1.model import (
     HIDDEN_SIZE,
     INPUT_SIZE,
 )
-from src.backend.ai.training_config import TrainingConfig
-from src.backend.ai.training_runner import BaseTrainingRunner
+from src.backend.training.training_config import TrainingConfig
+from src.backend.training.training_runner import BaseTrainingRunner
 
 
 class V1TrainingRunner(BaseTrainingRunner):
-    """Three-phase split PPO training with v1 GRU bypass forward strategy.
+    """[DEPRECATED] Three-phase split PPO training with v1 GRU bypass.
 
     Inherits all shared logic from BaseTrainingRunner.
     Overrides only the three phase methods that differ in forward strategy.

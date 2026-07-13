@@ -9,7 +9,7 @@ import tempfile
 
 import pytest
 
-from src.backend.ai.training_config import TrainingConfig
+from src.backend.training.training_config import TrainingConfig
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ def _base_kwargs(sample_path: str, output_dir: str, **overrides) -> dict:
     kwargs = {
         "sample_path": sample_path,
         "output_dir": output_dir,
-        "model": "rnn_v1.1",
+        "model": "rnn_v2.1",
         "policy_epoch": 1,
         "value_epoch": 1,
         "policy_lr": 0.001,
@@ -141,7 +141,7 @@ class TestTrainingConfigEpochValidation:
                 TrainingConfig(
                     sample_path=sample,
                     output_dir=td,
-                    model="rnn_v1.1",
+                    model="rnn_v2.1",
                     epoch=10,  # type: ignore[call-arg]
                     policy_epoch=1,  # type: ignore[call-arg]
                     value_epoch=1,  # type: ignore[call-arg]

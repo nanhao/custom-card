@@ -1,9 +1,8 @@
-"""Base PPO training runner — shared logic for v1/v2 (design/31 D7).
+"""Base PPO training runner — shared logic for v2+ (design/31 D7).
 
 Phase 1: value training, Phase 2: advantage re-computation, Phase 3: policy training.
 
 Subclasses:
-    V1TrainingRunner: rnn_v1/v1_training_runner.py (GRU bypass)
     V2TrainingRunner: rnn_v2/v2_training_runner.py (skip-connection forward)
 """
 
@@ -19,9 +18,9 @@ import torch.nn as nn
 import torch.nn.utils as nn_utils
 
 from src.backend.ai.registry import get_ai_info
-from src.backend.ai.sample_loader import SampleLoader
-from src.backend.ai.training_config import TrainingConfig
-from src.backend.ai.training_utils import (
+from src.backend.training.sample_loader import SampleLoader
+from src.backend.training.training_config import TrainingConfig
+from src.backend.training.training_utils import (
     compute_grad_norm,
     save_split_training_artifacts,
 )

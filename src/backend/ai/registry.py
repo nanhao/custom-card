@@ -35,18 +35,6 @@ _AI_BASE_PATH: str = os.path.join(_PROJECT_ROOT, "src", "backend", "ai")
 
 _REGISTRY: list[dict] = [
     {
-        "name": "rnn_v1",
-        "description": "gru hidden-state=32, level=2",
-        "policy": {
-            "module": "src.backend.ai.rnn_v1.model",
-            "class": "GRUPolicyModel",
-        },
-        "value": {
-            "module": "src.backend.ai.rnn_v1.model",
-            "class": "GRUValueModel",
-        },
-    },
-    {
         "name": "rnn_v2",
         "description": "gru skip-connection 74->64->32 head, level=3",
         "policy": {

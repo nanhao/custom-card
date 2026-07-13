@@ -85,8 +85,8 @@ class TestBuildGameSampleDismantle:
             rounds_played=1,
             p1_reward=1.0,
             p2_reward=-1.0,
-            ai1="rnn_v1.1",
-            ai2="rnn_v1.1",
+            ai1="rnn_v2.1",
+            ai2="rnn_v2.1",
             perspective="both",
         )
 
@@ -122,8 +122,8 @@ class TestBuildGameSampleDismantle:
             rounds_played=1,
             p1_reward=1.0,
             p2_reward=-1.0,
-            ai1="rnn_v1.1",
-            ai2="rnn_v1.1",
+            ai1="rnn_v2.1",
+            ai2="rnn_v2.1",
             perspective="ai1",
         )
 
@@ -169,8 +169,8 @@ class TestBuildGameSampleDismantle:
             rounds_played=3,
             p1_reward=1.0,
             p2_reward=-1.0,
-            ai1="rnn_v1.1",
-            ai2="rnn_v1.1",
+            ai1="rnn_v2.1",
+            ai2="rnn_v2.1",
             perspective="both",
         )
 
@@ -210,8 +210,8 @@ class TestBuildGameSampleDismantle:
             rounds_played=1,
             p1_reward=0.0,
             p2_reward=0.0,
-            ai1="rnn_v1.1",
-            ai2="rnn_v1.1",
+            ai1="rnn_v2.1",
+            ai2="rnn_v2.1",
             perspective="both",
         )
 
@@ -309,7 +309,7 @@ class TestSelfPlayDismantleEndToEnd:
             with tempfile.TemporaryDirectory() as td:
                 sample_path = os.path.join(td, "sample.json")
                 config = SelfPlayConfig(
-                    ai1="rnn_v1.1", ai2="rnn_v1.1",
+                    ai1="rnn_v2.1", ai2="rnn_v2.1",
                     game_count=1, sample_output=sample_path,
                     temperature=0.0, temp_side="both", perspective="both",
                 )
@@ -353,7 +353,7 @@ class TestSelfPlayDismantleEndToEnd:
             with tempfile.TemporaryDirectory() as td:
                 sample_path = os.path.join(td, "sample.json")
                 config = SelfPlayConfig(
-                    ai1="rnn_v1.1", ai2="rnn_v1.1",
+                    ai1="rnn_v2.1", ai2="rnn_v2.1",
                     game_count=1, sample_output=sample_path,
                     temperature=0.0, temp_side="both", perspective="both",
                 )
@@ -411,7 +411,7 @@ class TestSelfPlayDismantleEndToEnd:
             with tempfile.TemporaryDirectory() as td:
                 sample_path = os.path.join(td, "sample.json")
                 config = SelfPlayConfig(
-                    ai1="rnn_v1.1", ai2="rnn_v1.1",
+                    ai1="rnn_v2.1", ai2="rnn_v2.1",
                     game_count=3, sample_output=sample_path,
                     temperature=0.0, temp_side="both", perspective="both",
                 )
@@ -439,8 +439,8 @@ class TestSelfPlayDismantleEndToEnd:
         sample_path = tmp_path / "sample.json"
 
         config = SelfPlayConfig(
-            ai1="rnn_v1.1",
-            ai2="rnn_v1.1",
+            ai1="rnn_v2.1",
+            ai2="rnn_v2.1",
             game_count=0,
             sample_output=str(sample_path),
             temperature=0.0,
@@ -503,8 +503,8 @@ class TestSelfPlayPlayRoundDismantle:
             with tempfile.TemporaryDirectory() as td:
                 sample_path = os.path.join(td, "sample.json")
                 config = SelfPlayConfig(
-                    ai1="rnn_v1.1",
-                    ai2="rnn_v1.1",
+                    ai1="rnn_v2.1",
+                    ai2="rnn_v2.1",
                     game_count=1,
                     sample_output=sample_path,
                     temperature=0.0,
@@ -561,8 +561,8 @@ class TestSelfPlayPlayRoundDismantle:
             with tempfile.TemporaryDirectory() as td:
                 sample_path = os.path.join(td, "sample.json")
                 config = SelfPlayConfig(
-                    ai1="rnn_v1.1",
-                    ai2="rnn_v1.1",
+                    ai1="rnn_v2.1",
+                    ai2="rnn_v2.1",
                     game_count=1,
                     sample_output=sample_path,
                     temperature=0.0,
@@ -623,8 +623,8 @@ class TestSelfPlayPlayRoundDismantle:
             with tempfile.TemporaryDirectory() as td:
                 sample_path = os.path.join(td, "sample.json")
                 config = SelfPlayConfig(
-                    ai1="rnn_v1.1",
-                    ai2="rnn_v1.1",
+                    ai1="rnn_v2.1",
+                    ai2="rnn_v2.1",
                     game_count=1,
                     sample_output=sample_path,
                     temperature=0.0,

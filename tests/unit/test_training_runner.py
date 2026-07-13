@@ -12,15 +12,15 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from src.backend.ai.rnn_v1.model import (
-    GRUPolicyModel,
-    GRUValueModel,
+from src.backend.ai.rnn_v2.model import (
+    GRUPolicyModelV2,
+    GRUValueModelV2,
     HIDDEN_SIZE,
     INPUT_SIZE,
     POLICY_OUTPUT_SIZE,
 )
-from src.backend.ai.training_config import TrainingConfig
-from src.backend.ai.rnn_v1.v1_training_runner import V1TrainingRunner
+from src.backend.training.training_config import TrainingConfig
+from src.backend.ai.rnn_v2.v2_training_runner import V2TrainingRunner
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ def training_config(sample_file, output_dir):
     return TrainingConfig(
         sample_path=sample_file,
         output_dir=output_dir,
-        model="rnn_v1.1",
+        model="rnn_v2.1",
         policy_epoch=1,
         value_epoch=1,
         policy_lr=0.001,
@@ -103,8 +103,8 @@ def training_config(sample_file, output_dir):
 
 @pytest.fixture
 def runner():
-    """Create a fresh V1TrainingRunner instance."""
-    return V1TrainingRunner()
+    """Create a fresh V2TrainingRunner instance."""
+    return V2TrainingRunner()
 
 
 # ---------------------------------------------------------------------------
@@ -135,10 +135,10 @@ class TestValueTrainingCorrectness:
         torch.manual_seed(42)
 
         # Capture initial weights
-        policy = GRUPolicyModel()
+        policy = GRUPolicyModelV2()
         initial_value_state = {
             k: v.clone()
-            for k, v in GRUValueModel().state_dict().items()
+            for k, v in GRUValueModelV2().state_dict().items()
         }
 
         runner.run(training_config)
@@ -183,8 +183,8 @@ class TestFullTrainingOutput:
         random.seed(42)
         torch.manual_seed(42)
         runner.run(training_config)
-        policy = GRUPolicyModel()
-        value = GRUValueModel()
+        policy = GRUPolicyModelV2()
+        value = GRUValueModelV2()
         policy.load_state_dict(
             torch.load(
                 os.path.join(training_config.output_dir, "policy.pth"),
@@ -205,79 +205,6 @@ class TestFullTrainingOutput:
         val, _ = value(x, h_val)
         assert probs.shape == (1, POLICY_OUTPUT_SIZE)
         assert val.shape == (1, 1)
-
-
-# ---------------------------------------------------------------------------
-# TC-SB: Numerical equivalence — full sequence vs step-by-step GRU
-# ---------------------------------------------------------------------------
-
-
-class TestGRUSequenceEquivalence:
-    """Verify that full-sequence GRU output matches step-by-step GRU output.
-
-    This is the core correctness guarantee of the sequence batching optimization:
-    feeding (T, 1, 42) through one GRU call produces the same final hidden state
-    and outputs as iterating T times with (1, 1, 42).
-    """
-
-    def test_value_gru_sequence_equals_stepwise(self):
-        """GRUValueModel full-sequence output matches step-by-step output."""
-        torch.manual_seed(123)
-        model = GRUValueModel()
-        model.eval()
-
-        T = 5
-        x_seq = torch.randn(T, 1, INPUT_SIZE)
-
-        # Step-by-step
-        h_step = torch.zeros(1, 1, HIDDEN_SIZE)
-        step_vals = []
-        for t in range(T):
-            x_t = x_seq[t:t + 1]  # (1, 1, 42)
-            val, h_step = model(x_t, h_step)
-            step_vals.append(val.item())
-
-        # Full sequence — direct GRU + fc_value (as in training_runner)
-        h_seq = torch.zeros(1, 1, HIDDEN_SIZE)
-        with torch.no_grad():
-            gru_out, _ = model.gru(x_seq, h_seq)  # (T, 1, 32)
-            seq_vals = model.fc_value(gru_out.squeeze(1)).squeeze()  # (T,)
-
-        for t in range(T):
-            assert abs(step_vals[t] - seq_vals[t].item()) < 1e-5, (
-                f"Step {t}: step={step_vals[t]:.6f}, seq={seq_vals[t].item():.6f}"
-            )
-
-    def test_policy_gru_sequence_equals_stepwise(self):
-        """GRUPolicyModel full-sequence output matches step-by-step output."""
-        torch.manual_seed(123)
-        model = GRUPolicyModel()
-        model.eval()
-
-        T = 5
-        x_seq = torch.randn(T, 1, INPUT_SIZE)
-
-        # Step-by-step
-        h_step = torch.zeros(1, 1, HIDDEN_SIZE)
-        step_log_probs = []
-        for t in range(T):
-            x_t = x_seq[t:t + 1]  # (1, 1, 42)
-            probs, log_probs, h_step = model(x_t, h_step, mask_fn=None, temperature=1.0)
-            step_log_probs.append(log_probs)
-
-        # Full sequence — direct GRU + fc_policy (as in training_runner)
-        h_seq = torch.zeros(1, 1, HIDDEN_SIZE)
-        with torch.no_grad():
-            gru_out, _ = model.gru(x_seq, h_seq)  # (T, 1, 32)
-            policy_logits = model.fc_policy(gru_out.squeeze(1))  # (T, 14)
-            seq_log_probs = torch.log_softmax(policy_logits, dim=-1)  # (T, 14)
-
-        for t in range(T):
-            diff = (seq_log_probs[t] - step_log_probs[t].squeeze(0)).abs().max().item()
-            assert diff < 1e-5, (
-                f"Step {t}: max log_prob diff={diff:.6f}"
-            )
-
 
 # ---------------------------------------------------------------------------
 # TC-LP: Load progress output
@@ -325,7 +252,7 @@ class TestEpochLoopCount:
         config = TrainingConfig(
             sample_path=sample_file,
             output_dir=output_dir,
-            model="rnn_v1.1",
+            model="rnn_v2.1",
             policy_epoch=1,
             value_epoch=3,
             policy_lr=0.001,
@@ -355,7 +282,7 @@ class TestEpochLoopCount:
         config = TrainingConfig(
             sample_path=sample_file,
             output_dir=output_dir,
-            model="rnn_v1.1",
+            model="rnn_v2.1",
             policy_epoch=3,
             value_epoch=1,
             policy_lr=0.001,
@@ -385,7 +312,7 @@ class TestEpochLoopCount:
         config = TrainingConfig(
             sample_path=sample_file,
             output_dir=output_dir,
-            model="rnn_v1.1",
+            model="rnn_v2.1",
             policy_epoch=5,
             value_epoch=3,
             policy_lr=0.001,
@@ -427,7 +354,7 @@ class TestTrainingErrorHandling:
                 TrainingConfig(
                     sample_path=os.path.join(td, "nonexistent.json"),
                     output_dir=td,
-                    model="rnn_v1.1",
+                    model="rnn_v2.1",
                     policy_epoch=1,
                     value_epoch=1,
                     policy_lr=0.001,
@@ -452,7 +379,7 @@ class TestTrainingErrorHandling:
                 TrainingConfig(
                     sample_path=sample_path,
                     output_dir=td,
-                    model="rnn_v1.1",
+                    model="rnn_v2.1",
                     policy_epoch=0,
                     value_epoch=1,
                     policy_lr=0.001,

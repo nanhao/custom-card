@@ -170,19 +170,19 @@ class TestAiRegistry:
 
     def test_returns_ai_interface_instance(self):
         """get_ai_interface returns an AiInterface instance."""
-        adapter = AiRegistry.get_ai_interface("rnn_v1.1")
+        adapter = AiRegistry.get_ai_interface("rnn_v2.1")
         assert isinstance(adapter, AiInterface)
 
     def test_caches_same_instance_for_same_name(self):
         """Same ai_name returns the exact same cached instance."""
-        a1 = AiRegistry.get_ai_interface("rnn_v1.1")
-        a2 = AiRegistry.get_ai_interface("rnn_v1.1")
+        a1 = AiRegistry.get_ai_interface("rnn_v2.1")
+        a2 = AiRegistry.get_ai_interface("rnn_v2.1")
         assert a1 is a2
 
     def test_different_names_return_different_instances(self):
         """Different ai_names return different instances."""
-        a1 = AiRegistry.get_ai_interface("rnn_v1.1")
-        a2 = AiRegistry.get_ai_interface("rnn_v2.1")
+        a1 = AiRegistry.get_ai_interface("rnn_v2.1")
+        a2 = AiRegistry.get_ai_interface("rnn_v2.2")
         assert a1 is not a2
 
     def test_unknown_name_raises_value_error(self):

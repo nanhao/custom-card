@@ -14,8 +14,8 @@ from src.backend.ai.rnn_v2.model import (
     HIDDEN_SIZE,
     INPUT_SIZE,
 )
-from src.backend.ai.training_config import TrainingConfig
-from src.backend.ai.training_runner import BaseTrainingRunner
+from src.backend.training.training_config import TrainingConfig
+from src.backend.training.training_runner import BaseTrainingRunner
 
 
 class V2TrainingRunner(BaseTrainingRunner):
@@ -36,7 +36,7 @@ class V2TrainingRunner(BaseTrainingRunner):
         )  # (T, 74)
         h1 = torch.relu(value_model.fc1(combined))   # (T, 64)
         h2 = torch.relu(value_model.fc2(h1))          # (T, 32)
-        return value_model.fc_value(h2).squeeze()     # (T,)
+        return value_model.fc_value(h2).squeeze(-1)   # (T,)
 
     @staticmethod
     def _forward_policy_sequence(
