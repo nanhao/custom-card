@@ -177,8 +177,7 @@ body {
 
 /* ---- Hand Area ---- */
 .hand-area {
-  width: 100%;
-  max-width: 700px;
+  width: 700px;
   background: var(--panel);
   border-radius: 10px;
   padding: 16px;
@@ -195,12 +194,12 @@ body {
   display: flex;
   gap: 10px;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 /* ---- Card Button ---- */
 .card-btn {
-  width: 80px;
+  width: 72px;
   height: 110px;
   border-radius: 10px;
   border: 2px solid transparent;
@@ -516,6 +515,44 @@ body {
 .log-entry {
   font-size: 0.8rem;
   padding: 3px 0;
+  border-bottom: 1px solid #2a2a4a;
+}
+.log-entry:last-child {
+  border-bottom: none;
+}
+
+/* ---- Log toggle ---- */
+.log-toggle {
+  text-align: center;
+  margin: 8px 0;
+}
+.log-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.log-modal {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 700px;
+  width: 90%;
+  max-height: 70vh;
+  overflow-y: auto;
+  border: 2px solid var(--gold);
+}
+.log-modal h3 {
+  font-size: 1rem;
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+.log-modal .log-entry {
+  font-size: 0.85rem;
+  padding: 4px 0;
   border-bottom: 1px solid #2a2a4a;
 }
 .log-entry:last-child {

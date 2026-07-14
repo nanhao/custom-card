@@ -186,17 +186,13 @@ export default function GameBoard({
         return (
           <>
             <div className="card-grid">
-              {cardOrder.map(card => {
-                const cnt = countInHand(pH.hand, card);
-                return (
-                  <button key={card} className={`card-btn card-${card}`}
-                    disabled={cnt === 0} onClick={() => onSelectCard(card)}>
-                    <span className="icon">{CARD_ICONS[card]}</span>
-                    <span>{CARD_NAMES[card]}</span>
-                    <span className="count">×{cnt}</span>
-                  </button>
-                );
-              })}
+              {pH.hand.map((card, i) => (
+                <button key={`${card}-${i}`} className={`card-btn card-${card}`}
+                  onClick={() => onSelectCard(card)}>
+                  <span className="icon">{CARD_ICONS[card]}</span>
+                  <span>{CARD_NAMES[card]}</span>
+                </button>
+              ))}
             </div>
             <div className="pass-row" style={{ textAlign: 'center', marginTop: 8 }}>
               <button className="btn btn-secondary" onClick={onPass}>
@@ -249,17 +245,13 @@ export default function GameBoard({
               🎮 Player 2's Hand ({pO.hand.length} cards)
             </div>
             <div className="card-grid">
-              {cardOrder.map(card => {
-                const cnt = countInHand(pO.hand, card);
-                return (
-                  <button key={card} className={`card-btn card-${card}`}
-                    disabled={cnt === 0} onClick={() => onPlayer2Card(card)}>
-                    <span className="icon">{CARD_ICONS[card]}</span>
-                    <span>{CARD_NAMES[card]}</span>
-                    <span className="count">×{cnt}</span>
-                  </button>
-                );
-              })}
+              {pO.hand.map((card, i) => (
+                <button key={`${card}-${i}`} className={`card-btn card-${card}`}
+                  onClick={() => onPlayer2Card(card)}>
+                  <span className="icon">{CARD_ICONS[card]}</span>
+                  <span>{CARD_NAMES[card]}</span>
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -269,16 +261,12 @@ export default function GameBoard({
               {oppLabel} ({pO.hand.length} cards)
             </div>
             <div className="card-grid">
-              {cardOrder.map(card => {
-                const cnt = countInHand(pO.hand, card);
-                return (
-                  <div key={card} className={`card-btn card-${card}`} style={{ opacity: 0.7, cursor: 'default' }}>
-                    <span className="icon">{CARD_ICONS[card]}</span>
-                    <span>{CARD_NAMES[card]}</span>
-                    <span className="count">×{cnt}</span>
-                  </div>
-                );
-              })}
+              {pO.hand.map((card, i) => (
+                <div key={`${card}-${i}`} className={`card-btn card-${card}`} style={{ opacity: 0.7, cursor: 'default' }}>
+                  <span className="icon">{CARD_ICONS[card]}</span>
+                  <span>{CARD_NAMES[card]}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -320,7 +308,7 @@ export default function GameBoard({
       );
     }
 
-    // Round result / game over.
+    // Round result / game over — floating overlay.
     if (phase === 'reveal' || phase === 'gameover') {
       const rr = roundLog[roundLog.length - 1];
       if (!rr) return null;
@@ -332,7 +320,6 @@ export default function GameBoard({
 
       const p2Label = mode === 'pve' ? 'AI' : 'P2';
 
-      // Render card result: show card icon or pass indicator
       const renderCardResult = (card, label) => {
         if (!card || card.length === 0) {
           return (
@@ -351,7 +338,6 @@ export default function GameBoard({
         );
       };
 
-      // Cycle ended indicator
       const cycleBleedNote = rr.end_actions.cycle_ended ? (
         <div className="cycle-bleed" style={{ marginTop: 8 }}>
           ⚠️ Cycle {rr.cycle} ended — both players lose 1 HP. New cycle started.
@@ -359,36 +345,38 @@ export default function GameBoard({
       ) : null;
 
       return (
-        <div className="result-panel">
-          <div className="result-title">
-            ⚡ Round {rr.round} — Cycle {rr.cycle}, Round {rr.round_in_cycle}/3
-          </div>
-          <div className="result-cards">
-            {renderCardResult(rr.cards_1, 'P1')}
-            <div className="result-vs">VS</div>
-            {renderCardResult(rr.cards_2, p2Label)}
-          </div>
-          <div className="result-details">{details}</div>
-          {cycleBleedNote}
-          <div className="res-hp">
-            After: P1 <strong>{rr.after_resolve.hp_1} HP</strong>⚡{rr.after_resolve.energy_1}{' '}
-            | {p2Label} <strong>{rr.after_resolve.hp_2} HP</strong>\u26A1{rr.after_resolve.energy_2}
-          </div>
-          <div className="btn-row" style={{ marginTop: 12 }}>
-            {(phase === 'reveal' && !(state && state.is_over)) ? (
-              <button className="btn btn-primary btn-big" onClick={onNextRound}>
-                ▶ Next Round
-              </button>
-            ) : (
-              <>
-                <button className="btn btn-primary btn-big" onClick={onNewGame}>
-                  🔄 New Game
+        <div className="log-overlay">
+          <div className="log-modal">
+            <div className="result-title">
+              ⚡ Round {rr.round} — Cycle {rr.cycle}, Round {rr.round_in_cycle}/3
+            </div>
+            <div className="result-cards">
+              {renderCardResult(rr.cards_1, 'P1')}
+              <div className="result-vs">VS</div>
+              {renderCardResult(rr.cards_2, p2Label)}
+            </div>
+            <div className="result-details">{details}</div>
+            {cycleBleedNote}
+            <div className="res-hp">
+              After: P1 <strong>{rr.after_resolve.hp_1} HP</strong>⚡{rr.after_resolve.energy_1}{' '}
+              | {p2Label} <strong>{rr.after_resolve.hp_2} HP</strong>\u26A1{rr.after_resolve.energy_2}
+            </div>
+            <div className="btn-row" style={{ marginTop: 12 }}>
+              {(phase === 'reveal' && !(state && state.is_over)) ? (
+                <button className="btn btn-primary btn-big" onClick={onNextRound}>
+                  ▶ Next Round
                 </button>
-                <button className="btn btn-secondary btn-big" onClick={onBackToMenu}>
-                  🏠 Menu
-                </button>
-              </>
-            )}
+              ) : (
+                <>
+                  <button className="btn btn-primary btn-big" onClick={onNewGame}>
+                    🔄 New Game
+                  </button>
+                  <button className="btn btn-secondary btn-big" onClick={onBackToMenu}>
+                    🏠 Menu
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -528,9 +516,9 @@ export default function GameBoard({
             <div className="build-grid">
               {cardOrder.map(card => {
                 const cnt = countInHand(state.players['1'].discard_pile || [], card);
+                if (cnt === 0) return null;
                 return (
                   <button key={card} className={`build-card card-${card}`}
-                    disabled={cnt === 0}
                     onClick={() => onSelectDismantleTarget?.(pendingBuild, card)}>
                     <span className="build-icon">{CARD_ICONS[card]}</span>
                     <span>{CARD_NAMES[card]}</span>
