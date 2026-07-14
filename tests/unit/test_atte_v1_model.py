@@ -39,9 +39,6 @@ class TestModelHelpers:
         opp_last_action: int = 6,
         opp_status_ids: list[int] | None = None,
         opp_status_durations: list[int] | None = None,
-        opp_opp_hand_ids: list[int] | None = None,
-        opp_opp_discard_ids: list[int] | None = None,
-        opp_opp_draw_ids: list[int] | None = None,
         own_hp: float = 1.0,
         own_energy: float = 1.0,
         opp_hp: float = 1.0,
@@ -84,9 +81,6 @@ class TestModelHelpers:
             "opp_status_durations": torch.tensor(
                 [opp_status_durations or []], dtype=torch.float32,
             ),
-            "opp_opp_hand_ids": _tensor(opp_opp_hand_ids or []),
-            "opp_opp_discard_ids": _tensor(opp_opp_discard_ids or []),
-            "opp_opp_draw_ids": _tensor(opp_opp_draw_ids or []),
             "own_hp": _scalar(own_hp),
             "own_energy": _scalar(own_energy),
             "opp_hp": _scalar(opp_hp),
@@ -208,9 +202,6 @@ class TestAtteV1PolicyModel:
             opp_draw_ids=[],
             opp_status_ids=[],
             opp_status_durations=[],
-            opp_opp_hand_ids=[],
-            opp_opp_discard_ids=[],
-            opp_opp_draw_ids=[],
         )
         probs, log_probs, new_hidden = model(**inputs)
         assert probs.shape == (1, 24)

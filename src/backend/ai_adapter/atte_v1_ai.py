@@ -307,9 +307,6 @@ def _build_model_kwargs(
         "opp_status_durations": torch.tensor(
             [atte_input.opp.status_durations], dtype=torch.float32,
         ),
-        "opp_opp_hand_ids": _tensor(atte_input.opp.opp_hand_ids),
-        "opp_opp_discard_ids": _tensor(atte_input.opp.opp_discard_ids),
-        "opp_opp_draw_ids": _tensor(atte_input.opp.opp_draw_ids),
         "own_hp": _scalar(atte_input.own.hp),
         "own_energy": _scalar(atte_input.own.energy),
         "opp_hp": _scalar(atte_input.opp.hp),

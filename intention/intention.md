@@ -529,6 +529,5 @@ train.py 增加一个参数： value_epoch。用于指定训练 value 网络的 
 # intention_id=39
 进行了大规模的代码重构，并废弃了 rnn_v1，为后面改变网络结构准备
 
-# intention_id=109
-模型架构大幅度调整。新的网络架构定义看 intention/new_network.md。
-rnn_v1 和 rnn_v2 废弃了，从 registry 里面移除，其代码不改变，也不用了。
+# intention_id=40
+新增 atte_v1 模型，新的网络结构见 intention/new_network.md
