@@ -1,0 +1,79 @@
+@startuml atte_v1_forward_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title atte_v1 Forward Pass Flow
+
+participant "AtteV1Input" as Input
+participant "Embedding\ne1,e2,e3" as Emb
+participant "Ordinal\nEncoding" as Ordinal
+participant "Deck\nAdvantage" as Deck
+participant "State\nFeatures" as StateF
+participant "GRU\n(hidden)" as GRU
+participant "Hand\nAdvantage" as Hand
+participant "Feature\nConcat" as Concat
+participant "Policy\nHead" as PHead
+participant "Value\nHead" as VHead
+
+== Step 1: Embeddings ==
+Input -> Emb: card action IDs → e1
+Emb --> Emb: action IDs → emb1 (32-d)
+Input -> Emb: status IDs → e2
+Emb --> Emb: status IDs → S1, S2 (8-d each)
+Input -> Emb: last actions → e1
+Emb --> Emb: last_action → emb1 (32-d)
+
+== Step 2: Ordinal Encoding ==
+Emb -> Ordinal: emb1 vectors (hand/discard/draw)
+Ordinal -> Ordinal: compute ordinal\n(occurrence count in [hand+discard+draw])
+Ordinal -> Ordinal: ordinal → e3 → ordinal_emb (2-d)
+Ordinal -> Ordinal: concat(emb1, ordinal_emb) → LayerNorm\n→ emb2 (34-d)
+
+== Step 3: Deck Advantage ==
+Ordinal -> Deck: own deck emb2 sequence
+Ordinal -> Deck: opp deck emb2 sequence
+Deck -> Deck: Q1 attn over own deck → Z1 (34-d)
+Deck -> Deck: Q1 attn over opp deck → Z2 (34-d)
+Deck -> Deck: Q2 attn over [Z1, Z2] → Z3 (34-d)
+
+== Step 4: State Features ==
+Emb -> StateF: status embeddings S1, S2
+Input -> StateF: status durations
+StateF -> StateF: duration → FC(1->32->16)\nw=[0:8], b=[8:16]
+StateF -> StateF: S1' = S1 * w + b\nS2' = S2 * w + b
+StateF -> StateF: sum pool S1' → SS1 (8-d)\nsum pool S2' → SS2 (8-d)
+
+== Step 5: GRU ==
+StateF -> GRU: SS1, SS2
+Emb -> GRU: last_action_emb (both sides)
+GRU -> GRU: input = [last_action_embs, SS1, SS2]\n+ h_{t-1}
+GRU -> GRU: GRU(1 layer, 32) → h_out (32-d)
+
+== Step 6: Hand Advantage ==
+GRU -> Hand: h_out → Linear+LayerNorm → h_out' (34-d)
+Ordinal -> Hand: own hand emb2 sequence
+Hand -> Hand: concat(h_out', own_hand_emb2) → hh1
+Hand -> Hand: self-attn + LayerNorm over hh1 → HZ1
+Ordinal -> Hand: opp hand emb2 sequence
+Hand -> Hand: concat(h_out', opp_hand_emb2) → hh2
+Hand -> Hand: self-attn + LayerNorm over hh2 → HZ2
+Hand -> Hand: cross-attn: HZ1 queries HZ2\n→ updated HZ1 (combo + counter)
+Hand -> Hand: Q3 attn over HZ1 → HAZ (34-d)
+
+== Step 7: Feature Concat ==
+Deck -> Concat: Z3 (34-d)
+Hand -> Concat: HAZ (34-d)
+GRU -> Concat: h_out (32-d)
+Input -> Concat: HPx2, energyx2, round_in_cycle
+Emb -> Concat: last_action_emb x2
+Concat -> Concat: concat all → FC+ReLU → out (64-d)
+
+== Step 8: Heads ==
+Concat -> PHead: out (64-d)
+PHead -> PHead: FC(64->32) → ReLU\n→ FC(32->24)\n(shares weight with e1)
+
+Concat -> VHead: out (64-d)
+VHead -> VHead: FC(64->32) → ReLU\n→ FC(32->1)
+VHead --> VHead: value (scalar, no tanh)
+
+@enduml

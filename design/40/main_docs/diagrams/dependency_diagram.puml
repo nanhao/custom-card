@@ -1,0 +1,98 @@
+@startuml atte_v1_dependency
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title atte_v1 — Module Dependency Diagram
+
+' ====== Layers ======
+package "Game Layer\n(src/backend/game/)" as Game #C8E6C9 {
+    [GameStateSnapshot] as GSS
+    [CardType] as CT
+    [StatusType] as ST
+    [PlayerStatus] as PS
+    [PlayerHistoryItem] as PHI
+}
+
+package "AI Adapter Layer\n(src/backend/ai_adapter/)" as Adapter #BBDEFB {
+    [AtteV1Converter\n<<new>>] as A1C
+    [AtteV1Adapter\n<<new>>\nimplements AiInterface] as A1A
+    [AiInterface\n(existing)] as AIF
+    [AiRegistry\n(modified)] as AiReg
+    [Converter\n(existing, unchanged)] as Conv
+    [RnnAiAdapter\n(existing, unchanged)] as RnnA
+}
+
+package "AI Layer\n(src/backend/ai/)" as AI #FFF3E0 {
+    [atte_v1/model.py\nAtteV1PolicyModel\nAtteV1ValueModel\n<<new>>] as A1M
+    [atte_v1/constants.py\n<<new>>] as A1Const
+    [registry.py\n(modified)] as Reg
+    [rnn_v2/model.py\n(existing, unchanged)] as R2M
+}
+
+package "Training Layer\n(src/backend/training/)" as Training #F3E5F5 {
+    [atte_v1/\natte_v1_training_runner.py\n<<new>>] as A1TR
+    [atte_v1/\nsample_collector.py\n<<new>>] as A1SC
+    [training_runner.py\nBaseTrainingRunner\n(existing)] as BTR
+    [training_config.py\n(existing)] as TC
+    [training_factory.py\n(modified)] as TF
+    [rnn_v2/\nv2_training_runner.py\n(existing, unchanged)] as V2TR
+}
+
+package "App Layer\n(src/backend/app/)" as App #FFCDD2 {
+    [app_manager.py\n(existing, modified)] as AppMgr
+    [selfplay_runner.py\n(modified)] as SPR
+}
+
+' ====== Dependencies ======
+' New components
+A1C ..> GSS : reads
+A1C ..> CT : uses
+A1C ..> ST : uses
+A1C ..> PS : uses
+A1C ..> PHI : uses
+A1A ..|> AIF : implements
+A1A --> A1M : uses
+A1A ..> A1C : uses
+AiReg ..> A1A : creates (atte_v1)
+AiReg ..> RnnA : creates (rnn_v2)
+A1M --> A1Const : imports
+A1TR --|> BTR : extends
+A1TR --> A1M : trains
+A1TR --> TC : uses
+A1SC --> A1A : uses
+A1SC ..> A1C : uses
+TF ..> A1TR : creates (atte_v1)
+TF ..> V2TR : creates (rnn_v2)
+
+' Existing (unchanged)
+Conv ..> GSS
+Conv ..> CT
+RnnA ..|> AIF
+RnnA --> R2M
+V2TR --|> BTR
+V2TR --> R2M
+
+' Shared
+Reg --> A1M : registers
+Reg --> R2M : registers
+AppMgr ..> AiReg : uses
+SPR --> A1SC : uses (atte_v1)
+
+note bottom of Reg
+  _REGISTRY: rnn_v2 + atte_v1
+  weight_path: list[str] for atte_v1
+end note
+
+note bottom of AiReg
+  AiRegistry routes by name prefix:
+  "atte_v1" -> AtteV1Adapter(8 params)
+  else -> RnnAiAdapter(6 params)
+end note
+
+note bottom of TF
+  TrainingRunnerFactory routes:
+  "rnn_v2" -> V2TrainingRunner
+  "atte_v1" -> AtteV1TrainingRunner
+end note
+
+@enduml

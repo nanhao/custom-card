@@ -46,6 +46,18 @@ _REGISTRY: list[dict] = [
             "class": "GRUValueModelV2",
         },
     },
+    {
+        "name": "atte_v1",
+        "description": "attention-based + GRU, embedding+ordinal+card-advantage (design/40)",
+        "policy": {
+            "module": "src.backend.ai.atte_v1.model",
+            "class": "AtteV1PolicyModel",
+        },
+        "value": {
+            "module": "src.backend.ai.atte_v1.model",
+            "class": "AtteV1ValueModel",
+        },
+    },
 ]
 
 
@@ -184,6 +196,25 @@ def get_ai_info(ai_name: str) -> dict:
     # Look up architecture in registry
     for entry in _REGISTRY:
         if entry["name"] == arch_name:
+            # atte_v1 uses 4 weight files (e1e2 + main) per network
+            if arch_name == "atte_v1":
+                policy_e1e2 = _derive_weight_path(arch_name, gen, "policy_e1_e2")
+                policy_main = _derive_weight_path(arch_name, gen, "policy")
+                value_e1e2 = _derive_weight_path(arch_name, gen, "value_e1_e2")
+                value_main = _derive_weight_path(arch_name, gen, "value")
+                return {
+                    "name": entry["name"],
+                    "description": entry["description"],
+                    "policy": {
+                        **entry["policy"],
+                        "weight_path": [policy_e1e2, policy_main],
+                    },
+                    "value": {
+                        **entry["value"],
+                        "weight_path": [value_e1e2, value_main],
+                    },
+                }
+            # Standard format: single weight file per network
             policy_path = _derive_weight_path(arch_name, gen, "policy")
             value_path = _derive_weight_path(arch_name, gen, "value")
             return {

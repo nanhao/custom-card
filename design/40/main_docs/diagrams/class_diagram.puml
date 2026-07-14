@@ -1,0 +1,124 @@
+@startuml atte_v1_class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title atte_v1 — Class Diagram
+
+' ====== Dataclasses ======
+class AtteV1PlayerInput <<dataclass>> {
+  hand_ids: list[int]
+  discard_ids: list[int]
+  draw_ids: list[int]
+  last_action: int
+  hp: float
+  energy: float
+  status_ids: list[int]
+  status_durations: list[int]
+  opp_discard_ids: list[int]
+  opp_draw_ids: list[int]
+}
+
+class AtteV1Input <<dataclass>> {
+  own: AtteV1PlayerInput
+  opp: AtteV1PlayerInput
+  round_in_cycle: int
+}
+
+class AtteV1SampleStep <<dataclass>> {
+  input: AtteV1Input
+  action: int
+  log_prob: float
+  reward: float
+  value: float
+}
+
+class AtteV1Perspective <<dataclass>> {
+  game_id: str
+  player_key: str
+  model_name: str
+  steps: list[AtteV1SampleStep]
+}
+
+' ====== Converter ======
+class AtteV1Converter <<new>> {
+  {static} build_input(state, player_key): AtteV1Input
+  {static} card_to_action_id(CardType): int
+  {static} status_to_id(StatusType): int
+  {static} action_to_policy_index(card, build_target, dismantle_target): int
+  {static} policy_index_to_action(int): tuple
+  {static} build_cost(CardType): int
+}
+
+' ====== Models ======
+class AtteV1PolicyModel <<new,nn.Module>> {
+  INITIAL_HIDDEN_STATE: list[float]
+  --
+  forward(own_hand_ids,..., opp_opp_draw_ids,
+    own_hp, own_energy, opp_hp, opp_energy,
+    round_in_cycle, hidden,
+    mask_fn, temperature): (probs, log_probs, new_hidden)
+}
+
+class AtteV1ValueModel <<new,nn.Module>> {
+  INITIAL_HIDDEN_STATE: list[float]
+  --
+  forward(own_hand_ids,..., opp_opp_draw_ids,
+    own_hp, own_energy, opp_hp, opp_energy,
+    round_in_cycle, hidden): (value, new_hidden)
+}
+
+' ====== Adapter ======
+interface AiInterface <<existing>> {
+  {abstract} ai_select_action(state, hidden_state): tuple
+  {abstract} ai_sample_action(state, h_pol, h_val, temp, player_key): tuple
+}
+
+class AtteV1Adapter <<new>> {
+  ai_select_action(state, hidden_state): (card, build, dismantle, new_hidden)
+  ai_sample_action(state, h_pol, h_val, temp, player_key): (card, build, dismantle, new_h_pol, log_prob, value, new_h_val)
+}
+
+' ====== Training ======
+abstract class BaseTrainingRunner {
+  run(config)
+  _build_models(model_name): tuple
+  _load_samples(sample_path): list
+  {abstract} _process_value_perspective(...): Tensor|None
+  {abstract} _recompute_advantages(...)
+  {abstract} _process_policy_perspective(...): tuple|None
+  _compute_gae(values, rewards, gamma, gae_lambda): tuple
+}
+
+class AtteV1TrainingRunner <<new>> {
+  _load_samples(sample_path): list
+  _process_value_perspective(...): Tensor|None
+  _recompute_advantages(...)
+  _process_policy_perspective(...): tuple|None
+}
+
+class TrainingRunnerFactory <<modified>> {
+  {static} create(model_name): BaseTrainingRunner
+}
+
+' ====== Registry ======
+class AiRegistry <<modified>> {
+  {static} get_ai_interface(ai_name): AiInterface
+}
+
+' ====== Relationships ======
+AtteV1Input *-- AtteV1PlayerInput
+AtteV1SampleStep *-- AtteV1Input
+AtteV1Perspective *-- AtteV1SampleStep
+AtteV1Converter ..> AtteV1Input : creates
+AtteV1Converter ..> GameStateSnapshot : reads
+AiInterface <|.. AtteV1Adapter
+AtteV1Adapter --> AtteV1PolicyModel : uses
+AtteV1Adapter --> AtteV1ValueModel : uses
+AtteV1Adapter ..> AtteV1Converter : uses
+AiRegistry ..> AtteV1Adapter : creates
+AtteV1TrainingRunner --|> BaseTrainingRunner
+AtteV1TrainingRunner --> AtteV1PolicyModel : trains
+AtteV1TrainingRunner --> AtteV1ValueModel : trains
+TrainingRunnerFactory ..> AtteV1TrainingRunner : creates
+
+@enduml

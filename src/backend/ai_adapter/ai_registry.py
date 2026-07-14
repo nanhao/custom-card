@@ -1,11 +1,11 @@
 """AI adapter registry — factory for AiInterface instances.
 
 Resolves AI identifiers to pre-configured AiInterface instances
-backed by RNN-based policy models. Reuses the existing ai.registry
-module for architecture lookup and weight path derivation.
+backed by RNN-based or attention-based policy models. Reuses the
+existing ai.registry module for architecture lookup and weight path derivation.
 """
 
-from src.backend.ai.registry import get_ai_info
+from src.backend.ai.registry import get_ai_info, parse_ai_name
 from src.backend.ai_adapter.ai_interface import AiInterface
 from src.backend.ai_adapter.rnn_ai import RnnAiAdapter
 
@@ -24,9 +24,8 @@ class AiRegistry:
     def get_ai_interface(ai_name: str) -> AiInterface:
         """Return a cached AiInterface for the given AI name.
 
-        On first call for a given ai_name, constructs an RnnAiAdapter
-        with policy model metadata from the registry and caches it.
-        Subsequent calls return the same cached instance.
+        On first call for a given ai_name, constructs the appropriate
+        adapter (AtteV1Adapter or RnnAiAdapter) and caches it.
 
         Args:
             ai_name: AI identifier in name.gen format (e.g. "rnn_v1.3").
@@ -38,15 +37,31 @@ class AiRegistry:
             ValueError: If ai_name is unknown or format is invalid.
         """
         if ai_name not in AiRegistry._adapters:
+            name, _gen = parse_ai_name(ai_name)
             info = get_ai_info(ai_name)
             policy_info = info["policy"]
             value_info = info["value"]
-            AiRegistry._adapters[ai_name] = RnnAiAdapter(
-                policy_module=policy_info["module"],
-                policy_class=policy_info["class"],
-                policy_weight_path=policy_info["weight_path"],
-                value_module=value_info["module"],
-                value_class=value_info["class"],
-                value_weight_path=value_info["weight_path"],
-            )
+            if name == "atte_v1":
+                from src.backend.ai_adapter.atte_v1_ai import AtteV1Adapter
+                policy_paths = policy_info["weight_path"]
+                value_paths = value_info["weight_path"]
+                AiRegistry._adapters[ai_name] = AtteV1Adapter(
+                    policy_module=policy_info["module"],
+                    policy_class=policy_info["class"],
+                    policy_e1e2_weight_path=policy_paths[0],
+                    policy_weight_path=policy_paths[1],
+                    value_module=value_info["module"],
+                    value_class=value_info["class"],
+                    value_e1e2_weight_path=value_paths[0],
+                    value_weight_path=value_paths[1],
+                )
+            else:
+                AiRegistry._adapters[ai_name] = RnnAiAdapter(
+                    policy_module=policy_info["module"],
+                    policy_class=policy_info["class"],
+                    policy_weight_path=policy_info["weight_path"],
+                    value_module=value_info["module"],
+                    value_class=value_info["class"],
+                    value_weight_path=value_info["weight_path"],
+                )
         return AiRegistry._adapters[ai_name]

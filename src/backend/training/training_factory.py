@@ -30,7 +30,10 @@ class TrainingRunnerFactory:
         if name == "rnn_v2":
             from src.backend.training.rnn_v2.v2_training_runner import V2TrainingRunner
             return V2TrainingRunner()
+        if name == "atte_v1":
+            from src.backend.training.atte_v1.atte_v1_training_runner import AtteV1TrainingRunner
+            return AtteV1TrainingRunner()
         raise ValueError(
             f"Unknown or deprecated model: {name!r}. "
-            f"Only rnn_v2 is supported."
+            f"Supported: rnn_v2, atte_v1."
         )

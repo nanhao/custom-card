@@ -1,0 +1,81 @@
+@startuml atte_v1_architecture
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam componentStyle rectangle
+
+title atte_v1 Architecture — Attention + GRU
+
+package "Input Layer" as InputLayer #F5F5F5 {
+    rectangle "**Own Card Sequences**\nhand_ids[], discard_ids[], draw_ids[]\n(variable length)" as OwnCards
+    rectangle "**Opp Card Sequences**\nhand_ids[], discard_ids[], draw_ids[]\n(variable length)" as OppCards
+    rectangle "**Scalars**\nHP_own, HP_opp\nenergy_own, energy_opp\nround_in_cycle(-1/0/1)" as Scalars
+    rectangle "**Status**\nown: status_ids[] + durations[]\nopp: status_ids[] + durations[]" as Status
+    rectangle "**Last Actions**\nown_last, opp_last\n(-1 if first round)" as LastActions
+}
+
+package "Embedding Layer" as EmbLayer #E3F2FD {
+    rectangle "**e1: Action Embedding**\nvocab=25 (24 action + 1 PAD)\ndim=32" as E1
+    rectangle "**e2: Status Embedding**\nvocab=3, dim=8\n(DEFENSE/GUARD/FRAGILE)" as E2
+    rectangle "**e3: Ordinal Embedding**\nvocab=20, dim=2\n(occurrence count)" as E3
+    rectangle "**LayerNorm + Concat**\nemb1(32) + ordinal(2)\n= emb2(34)" as LNConcat
+}
+
+package "Attention Blocks" as AttnLayer #FFF3E0 {
+    rectangle "**Deck Advantage**\nQ1: attn over own/opp deck\nQ2: attn over Z1,Z2\noutput: Z3 (34)" as DeckAttn
+    rectangle "**Hand Advantage**\nh_out'(34) + hand emb2\nself-attn -> HZ1,HZ2\ncross-attn HZ1<->HZ2\nQ3 attn -> HAZ (34)" as HandAttn
+}
+
+package "State Features" as StateLayer #E8F5E9 {
+    rectangle "**Duration FC**\nLinear(1->32->16)\nw=[0:8], b=[8:16]" as DurFC
+    rectangle "**S' = S * w + b**\n(per-status element-wise)\nSum Pool\n-> SS1, SS2 (8)" as StatusTransform
+}
+
+package "GRU Cell" as GRULayer #FCE4EC {
+    rectangle "**GRU (1 layer, 32)**\ninput: [last_action_embs,\nSS1, SS2]\n+ h_{t-1}\noutput: h_out (32)" as GRUCell
+}
+
+rectangle "**Feature Concat**\nHPx2, energyx2, round\nlast_action_embsx2\nHAZ(34), Z3(34), h_out(32)\n-> FC+ReLU -> out(64)" as FeatureConcat #EDE7F6
+
+package "Policy Head" as PolicyHead #C8E6C9 {
+    rectangle "FC(64->32)\n+ ReLU\n+ FC(32->24)\n**shares weight with e1**" as PHead
+    rectangle "probs(24)\nlog_probs(24)" as POut
+}
+
+package "Value Head" as ValueHead #FFCDD2 {
+    rectangle "FC(64->32)\n+ ReLU\n+ FC(32->1)\n**no tanh**" as VHead
+    rectangle "value(1)" as VOut
+}
+
+OwnCards --> E1
+OppCards --> E1
+LastActions --> E1
+Status --> E2
+E1 --> LNConcat
+E3 --> LNConcat
+LNConcat --> DeckAttn
+LNConcat --> HandAttn
+Status --> DurFC
+DurFC --> StatusTransform
+E2 --> StatusTransform
+StatusTransform --> GRUCell
+E1 --> GRUCell : last_action_emb
+GRUCell --> HandAttn : h_out -> h_out'
+DeckAttn --> FeatureConcat : Z3
+HandAttn --> FeatureConcat : HAZ
+GRUCell --> FeatureConcat : h_out
+Scalars --> FeatureConcat
+E1 --> FeatureConcat : last_action_emb
+FeatureConcat --> PHead
+FeatureConcat --> VHead
+PHead --> POut
+VHead --> VOut
+
+note bottom of E1
+  Policy Head FC(32->24)
+  shares weight matrix
+  with e1 embedding (25,32)
+  first 24 rows transposed
+  (PAD row 25 excluded)
+end note
+
+@enduml
