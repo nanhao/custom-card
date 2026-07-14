@@ -44,22 +44,22 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         )
 
         v_target = torch.tensor(value_targets, dtype=torch.float32, device=device)
-        v_new: list[float] = []
+        v_new_list: list[torch.Tensor] = []
         h = torch.tensor(
             [0.0] * HIDDEN_SIZE, dtype=torch.float32, device=device,
         ).view(1, 1, HIDDEN_SIZE)
 
-        with torch.inference_mode():
-            for s in steps:
-                inp = s.get("input")
-                if inp is None:
-                    v_new.append(0.0)
-                    continue
-                kwargs = self._build_value_kwargs(inp, h)
-                value, h = value_model(**kwargs)
-                v_new.append(float(value.item()))
+        for s in steps:
+            inp = s.get("input")
+            if inp is None:
+                v_new_list.append(torch.tensor(0.0, device=device))
+                continue
+            kwargs = self._build_value_kwargs(inp, h)
+            kwargs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in kwargs.items()}
+            value, h = value_model(**kwargs)
+            v_new_list.append(value.squeeze())
 
-        v_new_t = torch.tensor(v_new, dtype=torch.float32, device=device)
+        v_new_t = torch.stack(v_new_list)
         value_loss = config.value_coef * nn.functional.mse_loss(v_new_t, v_target)
         if torch.isnan(value_loss):
             return None
@@ -89,6 +89,7 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
                         new_values.append(0.0)
                         continue
                     kwargs = self._build_value_kwargs(inp, h)
+                    kwargs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in kwargs.items()}
                     value, h = value_model(**kwargs)
                     new_values.append(float(value.item()))
                 advantages, value_targets = self._compute_gae(
@@ -114,7 +115,7 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         old_log_probs = [s.get("log_prob", 0.0) for s in steps]
         actions = [s.get("action", 0) for s in steps]
 
-        new_logs: list[float] = []
+        new_logs: list[torch.Tensor] = []
         h = torch.tensor(
             [0.0] * HIDDEN_SIZE, dtype=torch.float32, device=device,
         ).view(1, 1, HIDDEN_SIZE)
@@ -122,14 +123,15 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         for s in steps:
             inp = s.get("input")
             if inp is None:
-                new_logs.append(-1e9)
+                new_logs.append(torch.tensor(-1e9, device=device))
                 continue
             kwargs = self._build_policy_kwargs(inp, h)
+            kwargs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in kwargs.items()}
             _probs, log_probs_all, h = policy_model(**kwargs)
             action_idx = s.get("action", 0)
-            new_logs.append(float(log_probs_all[0, action_idx].item()))
+            new_logs.append(log_probs_all[0, action_idx])
 
-        new_log_t = torch.tensor(new_logs, dtype=torch.float32, device=device)
+        new_log_t = torch.stack(new_logs)
         old_log_t = torch.tensor(old_log_probs, dtype=torch.float32, device=device)
         adv_t = torch.tensor(advantages, dtype=torch.float32, device=device)
 
@@ -146,12 +148,46 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
 
     @staticmethod
     def _build_value_kwargs(inp, hidden: torch.Tensor) -> dict:
-        """Build kwargs for value model forward from AtteV1Input."""
+        """Build kwargs for value model forward from AtteV1Input or dict."""
         from src.backend.ai_adapter.atte_v1_ai import _build_model_kwargs
-        from src.backend.ai_adapter.atte_v1_converter import AtteV1Input
+        from src.backend.ai_adapter.atte_v1_converter import AtteV1Input, AtteV1PlayerInput
         if isinstance(inp, dict):
-            # Reconstruct from dict
-            pass
+            own_d = inp["own"]
+            opp_d = inp["opp"]
+            inp = AtteV1Input(
+                own=AtteV1PlayerInput(
+                    hand_ids=own_d["hand_ids"],
+                    discard_ids=own_d["discard_ids"],
+                    draw_ids=own_d["draw_ids"],
+                    last_action=own_d["last_action"],
+                    hp=own_d["hp"],
+                    energy=own_d["energy"],
+                    status_ids=own_d["status_ids"],
+                    status_durations=own_d["status_durations"],
+                    opp_hand_ids=own_d["opp_hand_ids"],
+                    opp_discard_ids=own_d["opp_discard_ids"],
+                    opp_draw_ids=own_d["opp_draw_ids"],
+                ),
+                opp=AtteV1PlayerInput(
+                    hand_ids=opp_d["hand_ids"],
+                    discard_ids=opp_d["discard_ids"],
+                    draw_ids=opp_d["draw_ids"],
+                    last_action=opp_d["last_action"],
+                    hp=opp_d["hp"],
+                    energy=opp_d["energy"],
+                    status_ids=opp_d["status_ids"],
+                    status_durations=opp_d["status_durations"],
+                    opp_hand_ids=opp_d["opp_hand_ids"],
+                    opp_discard_ids=opp_d["opp_discard_ids"],
+                    opp_draw_ids=opp_d["opp_draw_ids"],
+                ),
+                round_in_cycle=inp["round_in_cycle"],
+            )
+        elif isinstance(inp, list):
+            raise RuntimeError(
+                "Sample input is old flat-list format. "
+                "Delete old samples and regenerate with the updated self-play."
+            )
         return _build_model_kwargs(inp, hidden.squeeze(1).squeeze(0).tolist())
 
     @staticmethod

@@ -145,23 +145,27 @@ class BaseTrainingRunner(abc.ABC):
         """Resolve registry entry, instantiate both networks, move to device."""
         info = get_ai_info(model_name)
 
+        def _load_weights(model: nn.Module, weight_path):
+            """Load weights from single path or list of paths (atte_v1)."""
+            if isinstance(weight_path, list):
+                state = {}
+                for path in weight_path:
+                    state.update(torch.load(path, map_location="cpu", weights_only=True))
+            else:
+                state = torch.load(weight_path, map_location="cpu", weights_only=True)
+            model.load_state_dict(state, strict=False)
+
         policy_info = info["policy"]
         policy_module = importlib.import_module(policy_info["module"])
         policy_class = getattr(policy_module, policy_info["class"])
         policy_model = policy_class()
-        policy_state = torch.load(
-            policy_info["weight_path"], map_location="cpu", weights_only=True
-        )
-        policy_model.load_state_dict(policy_state)
+        _load_weights(policy_model, policy_info["weight_path"])
 
         value_info = info["value"]
         value_module = importlib.import_module(value_info["module"])
         value_class = getattr(value_module, value_info["class"])
         value_model = value_class()
-        value_state = torch.load(
-            value_info["weight_path"], map_location="cpu", weights_only=True
-        )
-        value_model.load_state_dict(value_state)
+        _load_weights(value_model, value_info["weight_path"])
 
         if torch.cuda.is_available():
             device = torch.device("cuda")

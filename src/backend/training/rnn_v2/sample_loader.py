@@ -114,7 +114,7 @@ class SampleLoader:
         for s_idx, step in enumerate(perspective.get("steps", [])):
             SampleLoader._validate_step(step, s_idx, p_idx, game_id, file_path)
             validated.append({
-                "input": list(step["input"]),
+                "input": dict(step["input"]) if isinstance(step["input"], dict) else list(step["input"]),
                 "action": step["action"],
                 "reward": float(step["reward"]),
                 "value": float(step["value"]),
@@ -165,11 +165,12 @@ class SampleLoader:
                 f"in {file_path!r}: action must be int in [0, {POLICY_OUTPUT_SIZE - 1}], "
                 f"got {action!r}"
             )
-        # Input dimension
-        if len(step["input"]) != INPUT_SIZE:
-            raise RuntimeError(
-                f"Step {s_idx} in perspective {p_idx} "
-                f"of game {game_id} "
-                f"in {file_path!r}: input has {len(step['input'])} elements, "
-                f"expected {INPUT_SIZE}"
-            )
+        # Input dimension — skip for atte_v1 dict format
+        if not isinstance(step["input"], dict):
+            if len(step["input"]) != INPUT_SIZE:
+                raise RuntimeError(
+                    f"Step {s_idx} in perspective {p_idx} "
+                    f"of game {game_id} "
+                    f"in {file_path!r}: input has {len(step['input'])} elements, "
+                    f"expected {INPUT_SIZE}"
+                )

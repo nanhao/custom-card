@@ -56,6 +56,7 @@ class SampleCollector:
         self._ai2 = ai2
         self._all_games: list[dict] = []
         self._step_buffer: list[dict] = []
+        self._use_atte_v1 = ai1.startswith("atte_v1") or ai2.startswith("atte_v1")
 
     # ------------------------------------------------------------------
     # Public properties
@@ -106,8 +107,15 @@ class SampleCollector:
             lp2: Log probability of player 2's action (None if greedy).
         """
         # Per design/27 D4: use perspective-specific states for input vectors.
-        state_vec_p1 = Converter.build_input_vector(pre_state_p1, player_key="1")
-        state_vec_p2 = Converter.build_input_vector(pre_state_p2, player_key="2")
+        if self._use_atte_v1:
+            from src.backend.ai_adapter.atte_v1_converter import AtteV1Converter
+            inp1 = AtteV1Converter.build_input(pre_state_p1, "1")
+            inp2 = AtteV1Converter.build_input(pre_state_p2, "2")
+            state_vec_p1 = _atte_v1_input_to_dict(inp1)
+            state_vec_p2 = _atte_v1_input_to_dict(inp2)
+        else:
+            state_vec_p1 = Converter.build_input_vector(pre_state_p1, player_key="1")
+            state_vec_p2 = Converter.build_input_vector(pre_state_p2, player_key="2")
 
         if self._perspective in ("ai1", "both"):
             p1_action_idx = Converter.action_to_policy_index(card1, bt1, dt1)
@@ -316,3 +324,31 @@ class SampleCollector:
             "rounds": rounds_played,
             "perspectives": perspectives,
         }
+
+
+# ---------------------------------------------------------------------------
+# Helper: serialize AtteV1Input to JSON-compatible dict
+# ---------------------------------------------------------------------------
+
+
+def _atte_v1_input_to_dict(inp) -> dict:
+    """Convert an AtteV1Input object to a JSON-serializable dict."""
+    def _player_to_dict(p):
+        return {
+            "hand_ids": list(p.hand_ids),
+            "discard_ids": list(p.discard_ids),
+            "draw_ids": list(p.draw_ids),
+            "last_action": p.last_action,
+            "hp": p.hp,
+            "energy": p.energy,
+            "status_ids": list(p.status_ids),
+            "status_durations": list(p.status_durations),
+            "opp_hand_ids": list(p.opp_hand_ids),
+            "opp_discard_ids": list(p.opp_discard_ids),
+            "opp_draw_ids": list(p.opp_draw_ids),
+        }
+    return {
+        "own": _player_to_dict(inp.own),
+        "opp": _player_to_dict(inp.opp),
+        "round_in_cycle": inp.round_in_cycle,
+    }
