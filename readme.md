@@ -55,6 +55,7 @@ src/backend/scripts/     Entry points
   run.py                 Start Flask server (python src/backend/scripts/run.py)
   selfplay.py            AI self-play (python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1)
   train.py               PPO training (python src/backend/scripts/train.py --sample-path ... --output-dir ... --model rnn_v1.1 --policy-epoch 10)
+  iteration_train.py     Iterative PPO pipeline — self-play → train → validate → repeat (see Iterative PPO Training below)
 
 src/frontend/            React SPA (Vite + React 19)
   src/api.js             REST API client
@@ -173,6 +174,50 @@ python src/backend/scripts/train.py ^
 
 python src/backend/scripts/train.py --sample-path samples/v1 --output-dir src/backend/ai/rnn_v1/gen2 --model rnn_v1.1 --policy-epoch 100
 ```
+
+### Iterative PPO Training
+
+Automated pipeline that iteratively trains AI generations: each iteration runs
+self-play/cross-play to generate samples, trains a new generation, then validates
+against historical generations. Continues advancing until validation fails.
+
+```bash
+# Start iterative training from gen1 with atte_v1
+python src/backend/scripts/iteration_train.py --ai atte_v1 --start-gen 1 --sample-dir samples/ --game 2000 --policy-epoch 5 --value-epoch 10
+
+# With different epoch counts
+python src/backend/scripts/iteration_train.py --ai rnn_v2 --start-gen 1 --sample-dir data/samples/ --game 1000 --policy-epoch 10 --value-epoch 10
+```
+
+**Pipeline Workflow (per iteration):**
+
+| Step | Description |
+|------|-------------|
+| ① Self-Play | gen vs gen, `--game` games, perspective=both → `{sample_dir}/{ai}/{gen}/self_play.json` |
+| ② Cross-Play | gen vs gen-1 (`game/2`), gen vs gen-2 (`game/4`), gen vs gen-3 (`game/8`), gen vs gen-4 (`game/16`), perspective=ai1 → `{sample_dir}/{ai}/{gen}/{k}_play.json` |
+| ③ Training | Three-phase PPO on all samples in `{sample_dir}/{ai}/{gen}/` → gen+1 weights at `src/backend/ai/{name}/gen{gen+1}/` |
+| ④ Validation | gen+1 vs gen/1/2/3/4, 500 games each. Condition: (ai1_wins - ai2_wins) / 500 > 5%. All must pass. |
+
+- Historical generations that don't exist are skipped (e.g. gen-1 at start_gen=1).
+- For `atte_v1`, weight files are automatically split into e1/e2 + main files after training.
+- Training hyperparameters (LR, gamma, clip_eps, etc.) are loaded from `config/backend.json` (same as `train.py`).
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--ai` | `str` | *(required)* | AI name to train (e.g. `atte_v1`, `rnn_v2`) |
+| `--start-gen` | `int` | *(required)* | Starting generation number (weights must exist at `src/backend/ai/{name}/gen{start_gen}/`) |
+| `--sample-dir` | `str` | *(required)* | Root directory for sample output (e.g. `samples/`) |
+| `--game` | `int` | *(required)* | Base game count for self-play per generation |
+| `--policy-epoch` | `int` | `5` | Policy network training epochs per generation |
+| `--value-epoch` | `int` | `10` | Value network training epochs per generation |
+
+**Training Outputs:** After each generation, weights are saved to
+`src/backend/ai/{name}/gen{gen+1}/`. For `atte_v1` this includes 4 files
+(`policy_e1_e2.pth`, `policy.pth`, `value_e1_e2.pth`, `value.pth`);
+for `rnn_v2` it includes 2 files (`policy.pth`, `value.pth`).
+Loss/grad artifacts are generated in `loss/`.
 
 **Training Outputs:** After training, two weight files are saved
 (`{output_dir}/policy.pth` + `{output_dir}/value.pth`) plus loss/grad charts in `loss/`.

@@ -531,3 +531,36 @@ train.py 增加一个参数： value_epoch。用于指定训练 value 网络的 
 
 # intention_id=40
 新增 atte_v1 模型，新的网络结构见 intention/new_network.md
+
+然后再实现一个训练脚本，参数是：
+- ai. eg: atte_v1
+- start_gen. eg: 1。即从哪一代开始
+- sample_dir: eg: samples/  生成样本时，进行路径拼接，最终的样本文件是 
+    - {sample_dir}/{ai_name}/{gen}/self_play.json
+    - {sample_dir}/{ai_name}/{gen}/{gen-1}_play.json
+    - {sample_dir}/{ai_name}/{gen}/{gen-2}_play.json
+    - {sample_dir}/{ai_name}/{gen}/{gen-3}_play.json
+    - {sample_dir}/{ai_name}/{gen}/{gen-4}_play.json
+- game: eg: 2000. 即自对弈的起始局数
+- policy_epoch. policy 网络每次训练多少 epoch。默认 5
+- value_epoch. value 网络每次训练多少 epoch，默认 10
+
+训练流程是这样的：
+1，从指定的第 i 代作为 ai1 开始：
+    - 自对弈 {game} 局，以 perspective=both 产生 self_play 样本
+    - 与 {gen-1} 对局 {game / 2}局，以 perspective=ai1 产生 {gen-1}_play 样本
+    - 与 {gen-2} 对局 {game / 4}局，以 perspective=ai1 产生 {gen-2}_play 样本
+    - 与 {gen-3} 对局 {game / 8}局，以 perspective=ai1 产生 {gen-3}_play 样本
+    - 与 {gen-4} 对局 {game / 16}局，以 perspective=ai1 产生 {gen-4}_play 样本
+2，进行训练，以 {sample_dir}/{ai_name}/{gen}/ 目录为样本目录进行训练，产生 i + 1 代权重
+3，训练后，自对弈进行验证（不产生样本）:
+    - i +1 对 i 进行 500 局，判断 胜率(i+1) - 胜率(i) > 5%
+    - i +1 对 i-1 进行 500 局，判断 胜率(i+1) - 胜率(i-1) > 5%
+    - i +1 对 i-2 进行 500 局，判断 胜率(i+1) - 胜率(i-2) > 5%
+    - i +1 对 i-3 进行 500 局，判断 胜率(i+1) - 胜率(i-3) > 5%
+    - i +1 对 i-4 进行 500 局，判断 胜率(i+1) - 胜率(i-4) > 5%
+    满足条件后， i = i + 1，回到 1；
+    如果不满足条件，停下并报告详细信息
+
+# intention_id=41
+前端手牌不要展示没有的牌
