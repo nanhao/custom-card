@@ -211,7 +211,13 @@ def _register_routes(app: Flask) -> None:
         Errors:  404 if game not found
         """
         store: SessionStore = app.config["SESSION_STORE"]
-        gm, metadata = store.load(game_id)
+        try:
+            gm, metadata = store.load(game_id)
+        except (ValueError, KeyError) as exc:
+            # B9 FIX: Corrupted save file returns JSON error, not unhandled 500.
+            return jsonify(error_response(
+                f"Failed to load game: {exc}", "LOAD_ERROR", 500
+            )), 500
         if gm is None:
             return jsonify(error_response(
                 f"Game not found: {game_id}", "GAME_NOT_FOUND", 404
@@ -253,7 +259,13 @@ def _register_routes(app: Flask) -> None:
             500 — AI load failure (AI_LOAD_ERROR), AI inference failure (AI_INFERENCE_ERROR)
         """
         store: SessionStore = app.config["SESSION_STORE"]
-        gm, metadata = store.load(game_id)
+        try:
+            gm, metadata = store.load(game_id)
+        except (ValueError, KeyError) as exc:
+            # B9 FIX: Corrupted save file returns JSON error, not unhandled 500.
+            return jsonify(error_response(
+                f"Failed to load game: {exc}", "LOAD_ERROR", 500
+            )), 500
         if gm is None:
             return jsonify(error_response(
                 f"Game not found: {game_id}", "GAME_NOT_FOUND", 404
@@ -321,10 +333,26 @@ def _register_routes(app: Flask) -> None:
             dismantle_target_2 = None
 
         # Parse build_target_1 / dismantle_target_1 from request (design/37)
+        # B4 FIX: Wrap str_to_card in try/except to return 400 on invalid cards
+        # instead of unhandled 500 from ValueError.
         build_target_1_raw = data.get("build_target_1")
         dismantle_target_1_raw = data.get("dismantle_target_1")
-        build_target_1 = str_to_card(build_target_1_raw) if build_target_1_raw else None
-        dismantle_target_1 = str_to_card(dismantle_target_1_raw) if dismantle_target_1_raw else None
+        build_target_1 = None
+        dismantle_target_1 = None
+        if build_target_1_raw:
+            try:
+                build_target_1 = str_to_card(build_target_1_raw)
+            except ValueError as exc:
+                return jsonify(error_response(
+                    str(exc), "INVALID_CARD", 400
+                )), 400
+        if dismantle_target_1_raw:
+            try:
+                dismantle_target_1 = str_to_card(dismantle_target_1_raw)
+            except ValueError as exc:
+                return jsonify(error_response(
+                    str(exc), "INVALID_CARD", 400
+                )), 400
 
         # ---- Delegate to GameCore ----
         try:

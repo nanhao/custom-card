@@ -62,6 +62,7 @@ class PlayerStateSnapshot:
                     "card": h.card.value if h.card else None,
                     "build_target": h.build_target.value if h.build_target else None,
                     "dismantle_target": h.dismantle_target.value if h.dismantle_target else None,
+                    "had_defense_after": h.had_defense_after,
                 }
                 for h in self.history
             ],

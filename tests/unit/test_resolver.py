@@ -263,14 +263,20 @@ class TestGrantDefenseResolver:
         assert gm.player_1.statuses[0].lifetime == 2  # Lifetime merged
 
     def test_strong_defense_extends_existing(self):
-        """IRON_DEFENSE extends existing DEFENSE instead of duplicating."""
+        """IRON_DEFENSE creates independent DEFENSE status (design/37 T6.3).
+
+        Per design/37 T6.3: StrongDefenseResolver creates a NEW independent
+        DEFENSE(2) status rather than extending existing DEFENSE(1). Result:
+        two separate statuses: DEFENSE(1) + DEFENSE(2), not merged DEFENSE(3).
+        """
         gm, ctx = _make_ctx(source="1")
         # Grant DEFENSE first (lifetime=1)
         GrantDefenseResolver().resolve(ctx, ResolveDetails())
-        # Then grant Strong DEFENSE (lifetime=2) — should extend to 3
+        # Then grant Strong DEFENSE (lifetime=2) — creates new, does NOT extend
         StrongDefenseResolver().resolve(ctx, ResolveDetails())
-        assert len(gm.player_1.statuses) == 1
-        assert gm.player_1.statuses[0].lifetime == 3
+        assert len(gm.player_1.statuses) == 2
+        lifetimes = sorted(s.lifetime for s in gm.player_1.statuses)
+        assert lifetimes == [1, 2]
 
 
 # =============================================================================
@@ -285,7 +291,7 @@ class TestGrantGuardResolver:
         """card_owner played DEFENSE last round → GUARD granted."""
         gm, ctx = _make_ctx(
             source="1",
-            history_1=[PlayerHistoryItem(CardType.DEFENSE, None)],
+            history_1=[PlayerHistoryItem(CardType.DEFENSE, None, had_defense_after=True)],
         )
         GrantGuardResolver().resolve(ctx, ResolveDetails())
         assert any(ps.status_type == StatusType.GUARD for ps in gm.player_1.statuses)
@@ -310,7 +316,7 @@ class TestGrantGuardResolver:
         gm, ctx = _make_ctx(
             source="1",
             statuses_1=[PlayerStatus(StatusType.GUARD, 1)],
-            history_1=[PlayerHistoryItem(CardType.DEFENSE, None)],
+            history_1=[PlayerHistoryItem(CardType.DEFENSE, None, had_defense_after=True)],
         )
         GrantGuardResolver().resolve(ctx, ResolveDetails())
         guard_count = sum(1 for ps in gm.player_1.statuses
@@ -542,7 +548,7 @@ class TestPriorityOrdering:
         gm = GameCore(mode="pvp")
         gm.start_game()
         # Simulate having played DEFENSE last round (history-based check).
-        gm.player_1.history = [PlayerHistoryItem(CardType.DEFENSE, None)]
+        gm.player_1.history = [PlayerHistoryItem(CardType.DEFENSE, None, had_defense_after=True)]
         tasks = _build_tasks(gm.player_1, gm.player_2, [CardType.DEFENSE], [CardType.ENERGY])
         result = CardResolver.resolve(tasks)
         types = {ps.status_type for ps in gm.player_1.statuses}
@@ -589,7 +595,7 @@ class TestCardResolverOrchestration:
         """Player.get_consecutive_attack_count() — only tail ATTACK counted."""
         history = [PlayerHistoryItem(CardType.ATTACK, None),
                     PlayerHistoryItem(CardType.ATTACK, None),
-                    PlayerHistoryItem(CardType.DEFENSE, None),
+                    PlayerHistoryItem(CardType.DEFENSE, None, had_defense_after=True),
                     PlayerHistoryItem(CardType.ATTACK, None)]
         gm = GameCore(mode="pvp")
         gm.start_game()
@@ -613,7 +619,7 @@ class TestCardResolverOrchestration:
     def test_get_consecutive_attack_counter_breaks(self):
         """Player.get_consecutive_attack_count() — non-ATTACK breaks streak."""
         history = [PlayerHistoryItem(CardType.ATTACK, None),
-                    PlayerHistoryItem(CardType.COUNTER, None)]
+                    PlayerHistoryItem(CardType.COUNTER, None, had_defense_after=True)]
         gm = GameCore(mode="pvp")
         gm.start_game()
         gm.player_1.history = history
@@ -700,7 +706,7 @@ class TestFragileBlocksGuard:
         gm, ctx = _make_ctx(
             source="1",
             statuses_1=[PlayerStatus(StatusType.FRAGILE, 2)],
-            history_1=[PlayerHistoryItem(CardType.DEFENSE, None)],
+            history_1=[PlayerHistoryItem(CardType.DEFENSE, None, had_defense_after=True)],
         )
         details = ResolveDetails()
         GrantGuardResolver().resolve(ctx, details)
@@ -711,7 +717,7 @@ class TestFragileBlocksGuard:
         """TC-GG-02: last-round DEFENSE and no FRAGILE, GUARD is granted."""
         gm, ctx = _make_ctx(
             source="1",
-            history_1=[PlayerHistoryItem(CardType.DEFENSE, None)],
+            history_1=[PlayerHistoryItem(CardType.DEFENSE, None, had_defense_after=True)],
         )
         details = ResolveDetails()
         GrantGuardResolver().resolve(ctx, details)

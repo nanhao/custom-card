@@ -34,12 +34,15 @@ class GrantGuardResolver(Resolver):
         # First round — no history.
         if len(ctx.card_owner.history) == 0:
             return
-        last_card = ctx.card_owner.history[-1].card
-        if last_card is None:
+        last_item = ctx.card_owner.history[-1]
+        if last_item.card is None:
             return
-        # Lazy import to avoid circular dependency (card_def → resolver).
-        from src.backend.game.card_def import get_card_def  # noqa: PLC0415
-        if "防" not in get_card_def(last_card).tags:
+        # B5: Check actual defense status from last round, not card tags.
+        # Tag-based check ("does last card have '防' tag?") is unreliable
+        # when FRAGILE blocks DEFENSE gain — the card has the tag but the
+        # player never actually had DEFENSE. Using had_defense_after which
+        # is set based on actual statuses present after resolution.
+        if not last_item.had_defense_after:
             return
         # Per design/24: FRAGILE blocks GUARD.
         if ctx.card_owner.has_status(StatusType.FRAGILE):

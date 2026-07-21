@@ -33,3 +33,10 @@ class PlayerHistoryItem:
     card: CardType | None  # None means pass (design/28)
     build_target: CardType | None = None
     dismantle_target: CardType | None = None  # design/37
+    had_defense_after: bool = False
+    """B5: Actual DEFENSE/GUARD status after resolution of this round.
+
+    Unlike tag-based checks (checking if last round's card had '防' tag),
+    this field tracks whether the player truly had DEFENSE or GUARD at the
+    end of resolution. This matters when FRAGILE blocks DEFENSE gain.
+    """

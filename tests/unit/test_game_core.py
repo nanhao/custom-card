@@ -343,7 +343,7 @@ class TestHistoryRecording:
         assert len(gm.player_1.history) == 1
         assert gm.player_1.history[0] == PlayerHistoryItem(CardType.ATTACK, None)
         assert len(gm.player_2.history) == 1
-        assert gm.player_2.history[0] == PlayerHistoryItem(CardType.DEFENSE, None)
+        assert gm.player_2.history[0] == PlayerHistoryItem(CardType.DEFENSE, None, had_defense_after=True)
 
     def test_build_records_target_to_history(self):
         """TC-GC-H02: BUILD card records build_target in PlayerHistoryItem."""
@@ -382,7 +382,7 @@ class TestHistoryRecording:
             PlayerHistoryItem(CardType.DEFENSE, None),
         ]
         assert gm.player_2.history == [
-            PlayerHistoryItem(CardType.DEFENSE, None),
+            PlayerHistoryItem(CardType.DEFENSE, None, had_defense_after=True),
             PlayerHistoryItem(CardType.ATTACK, None),
             PlayerHistoryItem(CardType.HEAVY, None),
         ]

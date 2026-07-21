@@ -138,7 +138,7 @@ class TestDefenseResolver36:
     def test_guard_triggered_after_defense(self):
         """TC-04-03: playing DEFENSE after defense-granting card → GUARD."""
         gm = _make_gm(
-            p1_history=[PlayerHistoryItem(CardType.DEFENSE)],
+            p1_history=[PlayerHistoryItem(CardType.DEFENSE, had_defense_after=True)],
         )
         ctx = _ctx(gm, "1", CardType.DEFENSE, opponent_card=CardType.ATTACK)
         details = ResolveDetails()
@@ -315,7 +315,7 @@ class TestCounterResolver36:
     def test_counter_guard_triggered(self):
         """TC-06-07: COUNTER after defense-granting card → GUARD."""
         gm = _make_gm(
-            p1_history=[PlayerHistoryItem(CardType.DEFENSE)],
+            p1_history=[PlayerHistoryItem(CardType.DEFENSE, had_defense_after=True)],
         )
         ctx = _ctx(gm, "1", CardType.COUNTER, opponent_card=CardType.ATTACK)
         details = ResolveDetails()
@@ -400,7 +400,7 @@ class TestFlexResolver36:
     def test_bonus_defense_after_defense_tag_card(self):
         """TC-08-02: last round played DEFENSE (防 tag) → bonus +1 defense."""
         gm = _make_gm(
-            p1_history=[PlayerHistoryItem(CardType.DEFENSE)],
+            p1_history=[PlayerHistoryItem(CardType.DEFENSE, had_defense_after=True)],
         )
         ctx = _ctx(gm, "1", CardType.FLEX, opponent_card=CardType.ATTACK)
         details = ResolveDetails()
@@ -414,7 +414,7 @@ class TestFlexResolver36:
         the resulting DEFENSE should have lifetime=2, surviving one tick.
         """
         gm = _make_gm(
-            p1_history=[PlayerHistoryItem(CardType.DEFENSE)],
+            p1_history=[PlayerHistoryItem(CardType.DEFENSE, had_defense_after=True)],
         )
         ctx = _ctx(gm, "1", CardType.FLEX, opponent_card=CardType.ATTACK)
         details = ResolveDetails()
@@ -440,7 +440,7 @@ class TestFlexResolver36:
     def test_bonus_defense_after_counter(self):
         """Bonus defense triggers after COUNTER (防 tag)."""
         gm = _make_gm(
-            p1_history=[PlayerHistoryItem(CardType.COUNTER)],
+            p1_history=[PlayerHistoryItem(CardType.COUNTER, had_defense_after=True)],
         )
         ctx = _ctx(gm, "1", CardType.FLEX, opponent_card=CardType.ATTACK)
         details = ResolveDetails()
@@ -461,7 +461,7 @@ class TestFlexResolver36:
         """Fragile blocks bonus defense."""
         gm = _make_gm(
             p1_statuses=[PlayerStatus(StatusType.FRAGILE, 1)],
-            p1_history=[PlayerHistoryItem(CardType.DEFENSE)],
+            p1_history=[PlayerHistoryItem(CardType.DEFENSE, had_defense_after=True)],
         )
         ctx = _ctx(gm, "1", CardType.FLEX, opponent_card=CardType.ATTACK)
         details = ResolveDetails()

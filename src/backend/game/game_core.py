@@ -212,6 +212,19 @@ class GameCore:
             )
         )
 
+        # B5: After all resolvers have run, record whether each player actually
+        # has DEFENSE or GUARD in their statuses. This is used by
+        # GrantGuardResolver to determine if the player truly had defense
+        # after the last round, replacing the unreliable tag-based proxy.
+        self.player_1.history[-1].had_defense_after = (
+            self.player_1.has_status(StatusType.DEFENSE)
+            or self.player_1.has_status(StatusType.GUARD)
+        )
+        self.player_2.history[-1].had_defense_after = (
+            self.player_2.has_status(StatusType.DEFENSE)
+            or self.player_2.has_status(StatusType.GUARD)
+        )
+
         # Step 6: after_resolve — snapshot after card resolution, before round-end.
         after_resolve = AfterResolve(
             statuses_1=[PlayerStatus(ps.status_type, ps.lifetime) for ps in self.player_1.statuses],
@@ -235,10 +248,14 @@ class GameCore:
                 round=self.round_number,
                 cycle=self.cycle_number,
                 round_in_cycle=self.round_in_cycle,
-                hp_1=after_resolve.hp_1,
-                hp_2=after_resolve.hp_2,
+                hand_cards_1=list(self.player_1.hand) if self.player_1 else [],
+                hand_cards_2=list(self.player_2.hand) if self.player_2 else [],
                 statuses_1=list(after_resolve.statuses_1),
                 statuses_2=list(after_resolve.statuses_2),
+                energy_1=self.player_1.energy if self.player_1 else 0,
+                energy_2=self.player_2.energy if self.player_2 else 0,
+                hp_1=after_resolve.hp_1,
+                hp_2=after_resolve.hp_2,
             )
             result = RoundResult(
                 round=self.round_number,
@@ -267,16 +284,21 @@ class GameCore:
             self.player_1.take_damage(1)
             self.player_2.take_damage(1)
             bleed_over, bleed_winner = self._check_game_end()
-            self.cycle_number += 1
-            self.round_in_cycle = 0
-            self._start_cycle()
+            # B1 FIX: Only advance cycle if bleed did NOT end the game.
+            # If bleed killed a player, skip cycle advancement and card drawing
+            # to prevent state corruption (dead players getting new hands, etc.).
+            if not bleed_over:
+                self.cycle_number += 1
+                self.round_in_cycle = 0
+                self._start_cycle()
         else:
             bleed_over = False
             bleed_winner = None
 
-        # Step 9: Advance round
-        self.round_number += 1
-        self.round_in_cycle += 1
+        # Step 9: Advance round — B1 FIX: skip if bleed ended the game.
+        if not bleed_over:
+            self.round_number += 1
+            self.round_in_cycle += 1
 
         # Step 10: after_end_actions — final state after all processing.
         after_end_actions = AfterEndActions(
@@ -442,7 +464,7 @@ class GameCore:
             # BUILD validation for P1 — dual-mode (design/37)
             if CardType.BUILD in cards_1:
                 self._validate_build_dual_mode(
-                    self.player_1, build_target_1, dismantle_target_1,
+                    self.player_1, build_target_1, dismantle_target_1, cards_1,
                 )
             else:
                 # Non-BUILD cards must not have build/dismantle targets
@@ -461,7 +483,7 @@ class GameCore:
             # BUILD validation for P2 — dual-mode (design/37)
             if CardType.BUILD in cards_2:
                 self._validate_build_dual_mode(
-                    self.player_2, build_target_2, dismantle_target_2,
+                    self.player_2, build_target_2, dismantle_target_2, cards_2,
                 )
             else:
                 if build_target_2 is not None or dismantle_target_2 is not None:
@@ -475,6 +497,7 @@ class GameCore:
         player: Player,
         build_target: CardType | None,
         dismantle_target: CardType | None,
+        cards: list[CardType],
     ) -> None:
         """Validate BUILD card dual-mode: build and dismantle are mutually exclusive.
 
@@ -504,15 +527,23 @@ class GameCore:
 
         # Build mode validation
         if build_target is not None:
-            if player.energy == 0:
+            # B2 FIX: Account for ENERGY cards played in the same round.
+            # Each ENERGY card provides at least +1 energy during resolution
+            # (GainEnergyResolver baseline), so add them to available energy.
+            energy_from_cards: int = sum(1 for c in cards if c == CardType.ENERGY)
+            available_energy: int = player.energy + energy_from_cards
+
+            if available_energy == 0:
                 raise ValueError(
-                    "Cannot play BUILD (build mode): energy is 0."
+                    "Cannot play BUILD (build mode): energy is 0 "
+                    "(including same-round ENERGY cards)."
                 )
             build_cost = get_card_def(build_target).build_cost
-            if build_cost > player.energy:
+            if build_cost > available_energy:
                 raise ValueError(
                     f"Cannot build {build_target.value}: "
-                    f"cost {build_cost} > energy {player.energy}."
+                    f"cost {build_cost} > energy {available_energy} "
+                    f"(player has {player.energy} + {energy_from_cards} from same-round ENERGY)."
                 )
 
         # Dismantle mode validation

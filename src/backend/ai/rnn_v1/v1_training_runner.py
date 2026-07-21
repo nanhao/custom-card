@@ -106,7 +106,7 @@ class V1TrainingRunner(BaseTrainingRunner):
                 ).view(1, 1, HIDDEN_SIZE)
                 gru_out, _ = value_model.gru(x, h)
                 new_values = (
-                    value_model.fc_value(gru_out.squeeze(1)).squeeze().tolist()
+                    value_model.fc_value(gru_out.squeeze(1)).squeeze(-1).tolist()  # B8 FIX: keep (T,) shape when T=1
                 )
 
                 advantages, value_targets = self._compute_gae(

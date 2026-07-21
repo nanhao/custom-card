@@ -135,7 +135,7 @@ class BaseTrainingRunner(abc.ABC):
         value_path = os.path.join(config.output_dir, "value.pth")
         self._save_weights(policy_model, policy_path)
         self._save_weights(value_model, value_path)
-        save_split_training_artifacts(phase_records, output_dir=None)
+        save_split_training_artifacts(phase_records, output_dir=config.output_dir)  # B7 FIX: use config.output_dir
 
     # -- Model building --
 

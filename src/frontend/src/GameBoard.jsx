@@ -119,7 +119,9 @@ export default function GameBoard({
           const isCurrent = phase === 'select'
             || (mode === 'pvp' && phase === 'pvp_pass')
             || buildPhase !== null;
-          if (!state.is_over && isCurrent && pid === '1') cls += ' current';
+          // B10 FIX: During pvp_pass, Player 2 is current, not Player 1.
+          const currentPid = (mode === 'pvp' && phase === 'pvp_pass') ? '2' : '1';
+          if (!state.is_over && isCurrent && pid === currentPid) cls += ' current';
           if (state.is_over && state.winner === pid) cls += ' winner';
           if (state.is_over && state.winner !== 'draw' && state.winner !== pid) cls += ' loser';
 
