@@ -263,20 +263,14 @@ class TestGrantDefenseResolver:
         assert gm.player_1.statuses[0].lifetime == 2  # Lifetime merged
 
     def test_strong_defense_extends_existing(self):
-        """IRON_DEFENSE creates independent DEFENSE status (design/37 T6.3).
-
-        Per design/37 T6.3: StrongDefenseResolver creates a NEW independent
-        DEFENSE(2) status rather than extending existing DEFENSE(1). Result:
-        two separate statuses: DEFENSE(1) + DEFENSE(2), not merged DEFENSE(3).
-        """
+        """IRON_DEFENSE extends existing DEFENSE instead of duplicating."""
         gm, ctx = _make_ctx(source="1")
         # Grant DEFENSE first (lifetime=1)
         GrantDefenseResolver().resolve(ctx, ResolveDetails())
-        # Then grant Strong DEFENSE (lifetime=2) — creates new, does NOT extend
+        # Then grant Strong DEFENSE (lifetime=2) — should extend to 3
         StrongDefenseResolver().resolve(ctx, ResolveDetails())
-        assert len(gm.player_1.statuses) == 2
-        lifetimes = sorted(s.lifetime for s in gm.player_1.statuses)
-        assert lifetimes == [1, 2]
+        assert len(gm.player_1.statuses) == 1
+        assert gm.player_1.statuses[0].lifetime == 3
 
 
 # =============================================================================
