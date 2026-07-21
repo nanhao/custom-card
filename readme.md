@@ -2,75 +2,99 @@
 
 A 2-player turn-based card game with simultaneous card resolution.
 
-## Game Rules
+## Game Rules (v2)
 
-- 2 players, 3 HP each
-- Each player holds 7 cards: 3× Attack, 2× Defense, 1× Heavy Strike, 1× Counter
-- Max 7 rounds. The player with higher HP wins at the end; draw if equal.
-
-### Card Effects
-
-| Card | Effect |
-|------|--------|
-| **Attack** | Deals damage equal to consecutive Attack count (×1, ×2, ×3...) |
-| **Defense** | Blocks all damage except Heavy Strike without consecutive Defense |
-| **Heavy Strike** | Deals 1 damage unless opponent played Defense in current AND previous rounds |
-| **Counter** | vs Attack: opponent takes 1. vs Heavy Strike: both take 1. Otherwise: no damage |
+- 2 players, each starting with 30 HP
+- 8 card types: Attack (连续击), Defense (格挡), Heavy Strike (破防重击), Counter (防守反击), Energy (聚能), Build (构建), Flex (攻守兼备), Iron Defense (严防死守)
+- **Energy System**: Each player has an energy bar (0–5), starting at 2. Playing cards costs no energy; only building new cards via Build card consumes energy.
+- **Deck System**: Each player has a draw pile and discard pile. Initial draw pile: 3× Attack + 2× Defense + 1× Energy + 1× Build (7 cards).
+- **Cycle (轮) System**: 3 rounds per cycle. At each cycle start, all hands are discarded, then 5 cards are drawn via smart draw (discard pile shuffled into draw pile when draw pile is empty). At cycle end, each player loses 1 HP (bleed).
+- **Priority Resolution**: Card effects resolve by priority (10, 11, or 12) — higher priority resolves first.
+- **Status System**: Defense (防御), Guard (联防), Fragile (脆弱) — each with managed lifetimes.
+- **Mutual Visibility**: Both players can see each other's hand, discard pile, and draw pile.
+- **Win Condition**: Opponent HP reaches 0; no maximum round limit.
 
 ## Project Structure
 
 ```
 src/backend/game/        Pure game logic (no UI, no I/O)
-  card_type.py           CardType enum (7 values)
+  card_type.py           CardType enum (8 values)
   card_def.py            CardDef dataclass + per-card Resolver mapping
-  player.py              Player state container
-  resolver/              Card resolution engine (strategy pattern, per-effect Resolver subclasses)
-  game_manager.py        Game state machine + round orchestration
-  session_store.py       Disk-based game persistence (save/load/delete)
+  player.py              Player state container (HP, energy, statuses, piles, hand, draw_cards)
+  player_history_item.py PlayerHistoryItem dataclass (card, build_target, dismantle_target)
+  player_state.py        StatusType enum + PlayerStatus dataclass with lifetime
+  player_state_snapshot.py  PlayerStateSnapshot read-only dataclass
+  game_state_snapshot.py GameStateSnapshot read-only dataclass
+  game_core.py           GameCore — state machine, play_round, cycle management, end detection
+  round_result.py        RoundResult four-phase dataclass
+  constants.py           Game-wide constants (HP, energy, deck composition)
+  session_store.py       Disk-based JSON persistence (save/load/delete)
+  resolver/              Card resolution engine (13 Resolver subclasses, strategy pattern)
+
+src/backend/ai_adapter/  Bridge: game ↔ AI tensor conversion
+  ai_interface.py        Abstract AI interface
+  ai_registry.py         AiRegistry — AI registration, model loading/caching
+  converter.py           Card↔index bidirectional mapping, 62-d input vector construction
+  atte_v1_converter.py   Atte v1-specific converter
+  rnn_ai.py              RNN-based AI implementation (rnn_v1/rnn_v2)
+  atte_v1_ai.py          Attention-based AI implementation
+
+src/backend/ai/           AI models (pure ML, no game logic)
+  registry.py            Declarative AI registry (model classes, modules, weight paths)
+  rnn_v1/model.py        GRU models: GRUPolicyModel + GRUValueModel
+  rnn_v2/model.py        GRU models with skip connection (design/34)
+  rnn_v2/constants.py    INPUT_SIZE=62, POLICY_OUTPUT_SIZE=24, HIDDEN_SIZE=32
+  atte_v1/model.py       Attention-based transformer model
+  atte_v1/constants.py   Atte v1 constants
+
+src/backend/training/    PPO training pipeline
+  training_runner.py     BaseTrainingRunner — three-phase PPO (value→advantage→policy)
+  training_config.py     TrainingConfig dataclass (PPO hyperparameters)
+  training_utils.py      CSV loss/grad logging + PNG charts
+  training_factory.py    Training runner factory
+  selfplay_config.py     SelfPlayConfig + SelfPlayResult dataclasses
+  rnn_v2/selfplay_runner.py     SelfPlayRunner — AI vs AI game loop, PPO sample generation
+  rnn_v2/v2_training_runner.py  V2TrainingRunner subclass
+  rnn_v2/sample_loader.py       SampleLoader — JSON sample loading
+  rnn_v2/sample_collector.py    PPO sample collection
+  rnn_v2/training_manager.py    Training orchestration
+  atte_v1/atte_v1_training_runner.py  Atte v1 training runner
+
+src/backend/app/          Thin orchestration layer
+  app_manager.py         AppManager — game creation, AI action selection
 
 src/backend/config/       Backend-wide configuration
-  backend.json           Shared config (logging, future: database, API)
-
-src/backend/ai/           AI opponents (no game logic)
-  registry.py            AI registry: list, get metadata
-  training_config.py     TrainingConfig dataclass (PPO hyperparameters)
-  training_runner.py     PPO training loop (GAE, loss, gradient accumulation)
-  training_utils.py      Training artifact generation (CSV + PNG charts)
-  rnn_v1/                GRU neural network model (PyTorch) — GRUPolicyModel + GRUValueModel
-
-src/backend/app/          Bridge layer (orchestrates game + AI)
-  app_manager.py         Game creation, AI action selection, model lifecycle
-  converter.py           Card ↔ tensor conversion, input vector construction
-  selfplay_config.py     SelfPlayConfig and SelfPlayResult dataclasses
-  selfplay_runner.py     Self-play game loop (AI vs AI, PPO sample generation)
-
-src/backend/log/          Structured logging facility (generic)
-  structured_logger.py   StructuredLogger + LoggerBuilder singleton
+  backend.json           Shared config (logging, training hyperparameters)
 
 src/backend/controller/  REST API adapter (thin, no business logic)
   api.py                 Flask routes + static serving
   serializers.py         CardType ⇄ string, RoundResult → dict, error formatting
 
+src/backend/log/          Structured logging facility
+  structured_logger.py   StructuredLogger + LoggerBuilder singleton
+
 src/backend/scripts/     Entry points
-  run.py                 Start Flask server (python src/backend/scripts/run.py)
-  selfplay.py            AI self-play (python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1)
-  train.py               PPO training (python src/backend/scripts/train.py --sample-path ... --output-dir ... --model rnn_v1.1 --policy-epoch 10)
-  iteration_train.py     Iterative PPO pipeline — self-play → train → validate → repeat (see Iterative PPO Training below)
+  run.py                 Start Flask server
+  selfplay.py            AI self-play
+  train.py               PPO training (split policy/value networks)
+  iteration_train.py     Iterative PPO pipeline — self-play → train → validate → repeat
 
 src/frontend/            React SPA (Vite + React 19)
   src/api.js             REST API client
   src/App.jsx            App shell (menu, navigation, game lifecycle)
   src/GameBoard.jsx      In-game UI (hand area, status, result, log)
+  src/main.jsx           React entry point
   src/App.css            All styles
 
 tests/
-  unit/                  Unit tests (per-module)
+  unit/                  Unit tests (26 test files, 592 tests)
   integration/           Integration tests (API routes, full game flows)
   e2e/                   End-to-end tests (future)
 
-src/frontend/tests/      Frontend tests (vitest + React Testing Library)
+src/frontend/tests/      Frontend tests (vitest + React Testing Library, 13 tests)
   api.test.js            API client unit tests
   App.test.jsx           UI component tests
+  B10.test.jsx           PVP pass phase highlight tests
 ```
 
 ## Quick Start
@@ -112,7 +136,7 @@ python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 \
     --game 200 --temperature 0.5 --temp_step 3 --temp_side both \
     --perspective ai1 --sample_output data/samples.json --temp_seed 42
 
-python src/backend/scripts/selfplay.py --ai1 rnn_v1.1 --ai2 rnn_v1.1 --game 1000 --temperature 2 --temp_step 2000 --temp_side both --perspective both --sample_output samples/v1/rnn_v1_self_play.json --perspective ai1
+python src/backend/scripts/selfplay.py --ai1 atte_v1.1 --ai2 atte_v1.1 --game 500 --temperature 1 --temp_step 2000 --temp_side both --perspective both --sample_output samples/atte/gen1/atte_v1_self_play.json --perspective ai1
 ```
 
 **Structured Logging:** Set `enabled` to `true` in `src/backend/config/backend.json`
@@ -186,7 +210,7 @@ against historical generations. Continues advancing until validation fails.
 python src/backend/scripts/iteration_train.py --ai atte_v1 --start-gen 1 --sample-dir samples/ --game 2000 --policy-epoch 5 --value-epoch 10
 
 # With different epoch counts
-python src/backend/scripts/iteration_train.py --ai rnn_v2 --start-gen 1 --sample-dir data/samples/ --game 1000 --policy-epoch 10 --value-epoch 10
+python src/backend/scripts/iteration_train.py --ai atte_v1 --start-gen 1 --sample-dir samples/atte_v1 --game 1000 --policy-epoch 10 --value-epoch 10
 ```
 
 **Pipeline Workflow (per iteration):**
@@ -264,7 +288,7 @@ Loss/grad artifacts are generated in `loss/`.
 ### Backend (Python)
 
 ```bash
-# All backend tests (506 tests)
+# All backend tests (592 tests)
 python -m pytest tests/
 
 # Unit tests only
@@ -279,7 +303,7 @@ python -m pytest tests/integration/
 ```bash
 cd src/frontend
 
-# Run frontend tests once (28 tests)
+# Run frontend tests once (13 tests)
 npm test
 
 # Watch mode (re-run on file changes)

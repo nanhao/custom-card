@@ -1,0 +1,72 @@
+@startuml class_diagram
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title AtteV1 Training Optimization — Class Diagram
+
+package "ai.atte_v1" {
+    class _AtteV1Body {
+        {field} e1: Embedding
+        {field} e2: Embedding
+        {field} e3: Embedding
+        {field} q1: _ScaledDotProductAttention
+        {field} q2: _ScaledDotProductAttention
+        {field} q3: _ScaledDotProductAttention
+        {field} self_attn: _SelfAttention
+        {field} cross_attn: _CrossAttention
+        {field} gru: nn.GRU
+        {field} feature_fc: Sequential
+        --
+        {method} forward_pre_gru(args) : (gru_input, intermediates)
+        {method} forward_post_gru(h_out, intermediates) : out
+        {method} forward(args, hidden) : out, new_hidden
+    }
+
+    class AtteV1PolicyModel {
+        {field} body: _AtteV1Body
+        {field} fc1: Linear
+        {field} fc_policy: Linear
+        --
+        {method} forward(args, hidden, mask_fn, temperature) : (probs, log_probs, new_hidden)
+    }
+
+    class AtteV1ValueModel {
+        {field} body: _AtteV1Body
+        {field} fc1: Linear
+        {field} fc_value: Linear
+        --
+        {method} forward(args, hidden) : (value, new_hidden)
+    }
+}
+
+package "training.atte_v1" {
+    class AtteV1TrainingRunner {
+        {method} _compute_all_pre_gru(perspective, device) : list[(gru_input, intermediates)]
+        {method} _forward_value_sequence(pre_gru_results, value_model, device) : values
+        {method} _forward_policy_sequence(pre_gru_results, policy_model, device) : log_probs
+        {method} _process_value_perspective(perspective, value_model, config, device) : loss
+        {method} _recompute_advantages(perspectives, value_model, config, device)
+        {method} _process_policy_perspective(perspective, policy_model, config, device) : (loss, entropy)
+    }
+
+    abstract class BaseTrainingRunner {
+        {method} run(config)
+        {method} _compute_gae(values, rewards, gamma, lambda) : (advantages, targets)
+    }
+}
+
+package "training" {
+    class TrainingConfig {
+        value_epoch, policy_epoch, batch_size, ...
+    }
+}
+
+AtteV1PolicyModel *-- _AtteV1Body
+AtteV1ValueModel *-- _AtteV1Body
+AtteV1TrainingRunner --|> BaseTrainingRunner
+AtteV1TrainingRunner ..> _AtteV1Body : calls forward_pre_gru / forward_post_gru
+AtteV1TrainingRunner ..> AtteV1ValueModel : uses body.gru + fc
+AtteV1TrainingRunner ..> AtteV1PolicyModel : uses body.gru + fc
+AtteV1TrainingRunner ..> TrainingConfig
+
+@enduml

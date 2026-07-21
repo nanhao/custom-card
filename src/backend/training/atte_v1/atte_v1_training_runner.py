@@ -1,8 +1,8 @@
 """AtteV1TrainingRunner — three-phase PPO training for atte_v1 model (design/40).
 
 Inherits BaseTrainingRunner.run() three-phase loop.
-Overrides _load_samples, _process_value_perspective, _recompute_advantages,
-_process_policy_perspective for atte_v1 variable-length sequence input format.
+Design/43: batch GRU optimization — pre-compute per-step features, then
+one GRU call for the entire perspective sequence.
 """
 
 import torch
@@ -14,7 +14,11 @@ from src.backend.training.training_runner import BaseTrainingRunner
 
 
 class AtteV1TrainingRunner(BaseTrainingRunner):
-    """Three-phase split PPO training for atte_v1 model."""
+    """Three-phase split PPO training for atte_v1 model with batch GRU (design/43)."""
+
+    # ------------------------------------------------------------------
+    # Public override
+    # ------------------------------------------------------------------
 
     def _load_samples(self, sample_path: str) -> list[dict]:
         """Load atte_v1 format samples from JSON.
@@ -23,6 +27,135 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         """
         return super()._load_samples(sample_path)
 
+    # ------------------------------------------------------------------
+    # New: batch GRU helpers (design/43)
+    # ------------------------------------------------------------------
+
+    def _compute_all_pre_gru(
+        self,
+        perspective: dict,
+        device: torch.device,
+        body: torch.nn.Module | None = None,
+    ) -> list[tuple[torch.Tensor, dict]]:
+        """Compute forward_pre_gru() for all steps in a perspective.
+
+        Args:
+            perspective: dict with "steps" key.
+            device: torch device.
+            body: _AtteV1Body instance. Created lazily if None.
+
+        Returns list of (gru_input, intermediates) tuples, one per step.
+        Steps with input=None produce a zero gru_input tensor and empty dict.
+        """
+        from src.backend.ai.atte_v1.model import _AtteV1Body
+        if body is None:
+            body = _AtteV1Body().to(device)
+        steps = perspective.get("steps", [])
+        results: list[tuple[torch.Tensor, dict]] = []
+        for s in steps:
+            inp = s.get("input")
+            if inp is None:
+                zero = torch.zeros(1, 80, device=device)
+                results.append((zero, {}))
+                continue
+            kwargs = self._build_pre_gru_kwargs(inp, device)
+            gru_input, intermediates = body.forward_pre_gru(**kwargs)
+            results.append((gru_input, intermediates))
+        return results
+
+    def _forward_value_sequence(
+        self,
+        pre_gru_results: list[tuple[torch.Tensor, dict]],
+        value_model: nn.Module,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Batch value forward: stack gru_inputs → one GRU → per-step post_gru + value head.
+
+        Args:
+            pre_gru_results: list of (gru_input, intermediates) from _compute_all_pre_gru.
+            value_model: AtteV1ValueModel instance.
+            device: torch device.
+
+        Returns:
+            values: (T,) float32 tensor of value estimates.
+        """
+        if not pre_gru_results:
+            return torch.empty(0, device=device)
+
+        # Stack all gru_inputs → (T, 1, 80)
+        gru_inputs = [r[0].unsqueeze(0) for r in pre_gru_results]
+        stacked = torch.cat(gru_inputs, dim=0)  # (T, 1, 80)  or (T, batch, 80)
+        # Determine batch dim from first result
+        batch_size = pre_gru_results[0][0].shape[0]
+
+        h0 = torch.zeros(
+            1, batch_size, HIDDEN_SIZE,
+            dtype=torch.float32, device=device,
+        )
+        gru_out, _new_h = value_model.body.gru(stacked, h0)  # (T, batch, 32)
+
+        # Per-step post_gru + value head
+        values: list[torch.Tensor] = []
+        for t_idx, (_gru_input, intermediates) in enumerate(pre_gru_results):
+            if not intermediates:
+                values.append(torch.tensor(0.0, device=device))
+                continue
+            h_out_t = gru_out[t_idx]  # (batch, 32)
+            out = value_model.body.forward_post_gru(h_out_t, intermediates)
+            h1 = torch.relu(value_model.fc1(out))
+            v = value_model.fc_value(h1).squeeze(-1)  # (batch,) or (batch, 1)
+            values.append(v.squeeze())
+
+        return torch.stack(values)  # (T,)
+
+    def _forward_policy_sequence(
+        self,
+        pre_gru_results: list[tuple[torch.Tensor, dict]],
+        policy_model: nn.Module,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Batch policy forward: stack gru_inputs → one GRU → per-step post_gru + policy head.
+
+        Args:
+            pre_gru_results: list of (gru_input, intermediates) from _compute_all_pre_gru.
+            policy_model: AtteV1PolicyModel instance.
+            device: torch device.
+
+        Returns:
+            log_probs: (T, 24) float32 tensor.
+        """
+        if not pre_gru_results:
+            return torch.empty(0, 24, device=device)
+
+        gru_inputs = [r[0].unsqueeze(0) for r in pre_gru_results]
+        stacked = torch.cat(gru_inputs, dim=0)  # (T, 1, 80)
+        batch_size = pre_gru_results[0][0].shape[0]
+
+        h0 = torch.zeros(
+            1, batch_size, HIDDEN_SIZE,
+            dtype=torch.float32, device=device,
+        )
+        gru_out, _new_h = policy_model.body.gru(stacked, h0)  # (T, batch, 32)
+
+        log_probs_list: list[torch.Tensor] = []
+        for t_idx, (_gru_input, intermediates) in enumerate(pre_gru_results):
+            if not intermediates:
+                log_probs_list.append(
+                    torch.full((batch_size, 24), -1e9, device=device),
+                )
+                continue
+            h_out_t = gru_out[t_idx]
+            out = policy_model.body.forward_post_gru(h_out_t, intermediates)
+            h1 = torch.relu(policy_model.fc1(out))
+            logits = policy_model.fc_policy(h1)
+            log_probs_list.append(torch.log_softmax(logits, dim=-1))
+
+        return torch.cat(log_probs_list, dim=0)  # (T, 24)
+
+    # ------------------------------------------------------------------
+    # Phase 1: Value Training (design/43: batch GRU)
+    # ------------------------------------------------------------------
+
     def _process_value_perspective(
         self,
         perspective: dict,
@@ -30,7 +163,7 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         config: TrainingConfig,
         device: torch.device,
     ) -> torch.Tensor | None:
-        """Phase 1: value MSE loss for one perspective."""
+        """Phase 1: value MSE loss using batch GRU forward."""
         steps = perspective.get("steps", [])
         if not steps:
             return None
@@ -43,27 +176,21 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
             old_values, rewards, config.gamma, config.gae_lambda,
         )
 
+        # Compute pre-GRU for all steps, then batched GRU + post-GRU
+        pre_gru_results = self._compute_all_pre_gru(
+            perspective, device, body=value_model.body,
+        )
+        v_new = self._forward_value_sequence(pre_gru_results, value_model, device)
+
         v_target = torch.tensor(value_targets, dtype=torch.float32, device=device)
-        v_new_list: list[torch.Tensor] = []
-        h = torch.tensor(
-            [0.0] * HIDDEN_SIZE, dtype=torch.float32, device=device,
-        ).view(1, 1, HIDDEN_SIZE)
-
-        for s in steps:
-            inp = s.get("input")
-            if inp is None:
-                v_new_list.append(torch.tensor(0.0, device=device))
-                continue
-            kwargs = self._build_value_kwargs(inp, h)
-            kwargs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in kwargs.items()}
-            value, h = value_model(**kwargs)
-            v_new_list.append(value.squeeze())
-
-        v_new_t = torch.stack(v_new_list)
-        value_loss = config.value_coef * nn.functional.mse_loss(v_new_t, v_target)
+        value_loss = config.value_coef * nn.functional.mse_loss(v_new, v_target)
         if torch.isnan(value_loss):
             return None
         return value_loss
+
+    # ------------------------------------------------------------------
+    # Phase 2: Advantage Re-computation (design/43: batch GRU)
+    # ------------------------------------------------------------------
 
     def _recompute_advantages(
         self,
@@ -72,31 +199,31 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         config: TrainingConfig,
         device: torch.device,
     ) -> None:
-        """Phase 2: recompute GAE advantages."""
+        """Phase 2: recompute GAE advantages using batch GRU forward."""
         with torch.no_grad():
             for perspective in perspectives:
                 steps = perspective.get("steps", [])
                 if not steps:
                     continue
                 rewards = [s.get("reward", 0.0) for s in steps]
-                h = torch.tensor(
-                    [0.0] * HIDDEN_SIZE, dtype=torch.float32, device=device,
-                ).view(1, 1, HIDDEN_SIZE)
-                new_values: list[float] = []
-                for s in steps:
-                    inp = s.get("input")
-                    if inp is None:
-                        new_values.append(0.0)
-                        continue
-                    kwargs = self._build_value_kwargs(inp, h)
-                    kwargs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in kwargs.items()}
-                    value, h = value_model(**kwargs)
-                    new_values.append(float(value.item()))
+
+                pre_gru_results = self._compute_all_pre_gru(
+                    perspective, device, body=value_model.body,
+                )
+                v_new = self._forward_value_sequence(
+                    pre_gru_results, value_model, device,
+                )
+                new_values = v_new.tolist()
+
                 advantages, value_targets = self._compute_gae(
                     new_values, rewards, config.gamma, config.gae_lambda,
                 )
                 perspective["new_advantages"] = advantages
                 perspective["new_value_targets"] = value_targets
+
+    # ------------------------------------------------------------------
+    # Phase 3: Policy Training (design/43: batch GRU)
+    # ------------------------------------------------------------------
 
     def _process_policy_perspective(
         self,
@@ -105,7 +232,7 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         config: TrainingConfig,
         device: torch.device,
     ) -> tuple | None:
-        """Phase 3: PPO policy loss for one perspective."""
+        """Phase 3: PPO policy loss using batch GRU forward."""
         steps = perspective.get("steps", [])
         if not steps:
             return None
@@ -115,82 +242,86 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         old_log_probs = [s.get("log_prob", 0.0) for s in steps]
         actions = [s.get("action", 0) for s in steps]
 
-        new_logs: list[torch.Tensor] = []
-        h = torch.tensor(
-            [0.0] * HIDDEN_SIZE, dtype=torch.float32, device=device,
-        ).view(1, 1, HIDDEN_SIZE)
+        pre_gru_results = self._compute_all_pre_gru(
+            perspective, device, body=policy_model.body,
+        )
+        log_probs_all = self._forward_policy_sequence(
+            pre_gru_results, policy_model, device,
+        )  # (T, 24)
 
-        for s in steps:
-            inp = s.get("input")
-            if inp is None:
-                new_logs.append(torch.tensor(-1e9, device=device))
-                continue
-            kwargs = self._build_policy_kwargs(inp, h)
-            kwargs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in kwargs.items()}
-            _probs, log_probs_all, h = policy_model(**kwargs)
-            action_idx = s.get("action", 0)
-            new_logs.append(log_probs_all[0, action_idx])
+        action_indices = torch.tensor(actions, dtype=torch.long, device=device)
+        new_log = log_probs_all[torch.arange(T, device=device), action_indices]
 
-        new_log_t = torch.stack(new_logs)
-        old_log_t = torch.tensor(old_log_probs, dtype=torch.float32, device=device)
-        adv_t = torch.tensor(advantages, dtype=torch.float32, device=device)
+        old_log = torch.tensor(old_log_probs, dtype=torch.float32, device=device)
+        adv = torch.tensor(advantages, dtype=torch.float32, device=device)
 
-        ratio = torch.exp(new_log_t - old_log_t)
+        ratio = torch.exp(new_log - old_log)
         clipped_ratio = torch.clamp(
             ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps,
         )
-        policy_loss = -torch.min(ratio * adv_t, clipped_ratio * adv_t).mean()
+        policy_loss = -torch.min(ratio * adv, clipped_ratio * adv).mean()
 
-        entropy = 0.0  # Simplified; full entropy requires full log_probs
-        if torch.isnan(policy_loss):
+        entropy = (
+            -(torch.exp(log_probs_all) * log_probs_all)
+            .nan_to_num(0.0)
+            .sum(dim=-1)
+            .mean()
+        )
+        if torch.isnan(policy_loss) or torch.isnan(entropy):
             return None
-        return policy_loss, torch.tensor(entropy)
+        return policy_loss, entropy
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_value_kwargs(inp, hidden: torch.Tensor) -> dict:
-        """Build kwargs for value model forward from AtteV1Input or dict."""
-        from src.backend.ai_adapter.atte_v1_ai import _build_model_kwargs
-        from src.backend.ai_adapter.atte_v1_converter import AtteV1Input, AtteV1PlayerInput
-        if isinstance(inp, dict):
-            own_d = inp["own"]
-            opp_d = inp["opp"]
-            inp = AtteV1Input(
-                own=AtteV1PlayerInput(
-                    hand_ids=own_d["hand_ids"],
-                    discard_ids=own_d["discard_ids"],
-                    draw_ids=own_d["draw_ids"],
-                    last_action=own_d["last_action"],
-                    hp=own_d["hp"],
-                    energy=own_d["energy"],
-                    status_ids=own_d["status_ids"],
-                    status_durations=own_d["status_durations"],
-                    opp_hand_ids=own_d["opp_hand_ids"],
-                    opp_discard_ids=own_d["opp_discard_ids"],
-                    opp_draw_ids=own_d["opp_draw_ids"],
-                ),
-                opp=AtteV1PlayerInput(
-                    hand_ids=opp_d["hand_ids"],
-                    discard_ids=opp_d["discard_ids"],
-                    draw_ids=opp_d["draw_ids"],
-                    last_action=opp_d["last_action"],
-                    hp=opp_d["hp"],
-                    energy=opp_d["energy"],
-                    status_ids=opp_d["status_ids"],
-                    status_durations=opp_d["status_durations"],
-                    opp_hand_ids=opp_d["opp_hand_ids"],
-                    opp_discard_ids=opp_d["opp_discard_ids"],
-                    opp_draw_ids=opp_d["opp_draw_ids"],
-                ),
-                round_in_cycle=inp["round_in_cycle"],
-            )
-        elif isinstance(inp, list):
-            raise RuntimeError(
-                "Sample input is old flat-list format. "
-                "Delete old samples and regenerate with the updated self-play."
-            )
-        return _build_model_kwargs(inp, hidden.squeeze(1).squeeze(0).tolist())
+    def _build_pre_gru_kwargs(inp: dict, device: torch.device) -> dict:
+        """Build kwargs for body.forward_pre_gru() from a dict-format step input.
 
-    @staticmethod
-    def _build_policy_kwargs(inp, hidden: torch.Tensor) -> dict:
-        """Build kwargs for policy model forward from AtteV1Input."""
-        return AtteV1TrainingRunner._build_value_kwargs(inp, hidden)
+        Converts Python list/dict fields to PyTorch tensors in the format
+        expected by _AtteV1Body.forward_pre_gru() (no hidden arg, no mask_fn).
+        """
+        from src.backend.ai.atte_v1.model import _AtteV1Body
+
+        own = inp["own"]
+        opp = inp["opp"]
+
+        def _tensor(ids: list[int]) -> torch.Tensor:
+            if not ids:
+                return torch.zeros(1, 0, dtype=torch.long)
+            return torch.tensor([ids], dtype=torch.long)
+
+        def _scalar(val: float) -> torch.Tensor:
+            return torch.tensor([[val]], dtype=torch.float32)
+
+        return {
+            "own_hand_ids": _tensor(own["hand_ids"]),
+            "own_discard_ids": _tensor(own["discard_ids"]),
+            "own_draw_ids": _tensor(own["draw_ids"]),
+            "own_last_action": torch.tensor(
+                [[own["last_action"]]], dtype=torch.long,
+            ),
+            "own_status_ids": _tensor(own["status_ids"]),
+            "own_status_durations": torch.tensor(
+                [own["status_durations"]], dtype=torch.float32,
+            ),
+            "own_opp_hand_ids": _tensor(own["opp_hand_ids"]),
+            "own_opp_discard_ids": _tensor(own["opp_discard_ids"]),
+            "own_opp_draw_ids": _tensor(own["opp_draw_ids"]),
+            "opp_hand_ids": _tensor(opp["hand_ids"]),
+            "opp_discard_ids": _tensor(opp["discard_ids"]),
+            "opp_draw_ids": _tensor(opp["draw_ids"]),
+            "opp_last_action": torch.tensor(
+                [[opp["last_action"]]], dtype=torch.long,
+            ),
+            "opp_status_ids": _tensor(opp["status_ids"]),
+            "opp_status_durations": torch.tensor(
+                [opp["status_durations"]], dtype=torch.float32,
+            ),
+            "own_hp": _scalar(own["hp"]),
+            "own_energy": _scalar(own["energy"]),
+            "opp_hp": _scalar(opp["hp"]),
+            "opp_energy": _scalar(opp["energy"]),
+            "round_in_cycle": _scalar(inp["round_in_cycle"]),
+        }

@@ -43,23 +43,35 @@ The project follows a **layered architecture** with strict separation of concern
          │                            │
 ┌────────▼────────┐          ┌────────▼───────────┐
 │   App Layer     │          │   Game Layer       │
-│  (Bridge)       │          │  (Pure Logic)      │
+│  (Orchestration)│          │  (Pure Logic)      │
 │                 │          │                    │
 │ AppManager      │◄────────►│ GameCore           │
-│ Converter       │          │ CardResolver (9)   │
-│ SelfPlayRunner  │          │ Player / CardDef   │
-│ SelfPlayConfig  │          │ GameState          │
+│                 │          │ CardResolver (13)  │
+│                 │          │ Player / CardDef   │
+│                 │          │ GameStateSnapshot  │
 │                 │          │ RoundResult        │
 │                 │          │ PlayerStatus       │
 │                 │          │ SessionStore       │
 └────────┬────────┘          └────────────────────┘
          │
 ┌────────▼────────────────────────────────────────┐
-│               AI Layer (pure ML)                 │
-│  registry.py  │  training_runner.py             │
-│  training_config.py  │  training_utils.py       │
-│  rnn_v1/model.py (GRUPolicyModel + GRUValueModel)│
-└─────────────────────────────────────────────────┘
+│           AI Adapter Layer (Bridge)              │
+│  ai_interface.py  │  converter.py               │
+│  rnn_ai.py  │  atte_v1_ai.py                    │
+│  atte_v1_converter.py  │  ai_registry.py        │
+└────────┬────────────────────────────────────────┘
+         │
+┌────────▼────────┐   ┌───────────────────────────┐
+│   AI Layer      │   │   Training Layer          │
+│  (Pure ML)      │   │                           │
+│                 │   │ training_runner.py         │
+│ registry.py     │   │ training_config.py        │
+│ rnn_v1/model.py │   │ selfplay_config.py        │
+│ rnn_v2/model.py │   │ training_utils.py         │
+│ atte_v1/model.py│   │ training_factory.py        │
+│                 │   │ rnn_v2/selfplay_runner.py │
+│                 │   │ atte_v1/training_runner.py│
+└─────────────────┘   └───────────────────────────┘
          │
 ┌────────▼────────┐   ┌───────────────────────────┐
 │    Log Layer    │   │     Config                 │
@@ -70,7 +82,9 @@ The project follows a **layered architecture** with strict separation of concern
 **Key principles**:
 - **Game layer** is pure logic — no UI, no I/O, no ML dependencies.
 - **AI layer** is pure ML — no game logic, no knowledge of rules.
-- **App layer** bridges the two, handling card↔tensor conversion, action selection, and masking.
+- **AI Adapter layer** bridges the two, handling card↔tensor conversion, action selection, masking, and AI interface abstraction.
+- **App layer** is a thin orchestration layer — game creation, AI action delegation.
+- **Training layer** owns PPO training pipeline — sample loading, GAE computation, policy/value loss, artifact generation.
 - **Controller layer** is a thin HTTP adapter with no business logic.
 - **Frontend** is a standalone React SPA communicating via REST.
 
@@ -84,13 +98,16 @@ Pure game logic. The only module that knows game rules.
 
 | File | Responsibility |
 |------|---------------|
-| `card_type.py` | `CardType` enum (7 values) |
+| `card_type.py` | `CardType` enum (8 values) |
 | `card_def.py` | `CardDef` dataclass (build_cost, display_name, resolvers mapping per design/22) |
-| `player.py` | `Player` + `PlayerHistoryItem`: HP, energy, statuses, piles, hand, history, `draw_cards()` (design/16, design/35) |
+| `player.py` | `Player`: HP, energy, statuses, piles, hand, history, `draw_cards()` (design/16, design/35) |
+| `player_history_item.py` | `PlayerHistoryItem` dataclass — single-round action record (card, build_target, dismantle_target) |
 | `player_state.py` | `StatusType` enum + `PlayerStatus` dataclass with lifetime (design/15) |
-| `game_state.py` | `GameState` + `PlayerState` typed dataclass snapshots (design/19) |
+| `player_state_snapshot.py` | `PlayerStateSnapshot` dataclass — read-only player state for serialization (design/19) |
+| `game_state_snapshot.py` | `GameStateSnapshot` dataclass — read-only full game snapshot (design/19) |
 | `round_result.py` | `RoundResult` four-phase dataclass: `BeforeResolve`, `AfterResolve`, `EndActions`, `AfterEndActions` (design/17) |
-| `resolver/` | `CardResolver` orchestrator + 9 Resolver subclasses (strategy pattern, design/21/22) |
+| `constants.py` | Game-wide constants (HP, energy, deck composition) |
+| `resolver/` | `CardResolver` orchestrator + 13 Resolver subclasses (strategy pattern, design/21/22) |
 | `game_core.py` | `GameCore` — game state machine (create, play_round, cycle management, end detection, design/35 draw) |
 | `session_store.py` | `SessionStore` — pure disk-based JSON persistence (save/load/delete games) |
 
@@ -100,11 +117,13 @@ Pure ML — no knowledge of game rules.
 
 | File | Responsibility |
 |------|---------------|
-| `registry.py` | Declarative AI registry — declares architectures (model classes); weight paths derived by `name.gen` convention (design/30) |
-| `training_config.py` | `TrainingConfig` dataclass — PPO hyperparameters |
-| `training_runner.py` | PPO training loop — GAE computation, policy/value loss, gradient accumulation (three-phase) |
-| `training_utils.py` | Training artifact generation — CSV loss/grad logging + PNG charts |
+| `registry.py` | Declarative AI registry — declares architectures (model classes, modules); weight paths derived by `name.gen` convention (design/30) |
 | `rnn_v1/model.py` | Split GRU models: `GRUPolicyModel` (56→32→14) + `GRUValueModel` (56→32→1) |
+| `rnn_v1/v1_training_runner.py` | Legacy v1 training runner |
+| `rnn_v2/model.py` | Split GRU models with skip connection: `GRUPolicyModel` (56+GRU→88→64→32→24) + `GRUValueModel` (56+GRU→88→64→32→1) (design/34) |
+| `rnn_v2/constants.py` | RNN v2 constants: `INPUT_SIZE=62`, `POLICY_OUTPUT_SIZE=24`, `HIDDEN_SIZE=32` |
+| `atte_v1/model.py` | Attention-based transformer model (separate policy/value heads) |
+| `atte_v1/constants.py` | Atte v1 constants |
 
 - Model Architecture (design/37):
 - Input: 62-d vector (8 card types × 7 segments + status × 3 per player + last action × 2 + metadata)
@@ -121,29 +140,57 @@ Pure ML — no knowledge of game rules.
 - Policy: GRU(32) → Linear(32→24) → softmax (24-d: 0=pass, triplets of play/build/dismantle per card type)
 - Value: GRU(32) → Linear(32→1) → scalar value estimate (no tanh)
 - Mask function (injected via forward): blocks illegal actions (cards not in hand, insufficient energy for build); pass always legal
-- rnn_v2 adds skip connection: Input(56)+GRU_out(32) → Concat(88) → MLP(88→64→32→14/1) (design/34)
+- rnn_v2 adds skip connection: Input(62)+GRU_out(32) → Concat(94) → MLP(94→64→32→24/1) (design/34)
 
 ### 3.3 App Layer (`src/backend/app/`)
 
-Bridge between game logic and AI — the only layer that understands both.
+Thin orchestration layer — delegates AI work to ai_adapter.
 
 | File | Responsibility |
 |------|---------------|
-| `app_manager.py` | `AppManager` — game creation, AI action selection (greedy + sampling), model lifecycle (loading/caching policy + value models), mask function construction |
-| `converter.py` | `Converter` — card↔index bidirectional mapping, 42-d input vector construction (design/27), illegal action masking, accepts `GameState` dataclass (design/19) |
-| `selfplay_config.py` | `SelfPlayConfig` + `SelfPlayResult` dataclasses |
-| `selfplay_runner.py` | `SelfPlayRunner` — AI vs AI game loop with PPO sample generation (game→perspective→steps hierarchy, design/7) |
+| `app_manager.py` | `AppManager` — game creation, AI action selection via `AiRegistry`, session lifecycle |
 
-### 3.4 Controller Layer (`src/backend/controller/`)
+### 3.4 AI Adapter Layer (`src/backend/ai_adapter/`)
+
+Bridge between game logic and AI — the only layer that understands both domains.
+
+| File | Responsibility |
+|------|---------------|
+| `ai_interface.py` | Abstract AI interface — defines `ai_select_action()` contract |
+| `ai_registry.py` | `AiRegistry` — AI registration and lookup, model loading/caching |
+| `converter.py` | `Converter` — card↔index bidirectional mapping, 62-d input vector construction (design/37), illegal action masking, accepts `GameStateSnapshot` dataclass (design/19) |
+| `atte_v1_converter.py` | Atte v1-specific converter with model-specific input format |
+| `rnn_ai.py` | RNN-based AI implementation (rnn_v1/rnn_v2) |
+| `atte_v1_ai.py` | Attention-based AI implementation |
+
+### 3.5 Training Layer (`src/backend/training/`)
+
+PPO training pipeline — model-agnostic base + version-specific subclasses.
+
+| File | Responsibility |
+|------|---------------|
+| `training_config.py` | `TrainingConfig` dataclass — PPO hyperparameters |
+| `training_runner.py` | `BaseTrainingRunner` — three-phase PPO training loop (value→advantage→policy), GAE computation, gradient accumulation |
+| `training_utils.py` | Training artifact generation — CSV loss/grad logging + PNG charts |
+| `training_factory.py` | Training runner factory — resolves model name to correct runner subclass |
+| `selfplay_config.py` | `SelfPlayConfig` + `SelfPlayResult` dataclasses |
+| `rnn_v2/selfplay_runner.py` | `SelfPlayRunner` — AI vs AI game loop with PPO sample generation (game→perspective→steps hierarchy, design/7) |
+| `rnn_v2/v2_training_runner.py` | `V2TrainingRunner` — rnn_v2-specific forward logic |
+| `rnn_v2/sample_loader.py` | `SampleLoader` — JSON sample file loading and perspective extraction |
+| `rnn_v2/sample_collector.py` | PPO sample collection from self-play games |
+| `rnn_v2/training_manager.py` | Training orchestration and lifecycle management |
+| `atte_v1/atte_v1_training_runner.py` | Atte v1-specific training runner |
+
+### 3.6 Controller Layer (`src/backend/controller/`)
 
 Thin HTTP adapter — no business logic.
 
 | File | Responsibility |
 |------|---------------|
 | `api.py` | Flask app factory + routes: `POST /api/games`, `GET /api/games/{id}`, `POST /api/games/{id}/play`, `DELETE /api/games/{id}`, `GET /api/ais` |
-| `serializers.py` | CardType↔string, RoundResult→dict, GameState→dict (design/19), error response helpers |
+| `serializers.py` | CardType↔string, RoundResult→dict, GameStateSnapshot→dict (design/19), error response helpers |
 
-### 3.5 Other Backend Modules
+### 3.7 Other Backend Modules
 
 | Module | Responsibility |
 |--------|---------------|
@@ -152,6 +199,7 @@ Thin HTTP adapter — no business logic.
 | `src/backend/scripts/run.py` | Entry point — start Flask server |
 | `src/backend/scripts/selfplay.py` | CLI — AI self-play with configurable temperature, perspective filtering, sample output |
 | `src/backend/scripts/train.py` | CLI — PPO training with split policy/value networks |
+| `src/backend/scripts/iteration_train.py` | CLI — iterative PPO pipeline: self-play → train → validate → repeat |
 
 ---
 
@@ -163,10 +211,12 @@ React 19 SPA built with **Vite** (dev server + build), tested with **vitest** + 
 |------|---------------|
 | `src/App.jsx` | App shell — main menu (Hot-seat PVP / PVE mode selection), game lifecycle management |
 | `src/GameBoard.jsx` | In-game UI — hand area, card selection, status display, opponent info, result/log display, deck viewer |
+| `src/main.jsx` | React entry point — mounts App into DOM |
 | `src/api.js` | REST API client — wraps fetch calls to all backend endpoints |
 | `src/App.css` | All styles (single CSS file) |
 | `tests/api.test.js` | API client unit tests |
 | `tests/App.test.jsx` | UI component tests |
+| `tests/B10.test.jsx` | PVP pass phase player highlight tests |
 
 **Game Modes**:
 - **Hot-seat PVP**: Two human players on the same device (face-down card selection protocol)
@@ -202,9 +252,9 @@ New gen directories auto-discovered by filesystem scanning (design/30)
 
 | Layer | Framework | Location | Count |
 |-------|-----------|----------|-------|
-| Unit tests (backend) | pytest | `tests/unit/` | ~270 tests across game_core, resolver, converter, player, player_state, game_state, card, app_manager (8 test files) |
+| Unit tests (backend) | pytest | `tests/unit/` | 592 tests across 26 test files (game_core, resolver, converter, player, player_state, game_state, card, app_manager, ai_adapter, training, model, registry, selfplay, and more) |
 | Integration tests (backend) | pytest | `tests/integration/` | API routes + full game flows |
-| Frontend tests | vitest | `src/frontend/tests/` | API client + UI component tests |
+| Frontend tests | vitest | `src/frontend/tests/` | 13 tests — API client + UI component tests |
 | E2E tests | (future) | `tests/e2e/` | — |
 
 **TDD workflow** is the project standard — tests are written before implementation.
@@ -214,10 +264,10 @@ New gen directories auto-discovered by filesystem scanning (design/30)
 ## 7. Key Design Decisions
 
 1. **Pure game logic** — `game/` has zero dependencies on AI, UI, or I/O.
-2. **Pure AI models** — `ai/` has zero knowledge of game rules; all card↔tensor conversion lives in `app/converter.py`.
+2. **Pure AI models** — `ai/` has zero knowledge of game rules; all card↔tensor conversion lives in `ai_adapter/converter.py`.
 3. **Split policy/value networks** (design/9) — avoids interference between the two heads.
 4. **Mask function as closure injection** — illegal action masking is defined in `AppManager` and passed into `model.forward()`.
-5. **Typed game state snapshots** (design/19) — `GameState` + `PlayerState` dataclasses replace ad-hoc dicts; all fields use typed objects (CardType, PlayerStatus).
+5. **Typed game state snapshots** (design/19) — `GameStateSnapshot` + `PlayerStateSnapshot` dataclasses replace ad-hoc dicts; all fields use typed objects (CardType, PlayerStatus).
 6. **Four-phase round results** (design/17) — `RoundResult` captures `before`, `after_resolve`, `end_actions`, `after_end_actions` snapshots for unambiguous round lifecycle tracking.
 7. **Disk-based persistence** — `SessionStore` uses JSON files, no database.
 8. **Structured logging** — `StructuredLogger` emits machine-parseable log lines with traceId/threadId/processId for post-hoc analysis.

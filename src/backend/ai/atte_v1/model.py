@@ -227,6 +227,131 @@ class _AtteV1Body(nn.Module):
         hz1 = self.cross_attn(hz1, hz2)
         return self.q3(hz1)
 
+    def forward_pre_gru(
+        self,
+        own_hand_ids: torch.Tensor,
+        own_discard_ids: torch.Tensor,
+        own_draw_ids: torch.Tensor,
+        own_last_action: torch.Tensor,
+        own_status_ids: torch.Tensor,
+        own_status_durations: torch.Tensor,
+        own_opp_hand_ids: torch.Tensor,
+        own_opp_discard_ids: torch.Tensor,
+        own_opp_draw_ids: torch.Tensor,
+        opp_hand_ids: torch.Tensor,
+        opp_discard_ids: torch.Tensor,
+        opp_draw_ids: torch.Tensor,
+        opp_last_action: torch.Tensor,
+        opp_status_ids: torch.Tensor,
+        opp_status_durations: torch.Tensor,
+        own_hp: torch.Tensor,
+        own_energy: torch.Tensor,
+        opp_hp: torch.Tensor,
+        opp_energy: torch.Tensor,
+        round_in_cycle: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict]:
+        """Compute all features before GRU: embeddings + attention + state features.
+
+        Returns:
+            gru_input: (batch, 80) tensor ready for GRU consumption.
+            intermediates: dict with own_hand_emb2, opp_hand_emb2, z3,
+                own_la_emb, opp_la_emb, and scalar features for post-GRU.
+        """
+        # Map last_action -1 → PAD
+        own_la = own_last_action.clone()
+        own_la[own_la == -1] = PAD_ACTION_ID
+        opp_la = opp_last_action.clone()
+        opp_la[opp_la == -1] = PAD_ACTION_ID
+
+        own_la_emb = self.e1(own_la).squeeze(1)
+        opp_la_emb = self.e1(opp_la).squeeze(1)
+
+        # Deck advantage: build emb2 for full deck (hand+discard+draw)
+        own_deck = self._build_emb2_sequence(
+            own_hand_ids, own_discard_ids, own_draw_ids,
+        )
+        opp_deck = self._build_emb2_sequence(
+            own_opp_hand_ids, own_opp_discard_ids, own_opp_draw_ids,
+        )
+        z3 = self._deck_advantage(own_deck, opp_deck)
+
+        # State features
+        own_ss = self._state_features(own_status_ids, own_status_durations)
+        opp_ss = self._state_features(opp_status_ids, opp_status_durations)
+
+        # Hand advantage needs hand-only emb2 (no discard/draw)
+        batch = own_hand_ids.shape[0]
+        own_hand_emb2 = self._build_emb2_sequence(
+            own_hand_ids,
+            torch.zeros(batch, 0, dtype=torch.long, device=own_hand_ids.device),
+            torch.zeros(batch, 0, dtype=torch.long, device=own_hand_ids.device),
+        )
+        opp_hand_emb2 = self._build_emb2_sequence(
+            own_opp_hand_ids,
+            torch.zeros(batch, 0, dtype=torch.long, device=own_hand_ids.device),
+            torch.zeros(batch, 0, dtype=torch.long, device=own_hand_ids.device),
+        )
+
+        # GRU input: concat [own_la_emb, opp_la_emb, own_ss, opp_ss]
+        gru_input = torch.cat(
+            [own_la_emb, opp_la_emb, own_ss, opp_ss], dim=-1,
+        )  # (batch, 80)
+
+        intermediates: dict = {
+            "own_hand_emb2": own_hand_emb2,
+            "opp_hand_emb2": opp_hand_emb2,
+            "z3": z3,
+            "own_la_emb": own_la_emb,
+            "opp_la_emb": opp_la_emb,
+            "own_hp": own_hp,
+            "own_energy": own_energy,
+            "opp_hp": opp_hp,
+            "opp_energy": opp_energy,
+            "round_in_cycle": round_in_cycle,
+        }
+        return gru_input, intermediates
+
+    def forward_post_gru(
+        self,
+        h_out: torch.Tensor,
+        intermediates: dict,
+    ) -> torch.Tensor:
+        """Compute all features after GRU: hand advantage + concat + FC → 64-d out.
+
+        Args:
+            h_out: (batch, 32) GRU output (already squeezed from (1, batch, 32)).
+            intermediates: dict from forward_pre_gru.
+
+        Returns:
+            out: (batch, 64) feature vector for policy/value heads.
+        """
+        batch = h_out.shape[0]
+
+        # h_out transform
+        h_out_t = self.h_out_norm(self.h_out_transform(h_out))
+
+        # Hand advantage
+        haz = self._hand_advantage(
+            h_out_t,
+            intermediates["own_hand_emb2"],
+            intermediates["opp_hand_emb2"],
+        )
+
+        # Feature concat — ensure all are (batch, d) before cat
+        feats = torch.cat([
+            intermediates["own_hp"].reshape(batch, 1),
+            intermediates["own_energy"].reshape(batch, 1),
+            intermediates["opp_hp"].reshape(batch, 1),
+            intermediates["opp_energy"].reshape(batch, 1),
+            intermediates["round_in_cycle"].reshape(batch, 1),
+            intermediates["own_la_emb"],
+            intermediates["opp_la_emb"],
+            haz,
+            intermediates["z3"],
+            h_out,
+        ], dim=-1)
+        return self.feature_fc(feats)
+
     def forward(
         self,
         own_hand_ids: torch.Tensor,
@@ -251,54 +376,19 @@ class _AtteV1Body(nn.Module):
         round_in_cycle: torch.Tensor,
         hidden: torch.Tensor,
     ) -> torch.Tensor:
-        batch = own_hand_ids.shape[0]
-
-        # Map last_action -1 → PAD
-        own_la = own_last_action.clone()
-        own_la[own_la == -1] = PAD_ACTION_ID
-        opp_la = opp_last_action.clone()
-        opp_la[opp_la == -1] = PAD_ACTION_ID
-
-        own_la_emb = self.e1(own_la).squeeze(1)
-        opp_la_emb = self.e1(opp_la).squeeze(1)
-
-        # Deck advantage
-        own_deck = self._build_emb2_sequence(own_hand_ids, own_discard_ids, own_draw_ids)
-        opp_deck = self._build_emb2_sequence(own_opp_hand_ids, own_opp_discard_ids, own_opp_draw_ids)
-        z3 = self._deck_advantage(own_deck, opp_deck)
-
-        # State features
-        own_ss = self._state_features(own_status_ids, own_status_durations)
-        opp_ss = self._state_features(opp_status_ids, opp_status_durations)
-
-        # GRU
-        gru_in = torch.cat([own_la_emb, opp_la_emb, own_ss, opp_ss], dim=-1).unsqueeze(0)
-        gru_out, new_h = self.gru(gru_in, hidden)
+        """Full forward pass — delegates to forward_pre_gru + GRU + forward_post_gru."""
+        gru_input, intermediates = self.forward_pre_gru(
+            own_hand_ids, own_discard_ids, own_draw_ids,
+            own_last_action, own_status_ids, own_status_durations,
+            own_opp_hand_ids, own_opp_discard_ids, own_opp_draw_ids,
+            opp_hand_ids, opp_discard_ids, opp_draw_ids,
+            opp_last_action, opp_status_ids, opp_status_durations,
+            own_hp, own_energy, opp_hp, opp_energy, round_in_cycle,
+        )
+        gru_out, new_h = self.gru(gru_input.unsqueeze(0), hidden)
         h_out = gru_out.squeeze(0)
         self._last_hidden = new_h
-        h_out_t = self.h_out_norm(self.h_out_transform(h_out))
-
-        # Hand advantage
-        own_hand_emb2 = self._build_emb2_sequence(
-            own_hand_ids,
-            torch.zeros(batch, 0, dtype=torch.long, device=own_hand_ids.device),
-            torch.zeros(batch, 0, dtype=torch.long, device=own_hand_ids.device),
-        )
-        opp_hand_emb2 = self._build_emb2_sequence(
-            own_opp_hand_ids,
-            torch.zeros(batch, 0, dtype=torch.long, device=own_hand_ids.device),
-            torch.zeros(batch, 0, dtype=torch.long, device=own_hand_ids.device),
-        )
-        haz = self._hand_advantage(h_out_t, own_hand_emb2, opp_hand_emb2)
-
-        # Feature concat — ensure all are (batch, d) before cat
-        feats = torch.cat([
-            own_hp.reshape(batch, 1), own_energy.reshape(batch, 1),
-            opp_hp.reshape(batch, 1), opp_energy.reshape(batch, 1),
-            round_in_cycle.reshape(batch, 1),
-            own_la_emb, opp_la_emb, haz, z3, h_out,
-        ], dim=-1)
-        return self.feature_fc(feats)
+        return self.forward_post_gru(h_out, intermediates)
 
 
 # ---------------------------------------------------------------------------

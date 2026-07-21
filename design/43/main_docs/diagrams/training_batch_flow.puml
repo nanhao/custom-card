@@ -1,0 +1,50 @@
+@startuml training_batch_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title AtteV1 Batch Training Flow (Value Phase)
+
+participant "TrainingRunner" as Runner
+participant "SampleLoader" as Loader
+participant "_AtteV1Body" as Body
+participant "GRU" as GRU
+participant "Value Head" as VHead
+
+== Phase 1: Pre-GRU ==
+Runner -> Loader: load perspective (T steps)
+loop T steps
+    Runner -> Runner: _build_value_kwargs(step["input"])
+    Runner -> Body: forward_pre_gru(kwargs)
+    Body -> Body: e1/e2/e3 embeddings
+    Body -> Body: ordinal encoding
+    Body -> Body: deck advantage (Q1, Q2) -> Z3
+    Body -> Body: state features (duration FC) -> SS
+    Body -> Body: last_action emb + SS -> gru_input (80-d)
+    Body --> Runner: gru_input (1,80) + intermediates
+    Runner -> Runner: collect gru_input
+end
+
+== Phase 2: Batched GRU ==
+Runner -> Runner: stack gru_inputs -> (T, 1, 80)
+Runner -> GRU: body.gru(stacked_inputs, h0)
+GRU -> GRU: 1-layer GRU, 32 hidden, unroll T steps
+GRU --> Runner: gru_out (T, 1, 32)
+
+== Phase 3: Post-GRU ==
+loop T steps
+    Runner -> Body: forward_post_gru(h_out[t], intermediates[t])
+    Body -> Body: hand advantage (self-attn, cross-attn, Q3) -> HAZ
+    Body -> Body: concat(hp, energy, round, la_emb, HAZ, Z3, h_out)
+    Body -> Body: FC+ReLU -> out (64-d)
+    Body --> Runner: out (1, 64)
+    Runner -> VHead: value_model.fc1(out) -> ReLU -> fc_value
+    VHead --> Runner: value (1, 1)
+    Runner -> Runner: collect value
+end
+
+== Phase 4: Loss ==
+Runner -> Runner: stack values -> (T,)
+Runner -> Runner: MSE(values, value_targets)
+Runner --> Runner: value_loss
+
+@enduml

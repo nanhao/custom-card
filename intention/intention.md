@@ -569,3 +569,6 @@ train.py 增加一个参数： value_epoch。用于指定训练 value 网络的 
 
 # intention_id=42
 做了一次 bug-competition 并修复了多个 bug
+
+# intention_id=43
+现在训练太慢了，需要提速
