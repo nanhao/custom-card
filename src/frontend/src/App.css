@@ -178,6 +178,10 @@ body {
   background: var(--iron-defense);
   color: #fff;
 }
+.chip-pass {
+  background: var(--text-muted, #555);
+  color: #ccc;
+}
 
 /* ---- Hand Area ---- */
 .hand-area {

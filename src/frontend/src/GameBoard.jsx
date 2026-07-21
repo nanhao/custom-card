@@ -25,6 +25,9 @@ const CARD_ICONS = {
   iron_defense: '\ud83d\udd30',
 };
 
+/** Icon for pass (no card played). */
+const PASS_ICON = '\u23ed';
+
 // =========================================================================
 // Helper — build derived lookup tables from cardMeta (from API)
 // =========================================================================
@@ -128,6 +131,10 @@ export default function GameBoard({
           // History chips — design/37: c is {card, build_target, dismantle_target}
           const chips = (p.history || []).map((c, i) => {
             const cardStr = typeof c === 'string' ? c : c.card;
+            // Pass: no card played — show dedicated pass icon.
+            if (cardStr === null) {
+              return <span key={i} className="hist-chip chip-pass" title="pass">{PASS_ICON}</span>;
+            }
             let label;
             if (c.dismantle_target) {
               label = `🗑️${CARD_ICONS[c.dismantle_target]}`;
