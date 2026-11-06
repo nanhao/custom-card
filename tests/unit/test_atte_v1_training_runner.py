@@ -6,8 +6,7 @@ Test cases per design/43 test_cases.md: T4-T11.
 import json
 import os
 import random
-import tempfile
-from unittest.mock import patch, PropertyMock
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -150,7 +149,7 @@ class TestComputeAllPreGru:
             })
         perspective = _make_perspective(steps_data)
         device = torch.device("cpu")
-        results = runner._compute_all_pre_gru(perspective, device)
+        results = runner._compute_all_pre_gru(perspective, device, body=_AtteV1Body())
         assert len(results) == 5
 
     def test_empty_perspective_returns_empty(self):
@@ -158,7 +157,7 @@ class TestComputeAllPreGru:
         runner = AtteV1TrainingRunner()
         perspective = {"steps": [], "game_id": "test"}
         device = torch.device("cpu")
-        results = runner._compute_all_pre_gru(perspective, device)
+        results = runner._compute_all_pre_gru(perspective, device, body=_AtteV1Body())
         assert results == []
 
     def test_none_input_skipped(self):
@@ -169,7 +168,7 @@ class TestComputeAllPreGru:
             {"input": None, "action": 0, "reward": 0.0, "value": 0.0, "log_prob": 0.0},
             {"input": _make_atte_v1_input_dict(), "action": 0, "reward": 0.0, "value": 0.0, "log_prob": 0.0},
         ])
-        results = runner._compute_all_pre_gru(perspective, device)
+        results = runner._compute_all_pre_gru(perspective, device, body=_AtteV1Body())
         assert len(results) == 2
         # First result should be a zero gru_input
         gru_input_0, _intermediates_0 = results[0]
@@ -182,7 +181,7 @@ class TestComputeAllPreGru:
         perspective = _make_perspective([
             {"input": _make_atte_v1_input_dict(), "action": 0, "reward": 0.0, "value": 0.0, "log_prob": 0.0},
         ])
-        results = runner._compute_all_pre_gru(perspective, device)
+        results = runner._compute_all_pre_gru(perspective, device, body=_AtteV1Body())
         gru_input, intermediates = results[0]
         assert gru_input.shape == (1, GRU_INPUT_SIZE)
         assert "own_hand_emb2" in intermediates
@@ -286,7 +285,7 @@ class TestForwardPolicySequence:
             {"input": _make_atte_v1_input_dict(), "action": 0, "reward": 0.0, "value": 0.0, "log_prob": 0.0},
             {"input": _make_atte_v1_input_dict(), "action": 0, "reward": 0.0, "value": 0.0, "log_prob": 0.0},
         ])
-        pre_gru_results = runner._compute_all_pre_gru(perspective, device)
+        pre_gru_results = runner._compute_all_pre_gru(perspective, device, body=policy_model.body)
         log_probs = runner._forward_policy_sequence(pre_gru_results, policy_model, device)
         assert log_probs.shape == (3, 24)
 
@@ -299,7 +298,7 @@ class TestForwardPolicySequence:
         perspective = _make_perspective([
             {"input": _make_atte_v1_input_dict(), "action": 0, "reward": 0.0, "value": 0.0, "log_prob": 0.0},
         ])
-        pre_gru_results = runner._compute_all_pre_gru(perspective, device)
+        pre_gru_results = runner._compute_all_pre_gru(perspective, device, body=policy_model.body)
         log_probs = runner._forward_policy_sequence(pre_gru_results, policy_model, device)
         probs = torch.exp(log_probs)
         assert abs(probs.sum().item() - 1.0) < 1e-5

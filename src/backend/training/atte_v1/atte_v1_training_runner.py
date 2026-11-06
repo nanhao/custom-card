@@ -8,7 +8,7 @@ one GRU call for the entire perspective sequence.
 import torch
 import torch.nn as nn
 
-from src.backend.ai.atte_v1.constants import HIDDEN_SIZE
+from src.backend.ai.atte_v1.constants import GRU_INPUT_SIZE, HIDDEN_SIZE, POLICY_OUTPUT_SIZE
 from src.backend.training.training_config import TrainingConfig
 from src.backend.training.training_runner import BaseTrainingRunner
 
@@ -35,27 +35,24 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         self,
         perspective: dict,
         device: torch.device,
-        body: torch.nn.Module | None = None,
+        body: torch.nn.Module,
     ) -> list[tuple[torch.Tensor, dict]]:
         """Compute forward_pre_gru() for all steps in a perspective.
 
         Args:
             perspective: dict with "steps" key.
             device: torch device.
-            body: _AtteV1Body instance. Created lazily if None.
+            body: _AtteV1Body instance from the model being trained.
 
         Returns list of (gru_input, intermediates) tuples, one per step.
         Steps with input=None produce a zero gru_input tensor and empty dict.
         """
-        from src.backend.ai.atte_v1.model import _AtteV1Body
-        if body is None:
-            body = _AtteV1Body().to(device)
         steps = perspective.get("steps", [])
         results: list[tuple[torch.Tensor, dict]] = []
         for s in steps:
             inp = s.get("input")
             if inp is None:
-                zero = torch.zeros(1, 80, device=device)
+                zero = torch.zeros(1, GRU_INPUT_SIZE, device=device)
                 results.append((zero, {}))
                 continue
             kwargs = self._build_pre_gru_kwargs(inp, device)
@@ -125,7 +122,7 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
             log_probs: (T, 24) float32 tensor.
         """
         if not pre_gru_results:
-            return torch.empty(0, 24, device=device)
+            return torch.empty(0, POLICY_OUTPUT_SIZE, device=device)
 
         gru_inputs = [r[0].unsqueeze(0) for r in pre_gru_results]
         stacked = torch.cat(gru_inputs, dim=0)  # (T, 1, 80)
@@ -141,7 +138,7 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         for t_idx, (_gru_input, intermediates) in enumerate(pre_gru_results):
             if not intermediates:
                 log_probs_list.append(
-                    torch.full((batch_size, 24), -1e9, device=device),
+                    torch.full((batch_size, POLICY_OUTPUT_SIZE), -1e9, device=device),
                 )
                 continue
             h_out_t = gru_out[t_idx]
@@ -282,29 +279,27 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
         Converts Python list/dict fields to PyTorch tensors in the format
         expected by _AtteV1Body.forward_pre_gru() (no hidden arg, no mask_fn).
         """
-        from src.backend.ai.atte_v1.model import _AtteV1Body
-
         own = inp["own"]
         opp = inp["opp"]
 
         def _tensor(ids: list[int]) -> torch.Tensor:
             if not ids:
-                return torch.zeros(1, 0, dtype=torch.long)
-            return torch.tensor([ids], dtype=torch.long)
+                return torch.zeros(1, 0, dtype=torch.long, device=device)
+            return torch.tensor([ids], dtype=torch.long, device=device)
 
         def _scalar(val: float) -> torch.Tensor:
-            return torch.tensor([[val]], dtype=torch.float32)
+            return torch.tensor([[val]], dtype=torch.float32, device=device)
 
         return {
             "own_hand_ids": _tensor(own["hand_ids"]),
             "own_discard_ids": _tensor(own["discard_ids"]),
             "own_draw_ids": _tensor(own["draw_ids"]),
             "own_last_action": torch.tensor(
-                [[own["last_action"]]], dtype=torch.long,
+                [[own["last_action"]]], dtype=torch.long, device=device,
             ),
             "own_status_ids": _tensor(own["status_ids"]),
             "own_status_durations": torch.tensor(
-                [own["status_durations"]], dtype=torch.float32,
+                [own["status_durations"]], dtype=torch.float32, device=device,
             ),
             "own_opp_hand_ids": _tensor(own["opp_hand_ids"]),
             "own_opp_discard_ids": _tensor(own["opp_discard_ids"]),
@@ -313,11 +308,11 @@ class AtteV1TrainingRunner(BaseTrainingRunner):
             "opp_discard_ids": _tensor(opp["discard_ids"]),
             "opp_draw_ids": _tensor(opp["draw_ids"]),
             "opp_last_action": torch.tensor(
-                [[opp["last_action"]]], dtype=torch.long,
+                [[opp["last_action"]]], dtype=torch.long, device=device,
             ),
             "opp_status_ids": _tensor(opp["status_ids"]),
             "opp_status_durations": torch.tensor(
-                [opp["status_durations"]], dtype=torch.float32,
+                [opp["status_durations"]], dtype=torch.float32, device=device,
             ),
             "own_hp": _scalar(own["hp"]),
             "own_energy": _scalar(own["energy"]),
